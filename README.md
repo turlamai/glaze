@@ -8,8 +8,6 @@ Build desktop apps with a [Racket](https://racket-lang.org/) backend and a web f
 
 **English** · [中文](README.zh-CN.md)
 
-<p align="center"><img src="docs/showcase.png" alt="Glaze Showcase — every capability in one window" width="720"></p>
-
 ## Start here
 
 Choose Glaze for a Racket backend and a shared HTML/CSS/JS interface inside native system WebViews. A real desktop window is mandatory; there is no external-browser fallback. Product data/permissions and service policy remain application-owned.
@@ -40,18 +38,9 @@ You get:
 
 Glaze is deliberately **GUI-first**. If the required native WebView runtime is missing or broken, startup fails with platform-specific installation/repair instructions. It does **not** silently turn the desktop app into a browser tab.
 
-### How it compares
+### Runtime design
 
-| | Glaze | Tauri | Electron | wails |
-|---|---|---|---|---|
-| Backend language | Racket | Rust | JS/Node | Go |
-| Native toolchain needed | **none** (pure FFI) | Rust + cargo | none | Go + WebView2 deps |
-| Binary size | tiny (Racket exe + assets) | small | 100 MB+ | small |
-| Frontend→backend | Native GLZ1 + HTTP adapter | `invoke()` IPC | Node APIs | bindings |
-| Runtime authority | Route permissions + resource scopes | Capabilities + permissions | app-defined | app-defined |
-| WebView backends | WebView2 / WKWebView / WebKitGTK | system WebView | bundled Chromium | WebView2/WKWebView |
-| Missing WebView behavior | **fail fast + install guidance** | prerequisite error | n/a (bundled) | prerequisite error |
-| Agent-friendly UI verification (`title`/`url`/screenshot) | **built-in** | via WebDriver | via CDP | limited |
+Glaze embeds the platform WebView in a real desktop window, uses Racket for application logic, and provides explicit, capability-gated backend routes. The frontend-to-backend transport is native GLZ1 when selected or the HTTP adapter by default in 0.x. Missing platform WebView dependencies produce a diagnostic rather than an external browser fallback.
 
 All three WebView backends pass the real-window CI e2e (open, load, capture, navigate, close, on-close). Native GLZ1 transport is implemented on Windows, macOS and Linux. The 0.x `run-app` default remains the HTTP adapter inside a native WebView; Linux needs a graphical session or Xvfb.
 
