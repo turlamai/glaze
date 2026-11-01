@@ -52,7 +52,7 @@ html:lang(en) .reader-zh,html:lang(zh) .reader-en{display:none!important}@media(
             </div>
             <ul class="nav-menu">
                 <li><a href="#features" class="optional" data-en="Features" data-zh="功能">Features</a></li>
-                <li><a href="#compare" class="optional" data-en="Compare" data-zh="对比">Compare</a></li>
+                <li><a href="#design" class="optional" data-en="Design" data-zh="设计">Design</a></li>
                 <li><a href="#start" data-en="Quick start" data-zh="快速上手">Quick start</a></li>
                 <li><a href="https://github.com/turlamai/glaze" class="optional">GitHub</a></li>
                 <li class="lang-dropdown-wrapper">
@@ -160,64 +160,20 @@ html:lang(en) .reader-zh,html:lang(zh) .reader-en{display:none!important}@media(
         </div>
     </section>
 
-    <!-- Compare -->
-    <section id="compare">
+    <!-- Product design -->
+    <section id="design">
         <div class="container">
-            <span class="eyebrow animate-on-scroll" data-en="How it compares" data-zh="横向对比">How it compares</span>
-            <h2 class="section-title animate-on-scroll" data-en="One product shape, different native stories" data-zh="产品形态相通，原生路线不同">One product shape, different native stories</h2>
-            <p class="section-lead animate-on-scroll" style="margin-bottom: 0;"
-               data-en="Pure FFI, no native toolchain, tiny binaries, HTTP-JSON instead of invoke()-style IPC."
-               data-zh="纯 FFI、无需原生工具链、二进制极小、以 HTTP-JSON 取代 invoke() 式 IPC。">
-                Pure FFI, no native toolchain, tiny binaries, HTTP-JSON instead of invoke()-style IPC.
-            </p>
-
+            <span class="eyebrow animate-on-scroll" data-en="Product design" data-zh="产品设计">Product design</span>
+            <h2 class="section-title animate-on-scroll" data-en="Racket logic, a web frontend, one desktop window" data-zh="Racket 逻辑、Web 界面、一个桌面窗口">Racket logic, a web frontend, one desktop window</h2>
+            <p class="section-lead animate-on-scroll" data-en="Glaze provides the runtime and explicit capability boundaries; applications own their features, permissions, data and release policy." data-zh="Glaze 提供运行时与明确的权限边界；应用自身负责功能、权限、数据与发行策略。">Glaze provides the runtime and explicit capability boundaries.</p>
             <div class="compare-table-wrap animate-on-scroll">
                 <table class="compare">
-                    <thead>
-                        <tr>
-                            <th data-en=" " data-zh=" "></th>
-                            <th>Glaze</th>
-                            <th>Tauri</th>
-                            <th>Electron</th>
-                        </tr>
-                    </thead>
                     <tbody>
-                        <tr>
-                            <td data-en="Backend language" data-zh="后端语言">Backend language</td>
-                            <td class="yes">Racket</td>
-                            <td>Rust</td>
-                            <td>JS / Node</td>
-                        </tr>
-                        <tr>
-                            <td data-en="Native toolchain needed" data-zh="需要原生工具链">Native toolchain needed</td>
-                            <td class="yes">none (pure FFI)</td>
-                            <td>Rust + cargo</td>
-                            <td>none</td>
-                        </tr>
-                        <tr>
-                            <td data-en="Binary size" data-zh="二进制大小">Binary size</td>
-                            <td class="yes">tiny</td>
-                            <td>small</td>
-                            <td>100 MB+</td>
-                        </tr>
-                        <tr>
-                            <td data-en="Frontend → backend" data-zh="前端 → 后端">Frontend → backend</td>
-                            <td>HTTP JSON routes (fetch)</td>
-                            <td>invoke() IPC</td>
-                            <td>Node APIs</td>
-                        </tr>
-                        <tr>
-                            <td data-en="WebView" data-zh="WebView">WebView</td>
-                            <td>WebView2 / WKWebView / WebKitGTK</td>
-                            <td>system WebView</td>
-                            <td>bundled Chromium</td>
-                        </tr>
-                        <tr>
-                            <td data-en="Agent UI verification" data-zh="代理 UI 验证">Agent UI verification</td>
-                            <td class="yes">built-in</td>
-                            <td>via WebDriver</td>
-                            <td>via CDP</td>
-                        </tr>
+                        <tr><th data-en="Application logic" data-zh="应用逻辑">Application logic</th><td>Racket CS</td></tr>
+                        <tr><th data-en="User interface" data-zh="界面">User interface</th><td>HTML / CSS / JavaScript</td></tr>
+                        <tr><th data-en="Desktop window" data-zh="桌面窗口">Desktop window</th><td>WebView2 / WKWebView / WebKitGTK</td></tr>
+                        <tr><th data-en="Backend transport" data-zh="后端通信">Backend transport</th><td data-en="Native GLZ1 when selected; HTTP adapter by default in 0.x" data-zh="可显式选择原生 GLZ1；0.x 默认使用 HTTP 适配器">Native GLZ1 when selected; HTTP adapter by default in 0.x</td></tr>
+                        <tr><th data-en="Missing WebView" data-zh="缺失 WebView 时">Missing WebView</th><td data-en="Diagnostic and repair guidance, not an external browser fallback" data-zh="输出诊断与修复提示，不回退到外部浏览器">Diagnostic and repair guidance, not an external browser fallback</td></tr>
                     </tbody>
                 </table>
             </div>
