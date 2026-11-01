@@ -8,8 +8,6 @@
 
 [English](README.md) · **中文**
 
-<p align="center"><img src="docs/showcase.png" alt="Glaze Showcase —— 全部能力一屏尽览" width="720"></p>
-
 ## 使用入口
 
 需要 Racket 后端与共享 HTML/CSS/JS 界面，并运行于系统原生 WebView 时选择 Glaze。必须使用真实桌面窗口，不提供外部浏览器回退；产品数据、权限和服务政策归应用。
@@ -40,18 +38,9 @@ Racket 自带的 `racket/gui` 可以用，但很难做出现代化的产品级 U
 
 Glaze 明确采用 **GUI-first** 设计。原生 WebView 运行时缺失或初始化失败时，应用会直接启动失败，并给出当前平台的安装/修复指引；**不会再偷偷退化成 Chrome、Edge 或 Safari 里的一个网页。**
 
-### 横向对比
+### 运行时设计
 
-| | Glaze | Tauri | Electron | wails |
-|---|---|---|---|---|
-| 后端语言 | Racket | Rust | JS/Node | Go |
-| 原生工具链 | **无需**（纯 FFI） | Rust + cargo | 无 | Go + WebView2 依赖 |
-| 二进制体积 | 极小 | 小 | 100 MB+ | 小 |
-| 前后端桥接 | 原生 GLZ1 + HTTP 适配器 | `invoke()` IPC | Node API | 绑定层 |
-| 运行时权限 | 路由权限 + 资源范围 | Capabilities + permissions | 应用自行实现 | 应用自行实现 |
-| WebView 后端 | WebView2 / WKWebView / WebKitGTK | 系统 WebView | 自带 Chromium | WebView2/WKWebView |
-| WebView 缺失时 | **明确失败 + 安装指引** | 前置依赖错误 | 不适用（自带） | 前置依赖错误 |
-| Agent 友好的 UI 验证（title/url/截图） | **内置** | 需 WebDriver | 需 CDP | 有限 |
+Glaze 在真正的桌面窗口中嵌入各平台系统 WebView，使用 Racket 承载应用逻辑，并通过明确的权限能力限制后端路由。0.x 默认使用 HTTP 适配器，也可显式选择原生 GLZ1 通道；缺失平台 WebView 依赖时给出诊断，不回退到外部浏览器。
 
 三个平台的 WebView 后端均通过真窗口 CI e2e（open、加载、截图、导航、关闭、on-close）。原生 GLZ1 WebView 消息通道已覆盖三个平台；0.x 的 `run-app` 默认仍使用原生 WebView 内的 HTTP 适配器。Linux 需要桌面会话或 Xvfb。
 
