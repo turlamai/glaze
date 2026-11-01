@@ -93,7 +93,14 @@ html:lang(en) .reader-zh,html:lang(zh) .reader-en{display:none!important}@media(
             </div>
 
             <div class="hero-visual animate-on-scroll">
-                <img class="showcase-img" src="showcase.png" alt="Glaze showcase — every capability in one window" loading="lazy">
+                <div class="code-window" style="padding:24px;text-align:left;">
+                    <p data-en="A verifiable first app" data-zh="可验证的第一个应用">A verifiable first app</p>
+                    <pre><code>raco pkg install --auto glaze
+raco glaze init myapp
+cd myapp
+racket main.rkt</code></pre>
+                    <p data-en="Expected result: a native desktop window opens. If it does not, follow the runtime diagnostic and repair guidance below." data-zh="预期结果：原生桌面窗口启动。若未启动，请根据下方运行时诊断和修复说明处理。">Expected result: a native desktop window opens.</p>
+                </div>
             </div>
         </div>
     </section>
