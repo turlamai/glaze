@@ -173,9 +173,8 @@
 (define (sha256-file path-value)
   (define path (->path path-value))
   (call-with-input-file path
-    (lambda (input)
-      (bytes->hex-string (sha256-bytes input)))
-    #:mode 'binary))
+                        (lambda (input) (bytes->hex-string (sha256-bytes input)))
+                        #:mode 'binary))
 
 (define (sha256-string content)
   (unless (or (string? content) (bytes? content))
