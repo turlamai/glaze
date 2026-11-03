@@ -26,5 +26,6 @@
 
 (test-case "typed declarations come from the same route schema"
   (define declarations (generate-api-declarations typed-routes))
-  (check-true (string-contains? declarations "glaze.ItemsId"))
+  (check-true (string-contains? declarations "declare namespace glaze.api {"))
+  (check-true (string-contains? declarations "function ItemsId"))
   (check-true (string-contains? declarations "Promise<string>")))

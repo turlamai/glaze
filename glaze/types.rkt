@@ -426,6 +426,11 @@
                                ""))]))
      "\n")
     "}\n\n")
+   ;; The runtime client hangs commands off `glaze.api` (see
+   ;; `generate-api-client`), so the declaration must use the same path.
+   ;; A top-level `glaze.<name>` declaration would type-check code that fails
+   ;; at runtime and reject the real `glaze.api.<name>` call.
+   "declare namespace glaze.api {\n"
    (string-join (for/list ([command (in-list commands)])
                   (define name (schema-command-name command))
                   (define ts-name (js-camel-safe name))
@@ -440,11 +445,12 @@
                                                        (type->ts (schema-parameter-type p)
                                                                  all-named-names)))
                                              "; "))))
-                  (format "declare function glaze.~a(~a): Promise<~a>;\n"
+                  (format "  function ~a(~a): Promise<~a>;\n"
                           ts-name
                           args-ts
                           (type->ts (schema-command-result command) all-named-names)))
-                "\n")))
+                "\n")
+   "}\n"))
 
 ;; GLZ1 command names are kebab-case ("api-items-get"); TS function names
 ;; camel-case them ("apiItemsGet") exactly like the generated JS client.
