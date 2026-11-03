@@ -325,6 +325,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # This release is explicitly named macos-arm64. A runner label
+      # migration must fail instead of silently mislabeling an Intel DMG.
+      - name: Assert Apple Silicon release runner
+        shell: bash
+        run: |
+          test "$(uname -m)" = "arm64"
+
       - name: Install Racket
         uses: Bogdanp/setup-racket@2466913449df77df2bad149d1f2fc4e1ea4795dd # v1.15
         with:
@@ -353,9 +360,9 @@ jobs:
           set -euo pipefail
           version='${{ needs.source.outputs.version }}'
           mkdir -p release-assets
-          mv "examples/showcase/dist/Glaze.dmg" "release-assets/glaze-${version}-macos.dmg"
+          mv "examples/showcase/dist/Glaze.dmg" "release-assets/glaze-${version}-macos-arm64.dmg"
           cd release-assets
-          sha256sum "glaze-${version}-macos.dmg" > "glaze-${version}-macos.dmg.sha256"
+          sha256sum "glaze-${version}-macos-arm64.dmg" > "glaze-${version}-macos-arm64.dmg.sha256"
           ls -la
 
       - name: Upload macOS release assets
@@ -379,21 +386,28 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      - name: Assert the full asset matrix
+      - name: Verify full source and showcase release matrix
         run: |
           set -euo pipefail
           version='${{ needs.source.outputs.version }}'
           cd release-assets
-          for f in \
-            "glaze-${version}.zip" \
-            "glaze-${version}-windows-x64.msi" \
-            "glaze-${version}-macos.dmg" \
-            "glaze-${version}-linux-amd64.deb" \
-            "glaze-${version}-linux-x86_64.rpm" \
-            "glaze-${version}-linux-x86_64.AppImage"; do
-            test -f "$f"
-            test -f "$f.sha256"
+          : > SHA256SUMS
+          for asset in \
+            "glaze-$version.zip" \
+            "glaze-$version-windows-x64.msi" \
+            "glaze-$version-macos-arm64.dmg" \
+            "glaze-$version-linux-amd64.deb" \
+            "glaze-$version-linux-x86_64.rpm" \
+            "glaze-$version-linux-x86_64.AppImage"; do
+            test -s "$asset" && test -s "$asset.sha256" || {
+              echo "::error::Missing or empty release asset/checksum: $asset"
+              exit 1
+            }
+            sha256sum "$asset" >> SHA256SUMS
           done
+          LC_ALL=C sort -k2 -o SHA256SUMS SHA256SUMS
+          sha256sum -c SHA256SUMS
+          test "$(grep -c '^' SHA256SUMS)" -eq 6
 
       - name: Publish GitHub Release
         shell: bash
@@ -404,19 +418,14 @@ jobs:
           version='${{ needs.source.outputs.version }}'
           cd release-assets
           gh release create "$GITHUB_REF_NAME" \
-            "glaze-${version}.zip" \
-            "glaze-${version}.zip.sha256" \
-            "glaze-${version}-windows-x64.msi" \
-            "glaze-${version}-windows-x64.msi.sha256" \
-            "glaze-${version}-macos.dmg" \
-            "glaze-${version}-macos.dmg.sha256" \
-            "glaze-${version}-linux-amd64.deb" \
-            "glaze-${version}-linux-amd64.deb.sha256" \
-            "glaze-${version}-linux-x86_64.rpm" \
-            "glaze-${version}-linux-x86_64.rpm.sha256" \
-            "glaze-${version}-linux-x86_64.AppImage" \
-            "glaze-${version}-linux-x86_64.AppImage.sha256" \
+            "glaze-$version.zip" \
+            "glaze-$version-windows-x64.msi" \
+            "glaze-$version-macos-arm64.dmg" \
+            "glaze-$version-linux-amd64.deb" \
+            "glaze-$version-linux-x86_64.rpm" \
+            "glaze-$version-linux-x86_64.AppImage" \
+            SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
-            --title "Glaze ${version}" \
+            --title "Glaze $version" \
             --notes-file release-notes.md
