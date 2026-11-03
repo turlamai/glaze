@@ -7,6 +7,7 @@
 
 (require racket/list
          net/base64
+         (only-in file/sha1 bytes->hex-string)
          racket/file
          racket/port
          racket/string
@@ -166,19 +167,15 @@
                                (display content output)))
                          #:exists 'replace))
 
+;; Hashing is a portable Racket/base operation. Only Ed25519 signing and
+;; verification require the OpenSSL 3 CLI; checking an update artifact digest
+;; must work in package-build sandboxes where that CLI is unavailable.
 (define (sha256-file path-value)
   (define path (->path path-value))
-  (define output (make-temporary-file "glaze-dgst~a"))
-  (dynamic-wind
-   void
-   (lambda ()
-     (openssl-run "sha256"
-                  (list "dgst" "-sha256" "-r" "-out" (path->string output) (path->string path)))
-     (define match (regexp-match #px"^([0-9a-f]{64})" (string-trim (file->string output))))
-     (unless match
-       (error 'signing "openssl returned an invalid sha256 digest"))
-     (second match))
-   (lambda () (delete-if-present output))))
+  (call-with-input-file path
+    (lambda (input)
+      (bytes->hex-string (sha256-bytes input)))
+    #:mode 'binary))
 
 (define (sha256-string content)
   (unless (or (string? content) (bytes? content))
