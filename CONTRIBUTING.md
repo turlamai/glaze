@@ -50,3 +50,12 @@ Racket collection:
 ## Documentation languages
 
 Use English for default public docs and preserve complete Chinese README and onboarding paths. Keep examples, supported-platform limits, troubleshooting and privacy/security promises consistent in the same change. Preserve identifiers and copyable commands; technical protocols have one normative English source, not separate language implementations. See the [family documentation language policy](https://github.com/turlamai/turlamai.github.io/blob/master/docs/DOCUMENTATION-LANGUAGES.md) for scope and review checks.
+
+## Security reports
+
+Do not open a public issue for a suspected vulnerability. Use the private route
+in [SECURITY.md](SECURITY.md) and include the affected commit, platform and a
+minimal reproduction. Changes to GLZ1 decoding, capability scopes, static
+resource containment, update verification or installer identity should be
+reviewed against that document's trust model and exercised by the names listed
+in its security-sensitive areas.

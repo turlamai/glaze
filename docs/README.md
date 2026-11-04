@@ -14,6 +14,11 @@ This directory has one owner for each durable decision. New documents must link 
 - [Getting started](getting-started.md) / [简体中文](getting-started.zh-CN.md): canonical install, scaffold, typed route, schema, native verification, and build tutorial.
 - [Agent-native workflow](agent-native.md): project inspection, diagnosis, editing, and native-window verification.
 - [GUI-first contract](gui-first.md): why application startup requires a native WebView and never falls back to a browser tab.
+- [CI contract](ci.md) / [简体中文](ci.zh-CN.md): the minimum gates an application must prove on each platform, runner requirements, and the evidence to record.
+- [Diagnostics](diagnostics.md): symptom-to-cause troubleshooting for startup, schema, verification, packaging and update failures.
+- [Product acceptance](product-acceptance.md): the scenario record and evidence levels that define when a packaged application is done.
+- [Production signing](production-signing.md): trust domains, certificate and notary prerequisites, key handling in CI, and the verification checklist.
+- [GLZ1 fuzzing](fuzzing.md): the decoders under fuzz, the invariant, the seeded inputs and how to extend the corpus.
 - [Releasing](RELEASING.md): framework release procedure and provenance requirements.
 - [Performance baseline](benchmarks.md): what the framework measures, the recorded baseline, and the honesty rules for comparing results.
 

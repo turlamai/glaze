@@ -30,4 +30,6 @@
 
 在 [Issues](https://github.com/turlamai/glaze/issues) 反馈，中文或英文均可。包含包版本/提交、Racket 版本、系统架构、最小复现和已脱敏的首条错误。不要附带真实密钥、客户凭据、支付原始数据或私密文档。社区支持不承诺响应时限。
 
+疑似漏洞请通过 [SECURITY.md](../SECURITY.md) 私下报告，不要开公开 issue。该策略记录了信任模型、安全敏感模块与不在范围内的组件。
+
 [现行许可证](../LICENSE) · [CHANGELOG](../CHANGELOG.md)

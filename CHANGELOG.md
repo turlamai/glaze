@@ -18,6 +18,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   domain, store persistence, live routes with authentication and 400 paths).
   CI runs the example's tests, schema check, native verify and build on
   Windows, macOS and Linux.
+- Add a repository security policy (`SECURITY.md`): private vulnerability
+  reporting, the supported-version window, the trusted-backend/untrusted-page
+  trust model, security-sensitive owner modules and out-of-scope components.
+  Both READMEs, `docs/USING.md`/`docs/USING.zh-CN.md` and `CONTRIBUTING.md`
+  now point suspected vulnerabilities at that private route instead of a
+  public issue.
+- Document how Glaze is tested and what it does not yet cover. Both READMEs
+  gain "Testing" and "Honest gaps" sections: framework suite, real-window e2e,
+  the CI package job, generated-project `verify`, and the bounded Linux/macOS/
+  WebView2, installer-toolchain, accessibility/IME and pre-1.0 API limits.
+- Add four application-facing owners to the documentation map:
+  `docs/ci.md` (+ `ci.zh-CN.md`) records the consumer CI gates, runner
+  requirements and evidence rules; `docs/diagnostics.md` maps startup, schema,
+  verification, packaging and update symptoms to causes; `docs/product-acceptance.md`
+  defines the scenario record and evidence levels for a packaged app; and
+  `docs/fuzzing.md` records the GLZ1 fuzz targets, invariant, seeded corpus
+  and limits.
+- Add `docs/production-signing.md`: separate OS, update and Permit trust
+  domains, macOS notarization and keychain prerequisites, Windows Authenticode
+  and MSI identity, Linux packaging limits, CI key handling, and the
+  verification commands for a released artifact.
 
 ### Fixed
 
