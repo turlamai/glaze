@@ -37,8 +37,9 @@
 ;;     advances the next step); our PeekMessage pump on the same thread
 ;;     delivers them.
 ;;
-;; Requires WebView2Loader.dll shipped under glaze/native/win-x64/. The
-;; WebView2 Evergreen Runtime is preinstalled on Windows 11.
+;; Requires the WebView2Loader.dll matching the process architecture, shipped
+;; under glaze/native/win-x64/ or win-arm64/. The WebView2 Evergreen Runtime
+;; is preinstalled on Windows 11.
 
 (require ffi/unsafe
          racket/async-channel
@@ -49,7 +50,8 @@
          racket/runtime-path
          "../native-transport.rkt"
          "../tray/tray-protocol.rkt"
-         "../private/id-allocator.rkt")
+         "../private/id-allocator.rkt"
+         "../private/win32-arch.rkt")
 
 (provide open-webview
          supported?
@@ -70,7 +72,7 @@
          win:webview?)
 
 (define-runtime-path here ".")
-(define loader-path (build-path here ".." "native" "win-x64" "WebView2Loader"))
+(define loader-path (build-path here ".." "native" (webview2-loader-subdir) "WebView2Loader"))
 
 (define user32 (ffi-lib "user32"))
 (define kernel32 (ffi-lib "kernel32"))

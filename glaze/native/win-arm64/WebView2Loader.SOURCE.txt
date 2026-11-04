@@ -1,0 +1,7 @@
+Source package: Microsoft.Web.WebView2 1.0.4314.35
+File: build/native/arm64/WebView2Loader.dll
+SHA-256: 05429881d918fd64a3fe4955155c1af79e66d7b7d944034467874f420bc2265a
+License: WebView2Loader.LICENSE.txt (identical to the win-x64 copy)
+
+The Evergreen WebView2 Runtime is a separate system dependency and is not
+redistributed here.

@@ -2,12 +2,8 @@ name: Desktop Architectures
 
 # The default CI matrix covers the hosted defaults only. This workflow keeps
 # one real run per supported desktop architecture: Intel macOS, Linux ARM64
-# (native packages, WebKitGTK, Xvfb) and Windows ARM64.
-#
-# Windows ARM64 uses the x64 build under emulation on purpose: Glaze ships
-# only the x64 WebView2Loader.dll, so a native arm64 Racket process cannot
-# load the WebView. The leg proves the x64 product on an ARM64 host; it is
-# not native ARM64 evidence.
+# (native packages, WebKitGTK, Xvfb) and Windows ARM64. Each leg installs the
+# native Racket VM; Glaze ships the matching WebView2Loader.dll.
 
 on:
   push:
@@ -39,8 +35,8 @@ jobs:
             label: Linux ARM64 (aarch64)
             architecture: arm64
           - os: windows-11-arm
-            label: Windows ARM64 host (x64 emulation)
-            architecture: x64
+            label: Windows ARM64
+            architecture: arm64
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

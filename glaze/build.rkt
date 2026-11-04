@@ -27,7 +27,8 @@
          "private/linux-package-metadata.rkt"
          "private/linux-package.rkt"
          "private/macos-bundle.rkt"
-         "private/windows-installer.rkt")
+         "private/windows-installer.rkt"
+         "private/win32-arch.rkt")
 
 (provide build-app
          default-entry-template
@@ -247,7 +248,8 @@
   ;; MSI would harvest the same hole). Stage it beside the executable —
   ;; LoadLibrary probes the exe directory — before any installer is built.
   (when (eq? os 'windows)
-    (define loader-src (collection-file-path "WebView2Loader.dll" "glaze" "native" "win-x64"))
+    (define loader-src
+      (collection-file-path "WebView2Loader.dll" "glaze" "native" (webview2-loader-subdir)))
     (copy-file loader-src (build-path out-dir-path "WebView2Loader.dll") #t))
 
   ;; macOS post-processing: customize the bundle's Info.plist if produced.

@@ -41,6 +41,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Add `docs/runtime-limits.md`: the current request-body, invoke-timeout,
   redirect, outbound HTTP, update, shell, SQLite, logging, store and filesystem
   defaults, with the keyword or configuration that changes each.
+- Support native Windows ARM64 builds. Glaze now ships
+  `glaze/native/win-arm64/WebView2Loader.dll` (Microsoft.Web.WebView2
+  1.0.4314.35, SHA-256 recorded beside it) and selects `win-x64` or
+  `win-arm64` from the Racket process architecture in both the runtime
+  backend and `build` staging. Previously a native arm64 Racket process
+  would try to load the x64 DLL and fail; the x64 build under emulation is
+  unchanged.
 
 ### Fixed
 
