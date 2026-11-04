@@ -19,6 +19,7 @@
 (define paths (make-path-resolver taskboard-app-id))
 (define bus (make-event-bus))
 (define state-lock (make-semaphore 1))
+(define store-init-lock (make-semaphore 1))
 (define store-box (box #f))
 
 ;; Tests and CI point TASKBOARD_DATA_DIR at a disposable directory; the
@@ -30,14 +31,20 @@
 ;; check` and `raco glaze inspect` load this module and must not touch user
 ;; data or create directories.
 (define (task-store)
+  ;; Two concurrent first requests must not load two stores and lose one
+  ;; writer. Double-check inside the init semaphore so the normal path stays
+  ;; lock-free.
   (or (unbox store-box)
-      (let* ([data-dir (data-root)]
-             [_ (make-directory* data-dir)]
-             [store (load-store (build-path data-dir "tasks.json")
-                                #:defaults (hasheq 'tasks '())
-                                #:auto-save 100)])
-        (set-box! store-box store)
-        store)))
+      (call-with-semaphore store-init-lock
+                           (lambda ()
+                             (or (unbox store-box)
+                                 (let* ([data-dir (data-root)]
+                                        [_ (make-directory* data-dir)]
+                                        [store (load-store (build-path data-dir "tasks.json")
+                                                           #:defaults (hasheq 'tasks '())
+                                                           #:auto-save 100)])
+                                   (set-box! store-box store)
+                                   store))))))
 
 (define (tasks)
   (define stored (store-get (task-store) 'tasks '()))

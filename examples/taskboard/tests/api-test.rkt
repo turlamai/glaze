@@ -100,6 +100,23 @@
          (check-true (ok? delete-status))
          (check-equal? (hash-ref (body-json delete-body) 'tasks) '())
 
+         ;; Concurrent creates all persist: the route layer serializes
+         ;; read-modify-write and the store is initialized once.
+         (define workers
+           (for/list ([index (in-range 8)])
+             (thread (lambda ()
+                       (call "POST"
+                             "/api/tasks/create"
+                             (jsexpr->string (hasheq 'title (format "parallel ~a" index))))))))
+         (for-each thread-wait workers)
+         (define-values (concurrent-status concurrent-body) (call "GET" "/api/tasks"))
+         (check-true (ok? concurrent-status))
+         (define concurrent-tasks (hash-ref (body-json concurrent-body) 'tasks))
+         (check-equal? (length concurrent-tasks) 8)
+         (check-equal? (length (remove-duplicates (map (lambda (task) (hash-ref task 'id))
+                                                       concurrent-tasks)))
+                       8)
+
          ;; Invalid input is a 400, not a 500.
          (define-values (bad-status _bad-body)
            (call "POST" "/api/tasks/create" (jsexpr->string (hasheq 'title "   "))))
