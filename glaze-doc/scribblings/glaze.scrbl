@@ -881,6 +881,34 @@ instead of widening silently.
 (@racketmodname[glaze/webview/main] and @racketmodname[glaze/window-state]
 re-exported).}
 
+@defmodule[glaze/window-state]{Persistence for window geometry: the
+@racket[window-state] and @racket[screen-area] structs plus helpers that read,
+normalize, and atomically write the per-application state file. The module has
+no FFI dependency and is safe to require on every platform.}
+
+@defstruct*[window-state ([x real?] [y real?] [width real?] [height real?] [maximized? boolean?])]{
+  A restorable window geometry. Coordinates and sizes are device-independent
+  units as reported by the platform host.}
+
+@defstruct*[screen-area ([x real?] [y real?] [width real?] [height real?])]{
+  The usable screen rectangle used to clamp a restored window.}
+
+@defproc[(default-window-state-path [app-id string?]) path?]{
+  Returns the per-user state file for @racket[app-id] under the platform
+  preference directory. Components are sanitized before use.}
+
+@defproc[(read-window-state [path (or/c path-string? #f)]) (or/c window-state? #f)]{
+  Reads a state file, returning @racket[#f] when @racket[path] is @racket[#f],
+  the file is missing, or its contents are malformed. Never signals on a
+  corrupt or partially written file.}
+
+@defproc[(write-window-state! [path path-string?] [state window-state?]) void?]{
+  Atomically replaces the state file, creating parent directories as needed.}
+
+@defproc[(normalize-window-state [state window-state?] [area screen-area?]) window-state?]{
+  Clamps a restored window to @racket[area] so a display change cannot place
+  it entirely off-screen.}
+
 @defmodule[glaze/services]{The capability services: filesystem scopes,
 the key-value store, SQL, shell, the HTTP proxy, logging, dialogs, tray,
 system commands, global shortcuts, hotkeys, system information, and the

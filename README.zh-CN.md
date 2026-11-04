@@ -159,6 +159,18 @@ raco glaze help          # 显示帮助
 
 Glaze **不提供浏览器模式的 `dev` / `serve` 命令**。开发和发布走同一条 Native WebView 路径，这样依赖缺失或原生后端故障会在开发阶段立即暴露，而不是被 browser fallback 隐藏。
 
+### 应用 schema 契约
+
+`glaze.rktd` 告诉 schema 工具加载哪个模块、哪个导出的路由列表绑定。默认生成内容等价于：
+
+```racket
+#hasheq((schema-module . "main.rkt")
+        (schema-binding . api)
+        (schema-baseline . "glaze-schema.json"))
+```
+
+把应用启动放在 `module+ main` 中，并导出路由列表。这样 CI 无需打开窗口或执行应用启动代码，就能检查精确的 GLZ1/Keel 契约。`schema check` 在兼容性破坏时退出 1，在配置或加载错误时退出 2，在兼容变更时退出 0。其 JSON 报告把 `breaking-changes` 与 `compatible-additions` 分开。更新基线是明确的评审决定：运行 `schema write`，检查 diff，然后随有意的 API 变更一起提交。
+
 ### `build`
 
 把 Glaze 项目打包为平台分发产物（`raco exe` + `raco distribute`），前端资源随可执行文件一起分发。Windows GUI 构建使用 `raco exe --gui`；macOS 产出标准 `.app` bundle。
@@ -190,6 +202,39 @@ raco glaze build --name myapp --sign 40HEXCHARS --installer
 ### 产品权益授权
 
 产品许可证有意放在 Glaze 框架边界之外。需要离线可验证商业权益的应用可以将 Glaze 与 [Permit](https://github.com/turlamai/permit) 或其他独立权益库组合使用；Glaze 本身不依赖它。需要在线结账、支付事件处理或凭证交付时，产品还可以把 [Commerce](https://github.com/turlamai/commerce) 作为独立的产品/服务层依赖；手工销售与完全离线产品不需要 Commerce。支付渠道密钥、Commerce 密钥、Permit 权益签名、Glaze 更新签名和平台代码签名始终分属不同职责与信任域。
+
+### 更新完整性
+
+`check-update` 仍是小型、向后兼容的通知助手。对已安装应用，完整更新器会校验签名清单、选择平台/架构与发布通道、执行分阶段发布与下载大小限制、校验 SHA-256 以及可选的制品签名，并执行带回滚的安装计划：
+
+所有更新器拉取都跟随绝对与相对重定向，最多十跳。签名清单与制品在每一次重定向中都只允许 HTTPS，因此发布别名无法把校验流量降级为明文。
+
+```racket
+(define manifest
+  (fetch-update-manifest manifest-url pinned-public-key
+                         #:key-id "release-2026"))
+(define candidate (select-update config manifest))
+(when candidate
+  (define artifact (download-update config candidate download-path))
+  (execute-install-plan!
+   (make-replace-install-plan candidate artifact installed-path
+                              #:restart restart-app)))
+```
+
+可移植制品（包括 AppImage 风格部署）可以使用上面的原子替换适配器。MSI/EXE/PKG/DMG 安装器使用 `make-install-plan` 与负责提权、进程交接的平台适配器；Glaze 仍控制已验证输入，并在安装失败时触发回滚。
+
+发布自动化可以用同一把固定 Ed25519 密钥签名制品与已验证清单：
+
+```bash
+raco glaze updater-keygen --out updater-keys
+raco glaze update-sign --artifact app.zip --key updater-keys/private.pem --out app.zip.sig
+raco glaze update-verify --artifact app.zip --pub updater-keys/public.pem \
+  --signature app.zip.sig --sha256 <manifest-sha256>
+raco glaze manifest-sign --manifest manifest.json --key updater-keys/private.pem \
+  --key-id release-2026 --out manifest.signed.json
+raco glaze manifest-verify --manifest manifest.signed.json \
+  --pub updater-keys/public.pem --key-id release-2026
+```
 
 ## 项目结构
 
@@ -266,9 +311,10 @@ myapp/
 
 Capability 是显式启用、默认拒绝的安全边界。一旦向 `run-app` 传入
 `#:capability`，每条 API 路由都必须声明 `#:permission`；未声明或未授权的
-路由直接返回 403，handler 不会执行。HTTP 适配器下，`run-app` 会自动生成 API token 并通过
-一次性 bootstrap URL 绑定到 WebView；原生 GLZ1 模式无需向页面暴露 token，
-但仍执行 capability 权限检查。
+路由直接返回 403，handler 不会执行。HTTP 适配器下，`run-app` 默认启用 API
+token（`#:api-token #t`）并通过一次性 bootstrap URL 绑定到 WebView；
+`#:api-token #f` 是显式关闭，且不能与 `#:capability` 同时使用。原生 GLZ1
+模式无需向页面暴露 token，但仍执行 capability 权限检查。
 
 ```racket
 (define main-capability
@@ -514,7 +560,7 @@ SSE 与嵌入式 WebView 前端共享同一个本地 origin。
 
 - 仅服务 Host 为 `127.0.0.1` / `localhost` / `[::1]` 的请求；
 - 参数问题返回 400 JSON，handler 异常返回 500 JSON；
-- 可选 `#:api-token` 保护 API 路由与 SSE；
+- `#:api-token`（默认 `#t`）保护 API 路由与 SSE；`#:api-token #f` 为显式关闭，且不能与 `#:capability` 同时使用；
 - 可选 `#:capability` 启用默认拒绝的路由权限，并可限制文件根目录、命令与参数；
 - 应用窗口通过一次性的 token bootstrap URL 获取 HttpOnly cookie。
 
