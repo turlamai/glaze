@@ -61,7 +61,8 @@ the most specific artifact first:
 ARM64: Apple Silicon, Linux ARM64 and Windows ARM64 use native Racket builds.
 Glaze ships both `win-x64` and `win-arm64` `WebView2Loader.dll` and selects by
 the process architecture; the x64 build also runs under emulation on ARM64
-hosts.
+hosts. The hosted Intel macOS runner is build-only (no WindowServer session);
+real-window Intel evidence needs a desktop or self-hosted runner.
 
 Set `GLAZE_NO_STARTUP_DIALOG=1` in unattended jobs so a failed WebView startup
 reports an error instead of waiting on an OS dialog. The dialog is for

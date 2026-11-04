@@ -768,6 +768,7 @@ evidence: [CI contract](docs/ci.md).
 - **macOS needs an interactive session** — WKWebView startup requires a logged-in graphical desktop; headless or SSH sessions fail with guidance instead of falling back to a browser.
 - **Windows needs the WebView2 Runtime** — Glaze stages `WebView2Loader.dll`, not the Evergreen Runtime. A missing Runtime is diagnosed at startup.
 - **Windows ARM64 has its own loader** — Glaze ships both `win-x64` and `win-arm64` `WebView2Loader.dll` and selects by the Racket process architecture; CI runs native arm64 on an ARM64 host. The x64 build still runs under emulation on ARM64.
+- **Intel macOS CI is build-only** — the hosted Intel runner has no WindowServer session, so CI proves the native x64 build and package path but cannot open a real window. Run the window tests on a desktop Intel Mac or a self-hosted runner.
 - **Installer toolchains are external** — WiX for MSI, macOS tooling for dmg/notarization, dpkg/rpm/AppImage tooling on Linux. `--installer` falls back to zip/tar.gz with a warning when a toolchain is absent; that is a distribution-format downgrade, not a UI runtime fallback.
 - **Accessibility and IME are application-owned** — Glaze hosts the system WebView and adds no accessibility layer. Semantic HTML, focus order, names/roles, large text and IME behavior must be designed and tested by the product on each platform.
 - **No mobile targets** — Windows, macOS and Linux desktops only.

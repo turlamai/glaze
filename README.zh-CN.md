@@ -665,6 +665,7 @@ CI 在三大平台跑两者，并用 `package` job 构建、校验安装器。�
 - **macOS 需要交互式会话** —— WKWebView 启动需要已登录的图形桌面；headless 或 SSH 会话会带指引失败，不会回退到浏览器。
 - **Windows 需要 WebView2 Runtime** —— Glaze 只随包提供 `WebView2Loader.dll`，不包含 Evergreen Runtime；缺失 Runtime 会在启动时被诊断。
 - **Windows ARM64 使用独立 loader** —— Glaze 同时提供 `win-x64` 与 `win-arm64` `WebView2Loader.dll`，按 Racket 进程架构选择；CI 在 ARM64 主机上跑原生 arm64。x64 构建仍可在 ARM64 上以模拟方式运行。
+- **Intel macOS 的 CI 只做构建** —— 托管 Intel runner 没有 WindowServer 会话，CI 只能证明原生 x64 构建与打包路径，无法打开真实窗口。真实窗口测试需在桌面 Intel Mac 或自托管 runner 上跑。
 - **安装器工具链是外部依赖** —— MSI 需要 WiX，dmg/公证需要 macOS 工具，Linux 需要 dpkg/rpm/AppImage 工具。工具链缺失时 `--installer` 会告警并降级为 zip/tar.gz；这是分发格式降级，不是 UI runtime 回退。
 - **无障碍与输入法由应用负责** —— Glaze 只承载系统 WebView，不额外提供无障碍层。语义化 HTML、焦点顺序、名称/角色、大字号和输入法行为必须由产品在各平台设计和验证。
 - **没有移动端目标** —— 仅 Windows、macOS、Linux 桌面。

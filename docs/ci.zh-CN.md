@@ -54,7 +54,8 @@ raco glaze measure size --budget budgets.json
 
 ARM64：Apple Silicon、Linux ARM64 与 Windows ARM64 都使用原生 Racket 构建。
 Glaze 同时提供 `win-x64` 与 `win-arm64` `WebView2Loader.dll` 并按进程架构选择；
-x64 构建也可以在 ARM64 主机上以模拟方式运行。
+x64 构建也可以在 ARM64 主机上以模拟方式运行。托管 Intel macOS runner 只做构建
+（没有 WindowServer 会话）；真实窗口的 Intel 证据需要桌面或自托管 runner。
 
 无人值守 job 设置 `GLAZE_NO_STARTUP_DIALOG=1`，让 WebView 启动失败直接报错，
 而不是卡在系统对话框上。该变量只抑制对话框，不抑制失败。
