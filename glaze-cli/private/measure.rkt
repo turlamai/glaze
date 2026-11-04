@@ -16,7 +16,8 @@
          racket/list
          racket/match
          racket/path
-         racket/string)
+         racket/string
+         racket/system)
 
 (provide measure-command
          measure-size
@@ -159,7 +160,15 @@
   ;; once it terminates — same shape rivet's launch smoke checks.
   (define alive (eq? (subprocess-status p) 'running))
   (when alive
-    (subprocess-kill p #t))
+    ;; Kill the whole tree on Windows. A staged launcher (a .bat/.cmd or an
+    ;; installer stub) can leave descendants that keep the staged directory
+    ;; locked; terminating only the direct process makes later cleanup and
+    ;; repeat builds fail with "permission denied".
+    (if (eq? (system-type 'os) 'windows)
+        (let ([pid (subprocess-pid p)])
+          (unless (zero? (system*/exit-code "taskkill" "/PID" (number->string pid) "/T" "/F"))
+            (subprocess-kill p #t)))
+        (subprocess-kill p #t)))
   (subprocess-wait p)
   (unless alive
     (error 'measure
