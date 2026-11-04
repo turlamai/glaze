@@ -1,9 +1,13 @@
 name: Desktop Architectures
 
 # The default CI matrix covers the hosted defaults only. This workflow keeps
-# one real run per supported desktop architecture: Intel macOS, Linux ARM64
+# one run per supported desktop architecture: Intel macOS, Linux ARM64
 # (native packages, WebKitGTK, Xvfb) and Windows ARM64. Each leg installs the
 # native Racket VM; Glaze ships the matching WebView2Loader.dll.
+#
+# The hosted Intel macOS runner has no WindowServer session, so it proves the
+# build/package path only. Real-window Intel evidence needs a desktop runner;
+# the matrix marks that leg gui: false instead of claiming a window test.
 
 on:
   push:
@@ -29,14 +33,17 @@ jobs:
       matrix:
         include:
           - os: macos-15-intel
-            label: macOS Intel (x86_64)
+            label: macOS Intel (x86_64) build
             architecture: x64
+            gui: false
           - os: ubuntu-24.04-arm
             label: Linux ARM64 (aarch64)
             architecture: arm64
+            gui: true
           - os: windows-11-arm
             label: Windows ARM64
             architecture: arm64
+            gui: true
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -53,6 +60,7 @@ jobs:
           uname -m 2>/dev/null || true
 
       - name: Run framework tests
+        if: matrix.gui
         env:
           # The ARM64 Windows runner has no notification area; the direct
           # tray-backend check cannot add an icon there.
@@ -66,6 +74,7 @@ jobs:
           fi
 
       - name: Run webview e2e
+        if: matrix.gui
         env:
           WEBKIT_DISABLE_DMABUF_RENDERER: '1'
           GLAZE_NO_STARTUP_DIALOG: '1'
@@ -85,6 +94,12 @@ jobs:
           cd arch-smoke
           raco glaze schema check --json
           raco glaze build --name arch-smoke --version 0.0.1 --out dist
+
+      - name: Packaged launch smoke
+        if: matrix.gui
+        working-directory: ${{ runner.temp }}/arch-smoke
+        shell: bash
+        run: |
           if [ "$RUNNER_OS" = "Linux" ]; then
             xvfb-run -a raco glaze measure startup --seconds 3
           else
