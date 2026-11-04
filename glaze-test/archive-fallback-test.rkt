@@ -32,8 +32,13 @@
                 "the archive is a sibling of the dist directory")
     (check-true (> (file-size artifact) 0))
     (define listing
-      (with-output-to-string
-       (lambda () (system* (find-executable-path "tar" #f) "-tf" (path->string artifact)))))
+      ;; Windows tar treats "C:" as a remote host; list from the parent with a
+      ;; relative name, matching how archive-directory invokes tar.
+      (parameterize ([current-directory work-root])
+        (with-output-to-string (lambda ()
+                                 (system* (find-executable-path "tar" #f)
+                                          "-tf"
+                                          (path->string (file-name-from-path artifact)))))))
     (check-true (string-contains? listing "FallbackApp-dist/payload.txt")
                 "the archive contains the dist root, not a copy of the parent")))
 
