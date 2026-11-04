@@ -53,7 +53,17 @@ jobs:
           uname -m 2>/dev/null || true
 
       - name: Run framework tests
-        run: raco test glaze-test/
+        env:
+          # The ARM64 Windows runner has no notification area; the direct
+          # tray-backend check cannot add an icon there.
+          GLAZE_TEST_NO_TRAY: ${{ matrix.os == 'windows-11-arm' && '1' || '' }}
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a raco test glaze-test/
+          else
+            raco test glaze-test/
+          fi
 
       - name: Run webview e2e
         env:
