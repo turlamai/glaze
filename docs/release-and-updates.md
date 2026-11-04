@@ -67,12 +67,11 @@ upgrade path.
 
 ## Signed manifests
 
-The signed wrapper is schema 1: base64 `payload`, plus
-`signature {algorithm: "ed25519", key_id, value}`. The payload binds schema,
-application id, version, build, channel, publish time, minimum and previous
-version, rollback permission, rollout and every artifact (platform,
-architecture, HTTPS URL, SHA-256, byte size, installer, arguments, optional
-signature).
+The wrapper is schema 1: a base64 payload plus an Ed25519 `signature` with a
+`key_id`. The payload binds the application id, version and build, channel,
+publish time, minimum/previous version, rollback permission, rollout and the
+artifact list. The field-by-field schema lives in the manual (`glaze/update`);
+this page does not duplicate it.
 
 Operational rules:
 
