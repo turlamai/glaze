@@ -120,6 +120,19 @@
    (define elapsed (launch-survival! sleeper 0.5))
    (check-true (>= elapsed 0.4) "survivor reports its window")
 
+   ;; A raco distribute layout keeps the executable under dist/bin/; startup
+   ;; must find it without mistaking bin/ or lib/ for an artifact.
+   (make-directory* (build-path dist "bin"))
+   (define bin-name (if (eq? (system-type 'os) 'windows) "bin-sleeper.bat" "bin-sleeper"))
+   (write-script (build-path "bin" bin-name)
+                 (if (eq? (system-type 'os) 'windows)
+                     "@echo off\r\nping -n 30 127.0.0.1 > nul\r\n"
+                     "#!/bin/sh\nsleep 30\n"))
+   (check-true (>= (hash-ref (measure-startup temp-root #:artifact bin-name #:seconds 0.5)
+                             'survival-seconds)
+                   0.4)
+               "startup finds an executable staged under dist/bin")
+
    (define quitter
      (write-script
       (if (eq? (system-type 'os) 'windows) "quitter.bat" "quitter")

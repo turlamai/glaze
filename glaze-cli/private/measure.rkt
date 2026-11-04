@@ -34,13 +34,16 @@
 ;; from "over budget" without parsing output.
 (struct exn:fail:glaze:budget exn:fail () #:transparent)
 
+;; A macOS .app is a directory but still one shippable artifact. Generic
+;; directories (raco distribute's bin/ and lib/) are layout, not artifacts.
+(define (app-bundle? path)
+  (and (directory-exists? path) (string-suffix? (path->string (file-name-from-path path)) ".app")))
+
 (define (dist-artifacts root)
-  ;; A macOS .app is a directory; count it as one artifact so size and
-  ;; launch-survival measurement see the bundle the build actually produced.
   (define dist (build-path root dist-directory))
   (if (directory-exists? dist)
       (sort (for/list ([path (in-list (directory-list dist #:build? #t))]
-                       #:when (or (file-exists? path) (directory-exists? path)))
+                       #:when (or (file-exists? path) (app-bundle? path)))
               path)
             #:key path->string
             string<?)
@@ -163,15 +166,37 @@
            seconds))
   (/ (- (current-inexact-milliseconds) started) 1000.0))
 
+;; Startup can also launch a distribution that keeps its executable under
+;; dist/bin/ (the Linux/Windows `raco distribute` layout).
+(define (startup-candidates root artifact-filter)
+  (define dist (build-path root dist-directory))
+  (define bin (build-path dist "bin"))
+  (define bin-files
+    (if (directory-exists? bin)
+        (filter file-exists? (directory-list bin #:build? #t))
+        '()))
+  (define candidates (append (dist-artifacts root) bin-files))
+  (if artifact-filter
+      (filter (lambda (path) (equal? (path->string (file-name-from-path path)) artifact-filter))
+              candidates)
+      candidates))
+
 (define (measure-startup project-root #:artifact [artifact-filter #f] #:seconds [seconds 3.0])
-  (define artifacts (select-artifacts project-root artifact-filter 'measure-startup))
-  ;; dist keeps manifests/sidecars too, so smoke the largest non-data file.
-  (define artifact
-    (argmax artifact-size
-            (filter (lambda (path)
-                      (not (regexp-match? #rx"[.](json|txt|sha256|sig|zip|tar[.]gz|msi|deb|rpm)$"
-                                          (path->string path))))
-                    artifacts)))
+  (define artifacts (startup-candidates project-root artifact-filter))
+  (when (null? artifacts)
+    (error 'measure
+           "no packaged artifacts under ~a; run `raco glaze build` first"
+           (build-path project-root dist-directory)))
+  ;; dist and bin/ keep manifests/sidecars too, so smoke the largest non-data
+  ;; file (or .app bundle).
+  (define exec-ish
+    (filter (lambda (path)
+              (not (regexp-match? #rx"[.](json|txt|sha256|sig|zip|tar[.]gz|msi|deb|rpm)$"
+                                  (path->string path))))
+            artifacts))
+  (when (null? exec-ish)
+    (error 'measure "no executable artifact under ~a" (build-path project-root dist-directory)))
+  (define artifact (argmax artifact-size exec-ish))
   (define elapsed (launch-survival! artifact seconds))
   (hash 'artifact
         (path->string (file-name-from-path artifact))
