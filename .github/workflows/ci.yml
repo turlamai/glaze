@@ -29,6 +29,10 @@ jobs:
           linux-webview-deps: 'false'
 
       - name: Run tests
+        env:
+          # Hosted macOS runners have no menu bar for NSStatusItem; the
+          # native tray construction is covered by local/self-hosted runs.
+          GLAZE_TEST_NO_TRAY: ${{ runner.os == 'macOS' && '1' || '' }}
         run: raco test glaze-test/
 
       - name: Build Scribble documentation
