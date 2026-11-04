@@ -207,17 +207,21 @@ runner 上的耗时只作参考。
 
 ### 代码签名与公证
 
+`build` 驱动 `codesign`（macOS）与 `signtool`（Windows）；签名失败会中止构建，工具链缺失则告警。
+
 ```bash
-# macOS
-raco glaze build --name myapp \
-  --sign "Developer ID Application: Acme Inc (TEAMID)" \
+# macOS：Developer ID + hardened runtime + 公证/staple
+raco glaze build --name myapp --sign "Developer ID Application: Acme Inc (TEAMID)" \
   --notarize acme-notary --installer
 
-# Windows
+# macOS ad-hoc，仅本地/CI 冒烟
+raco glaze build --name myapp --sign -
+
+# Windows：证书 thumbprint 或 subject，RFC-3161 时间戳
 raco glaze build --name myapp --sign 40HEXCHARS --installer
 ```
 
-签名失败会中止构建；缺失签名工具链时会明确告警。
+`--entitlements`、`--timestamp-url`、`--no-hardened-runtime` 覆盖其余情况。证书保管、CI 密钥与验签命令见[生产签名](docs/production-signing.md)。
 
 ### 产品权益授权
 
@@ -225,16 +229,11 @@ raco glaze build --name myapp --sign 40HEXCHARS --installer
 
 ### 更新完整性
 
-`check-update` 仍是小型、向后兼容的通知助手。对已安装应用，完整更新器会校验签名清单、选择平台/架构与发布通道、执行分阶段发布与下载大小限制、校验 SHA-256 以及可选的制品签名，并执行带回滚的安装计划：
-
-更新验签使用纯 Racket 的 [`ed25519`](https://pkgs.racket-lang.org/package/ed25519) 后端，因此已安装应用无需 OpenSSL 3 CLI 即可验证自己的更新；签名、密钥生成和加密私钥仍使用 OpenSSL 3 CLI。
-
-所有更新器拉取都跟随绝对与相对重定向，最多十跳。签名清单与制品在每一次重定向中都只允许 HTTPS，因此发布别名无法把校验流量降级为明文。
+`check-update` 是轻量通知助手。已安装应用的更新器会校验签名清单与制品，按通道/平台/架构选择，执行分阶段发布与最低版本限制，并运行带回滚的安装计划：
 
 ```racket
 (define manifest
-  (fetch-update-manifest manifest-url pinned-public-key
-                         #:key-id "release-2026"))
+  (fetch-update-manifest manifest-url pinned-public-key #:key-id "release-2026"))
 (define candidate (select-update config manifest))
 (when candidate
   (define artifact (download-update config candidate download-path))
@@ -243,9 +242,7 @@ raco glaze build --name myapp --sign 40HEXCHARS --installer
                               #:restart restart-app)))
 ```
 
-可移植制品（包括 AppImage 风格部署）可以使用上面的原子替换适配器。MSI/EXE/PKG/DMG 安装器使用 `make-install-plan` 与负责提权、进程交接的平台适配器；Glaze 仍控制已验证输入，并在安装失败时触发回滚。
-
-发布自动化可以用同一把固定 Ed25519 密钥签名制品与已验证清单：
+验签使用纯 Racket 的 [`ed25519`](https://pkgs.racket-lang.org/package/ed25519) 后端，已安装应用无需 OpenSSL 3 CLI；签名与密钥生成仍需要。所有拉取仅 HTTPS，最多十次重定向。发布自动化可签名制品与已验证清单：
 
 ```bash
 raco glaze updater-keygen --out updater-keys
@@ -257,6 +254,8 @@ raco glaze manifest-sign --manifest manifest.json --key updater-keys/private.pem
 raco glaze manifest-verify --manifest manifest.signed.json \
   --pub updater-keys/public.pem --key-id release-2026
 ```
+
+通道、分阶段发布、回滚与各安装形态证据见[发布与更新](docs/release-and-updates.md)。
 
 ## 项目结构
 
@@ -648,17 +647,15 @@ SSE 与嵌入式 WebView 前端共享同一个本地 origin。
 
 ## 测试
 
-Glaze 在不同层证明不同性质；单元测试全绿不等于打包产品已验证。
-
 ```bash
-raco test glaze-test/                       # 框架测试：桥接、capability、schema、打包、更新、模糊测试
+raco test glaze-test/                       # 框架测试
 racket scripts/webview-e2e.rkt              # 当前系统的真实窗口 e2e
 raco make glaze/main.rkt glaze-cli/cli.rkt  # 编译公开入口
 ```
 
-macOS 上框架测试也会驱动真实 WKWebView 窗口；Windows 与 Linux 的真实窗口路径是 `scripts/webview-e2e.rkt`：打开原生窗口、加载应用 origin、校验标题与 URL、截图、导航、关闭并验证关闭回调。它需要图形会话（Linux 用 Xvfb）和可用的 WebView 运行时。
+框架测试在 Windows/Linux 无窗口，在 macOS 也会驱动真实 WKWebView 窗口。e2e 在每个系统打开原生窗口，需要图形会话（Linux 用 Xvfb）。生成项目用 `raco glaze verify` 跑自己的 `verify.rkt`。
 
-CI 在 Windows、macOS、Linux 上用 Racket 9.0 与 9.3 跑框架测试，三平台跑真实窗口 e2e；`package` job 会 scaffold 项目、以 `--installer --sign -` 构建，校验 MSI 升级标识、macOS bundle 签名和 deb/rpm/AppImage 内容，并记录产物大小。生成的项目有自己的验收检查：`raco glaze verify` 打开真实窗口并运行项目的 `verify.rkt`。
+CI 在三大平台跑两者，并用 `package` job 构建、校验安装器。应用侧门禁、runner 要求与证据见 [CI 契约](docs/ci.md)。
 
 ## 已知缺口
 

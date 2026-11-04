@@ -20,20 +20,11 @@ acceptance, and that a rejection always carries a string reason.
 
 ## Inputs
 
-`glaze-test/fuzz-test.rkt` generates two families with a fixed-seed xorshift
-generator (`20261013`), so a failure is reproducible:
-
-- random JSON-compatible values up to depth 3, including deep objects/arrays,
-  empty containers and mixed atoms;
-- hostile atoms: `null`, booleans, negative and huge integers beyond fixnum
-  range, `+nan.0`, `+inf.0`, empty and 4 KiB strings, path-like strings and
-  method names outside the closed set.
-
-The current runs cover 5,000 random JSON values and 1,000 hostile atoms for the
-envelope, and 5,000 random values plus 500 hostile atoms for result validation.
-A table of known-bad envelopes pins the exact error codes
-(`unsupported-version`, `bad-envelope`) so a decoder that starts accepting a
-previously rejected shape fails the suite.
+`glaze-test/fuzz-test.rkt` owns the generators and their exact counts: a
+fixed-seed xorshift corpus of random JSON values and hostile atoms (NaN and
+infinity, out-of-range integers, 4 KiB strings, invalid methods), plus
+known-bad envelopes that pin each error code. This page does not restate the
+counts, so changing the corpus does not create a second source of truth.
 
 ## Running
 

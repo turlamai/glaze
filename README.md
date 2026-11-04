@@ -202,22 +202,24 @@ runners.
 
 ### Code signing & notarization
 
-Unsigned apps get blocked by macOS Gatekeeper and Windows SmartScreen. `build` drives the platform signer for you:
+`build` drives `codesign` (macOS) and `signtool` (Windows); a signing failure
+aborts the build, while a missing toolchain warns.
 
 ```bash
-# macOS — Developer ID identity, hardened runtime, notarize + staple:
-raco glaze build --name myapp \
-  --sign "Developer ID Application: Acme Inc (TEAMID)" \
+# macOS: Developer ID + hardened runtime + notarize/staple
+raco glaze build --name myapp --sign "Developer ID Application: Acme Inc (TEAMID)" \
   --notarize acme-notary --installer
 
-# macOS — ad-hoc (no cert; for local testing / CI):
+# macOS ad-hoc for local/CI smoke
 raco glaze build --name myapp --sign -
 
-# Windows — signtool with a certificate thumbprint (RFC-3161 timestamped):
+# Windows: certificate thumbprint or subject, RFC-3161 timestamped
 raco glaze build --name myapp --sign 40HEXCHARS --installer
 ```
 
-Details: `--sign` takes a codesign identity (macOS) or a SHA-1 thumbprint / subject name for `signtool` (Windows). Hardened runtime is applied automatically on macOS unless `--no-hardened-runtime` is passed (and is skipped for ad-hoc, where its library validation would reject the app's own framework). `--notarize <keychain-profile>` submits the built dmg via `notarytool`, waits, and staples the ticket. `--entitlements <file>`, `--timestamp-url <url>` round it out. Signing failures abort the build; a *missing toolchain* degrades with a loud warning.
+`--entitlements`, `--timestamp-url` and `--no-hardened-runtime` round it out.
+Certificate custody, CI secrets and verification commands:
+[production signing](docs/production-signing.md).
 
 ### Product entitlements
 
@@ -225,18 +227,13 @@ Product licensing is intentionally outside Glaze's framework boundary. Applicati
 
 ### Update integrity
 
-`check-update` remains the small, backward-compatible notification helper. For installed applications, the full updater validates a signed manifest, selects the platform/architecture and release channel, enforces staged-rollout and download-size limits, verifies SHA-256 plus an optional artifact signature, and executes an install plan with rollback:
-
-Update verification uses the pure-Racket [`ed25519`](https://pkgs.racket-lang.org/package/ed25519) backend, so an installed application can verify its own updates without an OpenSSL 3 CLI. Signing, key generation, and encrypted private keys still use the OpenSSL 3 CLI at release time.
-
-All updater fetches follow absolute and relative redirects for up to ten hops.
-Signed manifests and artifacts remain HTTPS-only across every redirect, so a
-release alias cannot downgrade verification traffic to plaintext.
+`check-update` is the small notification helper. The installed updater verifies
+a signed manifest and artifact, selects by channel/platform/architecture,
+enforces rollout and minimum version, and runs an install plan with rollback:
 
 ```racket
 (define manifest
-  (fetch-update-manifest manifest-url pinned-public-key
-                         #:key-id "release-2026"))
+  (fetch-update-manifest manifest-url pinned-public-key #:key-id "release-2026"))
 (define candidate (select-update config manifest))
 (when candidate
   (define artifact (download-update config candidate download-path))
@@ -245,9 +242,10 @@ release alias cannot downgrade verification traffic to plaintext.
                               #:restart restart-app)))
 ```
 
-Portable artifacts (including AppImage-style deployments) can use the atomic replacement adapter above. MSI/EXE/PKG/DMG installers use `make-install-plan` with a platform adapter that owns elevation and process handoff; Glaze still controls the verified input and invokes rollback when installation fails.
-
-Release automation can sign both artifacts and the validated manifest with the same pinned Ed25519 key:
+Verification uses the pure-Racket [`ed25519`](https://pkgs.racket-lang.org/package/ed25519)
+backend, so an installed application needs no OpenSSL 3 CLI; signing and key
+generation still do. Every fetch is HTTPS-only across at most ten redirects.
+Release automation signs the artifact and the validated manifest:
 
 ```bash
 raco glaze updater-keygen --out updater-keys
@@ -259,6 +257,9 @@ raco glaze manifest-sign --manifest manifest.json --key updater-keys/private.pem
 raco glaze manifest-verify --manifest manifest.signed.json \
   --pub updater-keys/public.pem --key-id release-2026
 ```
+
+Channels, staged rollout, rollback and per-installation evidence:
+[releasing and updating applications](docs/release-and-updates.md).
 
 ## Project Structure
 
@@ -744,17 +745,20 @@ The tray is an optional integration. If its backend is unavailable it may degrad
 
 ## Testing
 
-Glaze proves different properties at different layers; a green unit suite is not a packaged product test.
-
 ```bash
-raco test glaze-test/                       # framework suite: bridge, capabilities, schema, packaging, updates, fuzz
-racket scripts/webview-e2e.rkt              # real-window e2e on the current OS
-raco make glaze/main.rkt glaze-cli/cli.rkt  # compile the public entry points
+raco test glaze-test/                       # framework suite
+racket scripts/webview-e2e.rkt              # real native window on this OS
+raco make glaze/main.rkt glaze-cli/cli.rkt  # compile public entry points
 ```
 
-On macOS the framework suite also drives real WKWebView windows; on Windows and Linux the real-window path is `scripts/webview-e2e.rkt`, which opens a native window, loads the application origin, checks title and URL, captures a PNG, navigates, closes and verifies the close callback. It needs a graphical session (Xvfb on Linux) and a working WebView runtime.
+The framework suite is windowless on Windows and Linux and also drives real
+WKWebView windows on macOS. The e2e opens a native window on every OS and
+needs a graphical session (Xvfb on Linux). Generated projects run their own
+`verify.rkt` with `raco glaze verify`.
 
-CI runs the framework suite on Racket 9.0 and 9.3 across Windows, macOS and Linux, the real-window e2e on all three, and a package job that scaffolds a project, builds with `--installer --sign -`, validates the MSI upgrade identity, the macOS bundle signature and deb/rpm/AppImage contents, and records artifact sizes. Generated projects have their own acceptance check: `raco glaze verify` opens the real window and runs the project's `verify.rkt`.
+CI runs both on Windows, macOS and Linux, and a package job builds and
+validates the installers. Application-side gates, runner requirements and
+evidence: [CI contract](docs/ci.md).
 
 ## Honest gaps
 

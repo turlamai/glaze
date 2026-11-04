@@ -39,27 +39,13 @@ with `--json`.
 | Build warns and emits zip/tar.gz instead of an installer | toolchain availability | WiX (Windows), macOS dmg tooling, or dpkg/rpm/AppImage tooling is missing. This is a distribution-format downgrade; install the toolchain before releasing. |
 | Update verification fails | manifest, key id, SHA-256 and signature | Treat it as a failed update, never as “unverified but acceptable”. Check the pinned public key, `#:key-id`, channel and artifact digest. |
 
-## WebView diagnostics API
+## Where the rules live
 
-The public WebView layer exposes the same facts the CLI reports:
-
-- `webview-supported?` — non-throwing capability probe;
-- `webview-diagnostic` — the last startup/probe error plus platform install guidance;
-- `webview-last-error` — the raw error, when one exists;
-- `webview-install-guidance` — the platform-specific repair instructions.
-
-`run-app` fails closed: a WebView that cannot start aborts startup with that
-guidance and never opens a browser tab. If `run-app` had already started the
-local server, it shuts the server down before raising.
-
-## Logs
-
-`glaze/log` provides a structured logger with per-sink levels, a rotating file
-sink, an in-memory history and an SSE sink. Application routes can be exposed
-through `make-log-routes` under a capability; frontend records are tagged with
-their source and capability so a page cannot forge backend lines. Prefer
-`log-error`/`log-warn` with structured `#:data` over `displayln` when a failure
-must be reportable.
+Startup failure behavior and the never-fall-back rule are owned by
+[the GUI-first contract](gui-first.md); the `webview-supported?`,
+`webview-diagnostic`, `webview-last-error` and `webview-install-guidance`
+procedures are documented in the Scribble manual. Structured logging and the
+`make-log-routes` sink are owned by the README's logging section.
 
 ## Reporting a defect
 
