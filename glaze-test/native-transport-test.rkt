@@ -238,6 +238,14 @@
 (define delivered (make-async-channel))
 (native-transport-set-deliver! t (lambda (js) (async-channel-put delivered js)))
 
+;; A platform callback may only stash the payload; the pump takes the batch
+;; from full Racket context and hands it to the dispatcher.
+(define deferred-raw (jsexpr->string (hasheq 'glz 1 'id "deferred" 'path "api/ping")))
+(native-transport-message-deferred! t deferred-raw)
+(check-equal? (native-transport-take-deferred! t)
+              (list deferred-raw)
+              "deferred callbacks are batched in arrival order")
+
 (native-transport-message! t (jsexpr->string (hasheq 'glz 1 'op "hello" 'id "rt-hello")))
 (define hello-d (sync/timeout 5 delivered))
 (check-not-false hello-d "hello delivery arrives")

@@ -303,7 +303,9 @@
       (when (and value (jsc_value_is_string value))
         (define text (jsc_value_to_string value))
         (when (string? text)
-          (native-transport-message! (native-wiring-transport wiring) text))))))
+          ;; GTK/WebKit signal handlers run on the pump's FFI callback stack;
+          ;; only stash here or the scheduler aborts in atomic mode.
+          (native-transport-message-deferred! (native-wiring-transport wiring) text))))))
 
 ;; JavaScript snippets awaiting webkit_web_view_evaluate_javascript on the
 ;; window's pump thread: (cons view js-string).
@@ -322,6 +324,11 @@
       ;; Non-blocking iteration of the shared default main context (the one
       ;; gtk_init installed); FALSE = don't block waiting for events.
       (g_main_context_iteration #f #f)
+      (define wiring (native-wiring-for-webview! (lin:webview-webview wv)))
+      (when wiring
+        (define transport (native-wiring-transport wiring))
+        (for ([raw (in-list (native-transport-take-deferred! transport))])
+          (native-transport-message! transport raw)))
       (drain-deliveries! wv)
       (unless (and gtk_window_is_maximized (gtk_window_is_maximized (lin:webview-window wv)))
         (define current (raw-geometry wv))

@@ -350,6 +350,7 @@
                   closed?-box
                   [thread #:mutable]
                   [deliver-queue #:mutable]
+                  [transport #:mutable]
                   on-close)
   #:transparent)
 
@@ -512,7 +513,10 @@
     (define text (wstr->string p))
     (when (string? text)
       (log "message: envelope received")
-      (native-transport-message! transport text))))
+      ;; This runs on the WebView2 COM callback stack (atomic mode); a
+      ;; scheduler operation here aborts the process. Stash and let the pump
+      ;; dispatch it from full Racket context.
+      (native-transport-message-deferred! transport text))))
 
 (struct native-wiring (transport env) #:transparent)
 
@@ -553,7 +557,17 @@
     (CoInitialize #f))
 
   (define wv
-    (win:webview (box #f) #f #f url (box #f) (box #f) (box #f) #f (make-async-channel #f) on-close))
+    (win:webview (box #f)
+                 #f
+                 #f
+                 url
+                 (box #f)
+                 (box #f)
+                 (box #f)
+                 #f
+                 (make-async-channel #f)
+                 native-transport
+                 on-close))
   (define instance (GetModuleHandleW #f))
 
   ;; controller callback: AddRef both interfaces into the handle, Navigate,
@@ -745,6 +759,10 @@
       (when (PeekMessageW msg #f 0 0 PM_REMOVE)
         (TranslateMessage msg)
         (DispatchMessageW msg))
+      (define transport (win:webview-transport wv))
+      (when transport
+        (for ([raw (in-list (native-transport-take-deferred! transport))])
+          (native-transport-message! transport raw)))
       (drain-deliveries! wv)
       (sleep 0.01)
       (pump-loop)))
