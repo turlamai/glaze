@@ -5,6 +5,8 @@
          racket/port
          racket/string
          racket/system
+         net/base64
+         (prefix-in pure: ed25519)
          glaze/signing)
 
 ;; The CLI's progress messages go to stderr by design, but drdr treats a
@@ -123,3 +125,35 @@
     (begin
       (printf "glaze-test/signing: skipped — no OpenSSL >= 1.1.1 found (set GLAZE_OPENSSL)\n")
       (delete-directory/files directory)))
+
+;; Verification must work when no OpenSSL CLI exists: this is the path an
+;; installed application takes when checking its own update manifest.
+
+(test-case "pure Ed25519 verification needs no OpenSSL"
+  (define keypair (pure:generate-keypair))
+  (define spki
+    (bytes-append #"\x30\x2a\x30\x05\x06\x03\x2b\x65\x70\x03\x21\x00" (pure:keypair-public keypair)))
+  (define content #"sha256:0123456789abcdef")
+  (define signature
+    (bytes->string/utf-8 (base64-encode (pure:sign content (pure:keypair-secret keypair)) #"")))
+  (define der-path (make-temporary-file "glaze-pure-pub~a"))
+  (define pem-path (make-temporary-file "glaze-pure-pub-pem~a"))
+  (dynamic-wind
+   void
+   (lambda ()
+     (call-with-output-file der-path #:exists 'truncate/replace (lambda (out) (write-bytes spki out)))
+     (call-with-output-file pem-path
+                            #:exists 'truncate/replace
+                            (lambda (out)
+                              (displayln "-----BEGIN PUBLIC KEY-----" out)
+                              (displayln (bytes->string/utf-8 (base64-encode spki #"")) out)
+                              (displayln "-----END PUBLIC KEY-----" out)))
+     (check-true (verify-bytes content #:public-key der-path #:signature signature))
+     (check-true (verify-bytes content #:public-key pem-path #:signature signature))
+     (check-false (verify-bytes #"sha256:fedcba" #:public-key der-path #:signature signature))
+     (check-false (verify-bytes content #:public-key pem-path #:signature "not-base64!")))
+   (lambda ()
+     (when (file-exists? der-path)
+       (delete-file der-path))
+     (when (file-exists? pem-path)
+       (delete-file pem-path)))))

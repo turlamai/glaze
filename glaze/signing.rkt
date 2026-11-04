@@ -1,9 +1,11 @@
 #lang racket/base
 
-;; Ed25519 artifact signing for self-updating apps, implemented through the
-;; system OpenSSL CLI so Glaze does not add a compiled crypto dependency.
-;; Signatures cover "sha256:<hex digest>" rather than loading the artifact in
-;; memory, which keeps the format suitable for large release archives.
+;; Ed25519 artifact signing for self-updating apps. Signing and key
+;; generation still use the system OpenSSL 3 CLI; verification uses the pure
+;; Racket `ed25519` package, so an installed application can verify its own
+;; updates without a developer toolchain. Signatures cover
+;; "sha256:<hex digest>" rather than loading the artifact in memory, which
+;; keeps the format suitable for large release archives.
 
 (require racket/list
          net/base64
@@ -11,7 +13,9 @@
          racket/file
          racket/port
          racket/string
-         racket/system)
+         racket/system
+         (prefix-in pure: ed25519)
+         "private/ed25519-public.rkt")
 
 (provide signing-keygen
          signing-key-password-encrypted?
@@ -187,21 +191,10 @@
                 (lambda () (delete-if-present input))))
 
 (define (public-key-fingerprint public-key-value)
-  (define public-key (->path public-key-value))
-  (define der (make-temporary-file "glaze-pub-der~a"))
-  (dynamic-wind void
-                (lambda ()
-                  (openssl-run "public-key fingerprint"
-                               (list "pkey"
-                                     "-pubin"
-                                     "-in"
-                                     (path->string public-key)
-                                     "-outform"
-                                     "DER"
-                                     "-out"
-                                     (path->string der)))
-                  (sha256-file der))
-                (lambda () (delete-if-present der))))
+  (define-values (_public der) (read-public-key-components (->path public-key-value)))
+  ;; Same value as `openssl pkey -pubin -outform DER | sha256`: the digest
+  ;; of the SubjectPublicKeyInfo bytes, not of the raw 32-byte point.
+  (sha256-string der))
 
 (define (signing-key-password-encrypted? private-key-path)
   (string-contains? (file->string private-key-path) "ENCRYPTED"))
@@ -304,29 +297,8 @@
     (raise-argument-error 'verify-bytes "bytes?" content))
   (unless (string? signature-base64)
     (raise-argument-error 'verify-bytes "string?" signature-base64))
-  (define public-key (->path public-key-value))
-  (define payload-file (make-temporary-file "glaze-ver-in~a"))
-  (define signature-file (make-temporary-file "glaze-ver-sig~a"))
-  (dynamic-wind
-   void
-   (lambda ()
-     (write-content-file payload-file content)
-     (write-content-file signature-file
-                         (with-handlers ([exn:fail? (lambda (_) #"")])
-                           (base64-decode (string->bytes/utf-8 (string-trim signature-base64)))))
-     (define-values (exit-code _detail)
-       (call-openssl (append (list "pkeyutl" "-verify")
-                             (if (use-rawin?)
-                                 (list "-rawin")
-                                 '())
-                             (list "-pubin"
-                                   "-inkey"
-                                   (path->string public-key)
-                                   "-sigfile"
-                                   (path->string signature-file)
-                                   "-in"
-                                   (path->string payload-file)))))
-     (zero? exit-code))
-   (lambda ()
-     (delete-if-present payload-file)
-     (delete-if-present signature-file))))
+  (define-values (public-key _der) (read-public-key-components (->path public-key-value)))
+  (define signature
+    (with-handlers ([exn:fail? (lambda (_) #f)])
+      (base64-decode (string->bytes/utf-8 (string-trim signature-base64)))))
+  (and signature (= 64 (bytes-length signature)) (pure:verify content signature public-key)))
