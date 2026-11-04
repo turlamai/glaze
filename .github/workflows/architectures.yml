@@ -64,7 +64,7 @@ jobs:
         env:
           # The ARM64 Windows runner has no notification area; the direct
           # tray-backend check cannot add an icon there.
-          GLAZE_TEST_NO_TRAY: ${{ matrix.os == 'windows-11-arm' && '1' || '' }}
+          GLAZE_TEST_NO_TRAY_BACKEND: ${{ matrix.os == 'windows-11-arm' && '1' || '' }}
         shell: bash
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then
