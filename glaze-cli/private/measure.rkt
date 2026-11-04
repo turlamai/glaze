@@ -154,7 +154,11 @@
   (define-values (p _stdout _stdin _stderr)
     (with-handlers ([exn:fail? (lambda (e)
                                  (error 'measure "could not launch ~a: ~a" target (exn-message e)))])
-      (subprocess #f #f #f target)))
+      ;; Do not inherit the caller's working directory: a Windows child keeps
+      ;; it locked until every descendant exits, which makes a temporary
+      ;; staging tree undeletable right after the survival window.
+      (parameterize ([current-directory (find-system-path 'temp-dir)])
+        (subprocess #f #f #f target))))
   (sleep seconds)
   ;; subprocess-status is the SYMBOL 'running while alive, the exit code
   ;; once it terminates — same shape rivet's launch smoke checks.
