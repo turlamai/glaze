@@ -18,6 +18,7 @@ This directory has one owner for each durable decision. New documents must link 
 - [Diagnostics](diagnostics.md): symptom-to-cause troubleshooting for startup, schema, verification, packaging and update failures.
 - [Product acceptance](product-acceptance.md): the scenario record and evidence levels that define when a packaged application is done.
 - [Production signing](production-signing.md): trust domains, certificate and notary prerequisites, key handling in CI, and the verification checklist.
+- [Releasing and updating applications](release-and-updates.md): release identity, update channels, staged rollout, signed manifests, rollback and the N→N+1 evidence per installation shape.
 - [GLZ1 fuzzing](fuzzing.md): the decoders under fuzz, the invariant, the seeded inputs and how to extend the corpus.
 - [Releasing](RELEASING.md): framework release procedure and provenance requirements.
 - [Performance baseline](benchmarks.md): what the framework measures, the recorded baseline, and the honesty rules for comparing results.
@@ -27,3 +28,5 @@ The generated HTML site under `docs/index.html` is product-facing material. The 
 ## Adoption and support
 
 [English guide](USING.md) · [简体中文](USING.zh-CN.md): fit, maturity, upgrade boundaries and support. This user path links to the existing canonical technical owners above.
+
+[Security policy](../SECURITY.md): private vulnerability reporting, supported versions and the framework trust model.

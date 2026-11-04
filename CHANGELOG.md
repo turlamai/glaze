@@ -28,17 +28,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   gain "Testing" and "Honest gaps" sections: framework suite, real-window e2e,
   the CI package job, generated-project `verify`, and the bounded Linux/macOS/
   WebView2, installer-toolchain, accessibility/IME and pre-1.0 API limits.
-- Add four application-facing owners to the documentation map:
+- Add six application-facing owners to the documentation map:
   `docs/ci.md` (+ `ci.zh-CN.md`) records the consumer CI gates, runner
   requirements and evidence rules; `docs/diagnostics.md` maps startup, schema,
   verification, packaging and update symptoms to causes; `docs/product-acceptance.md`
-  defines the scenario record and evidence levels for a packaged app; and
-  `docs/fuzzing.md` records the GLZ1 fuzz targets, invariant, seeded corpus
-  and limits.
-- Add `docs/production-signing.md`: separate OS, update and Permit trust
-  domains, macOS notarization and keychain prerequisites, Windows Authenticode
-  and MSI identity, Linux packaging limits, CI key handling, and the
-  verification commands for a released artifact.
+  defines the scenario record and evidence levels for a packaged app;
+  `docs/production-signing.md` covers OS/update/Permit trust domains,
+  notarization, CI key handling and verification; `docs/release-and-updates.md`
+  owns release identity, channels, rollout, signed manifests, rollback and the
+  N→N+1 evidence per installation shape; and `docs/fuzzing.md` records the GLZ1
+  fuzz targets, invariant, seeded corpus and limits.
 
 ### Fixed
 
