@@ -27,15 +27,28 @@
    (stage-artifact "measured-0.1.0-macos.dmg" 3000)
    (stage-artifact "measured-0.1.0-macos-arm64.zip" 1500)
    (stage-artifact "update-stable.json" 40)
+   ;; A macOS .app is a directory; its nested bytes count as one artifact.
+   (define app-dir (build-path dist "measured.app"))
+   (make-directory* (build-path app-dir "Contents" "MacOS"))
+   (call-with-output-file (build-path app-dir "Contents" "MacOS" "measured")
+                          (lambda (out) (write-bytes (make-bytes 700 66) out)))
 
    ;; No budgets: every artifact is listed with its byte count and no
    ;; violations exist.
    (define plain (measure-size temp-root))
-   (check-equal? (length (hash-ref plain 'artifacts)) 3)
+   (check-equal? (length (hash-ref plain 'artifacts)) 4)
    (check-equal? (hash-ref plain 'violations) '())
    (check-true (for/and ([row (in-list (hash-ref plain 'artifacts))])
                  (and (exact-positive-integer? (hash-ref row 'bytes))
                       (not (hash-ref row 'budget-bytes)))))
+
+   ;; Directory artifacts report their recursive byte size.
+   (define app-row
+     (for/first ([row (in-list (hash-ref plain 'artifacts))]
+                 #:when (equal? (hash-ref row 'name) "measured.app"))
+       row))
+   (check-not-false app-row "the .app directory is listed")
+   (check-equal? (hash-ref app-row 'bytes) 700)
 
    ;; A budget file gates by glob, first match wins.
    (define budget-path (build-path temp-root "budgets.json"))
@@ -92,15 +105,16 @@
    ;; executable extensions, so the staged scripts get .bat names there and
    ;; sh scripts elsewhere.
    (define script-name (if (eq? (system-type 'os) 'windows) "sleeper.bat" "sleeper"))
-   (define (write-script body)
-     (define path (build-path dist script-name))
+   (define (write-script name body)
+     (define path (build-path dist name))
      (call-with-output-file path (lambda (out) (display body out)) #:exists 'replace)
      (file-or-directory-permissions path
                                     (bitwise-ior (file-or-directory-permissions path 'bits)
                                                  user-execute-bit))
      path)
    (define sleeper
-     (write-script (if (eq? (system-type 'os) 'windows)
+     (write-script script-name
+                   (if (eq? (system-type 'os) 'windows)
                        "@echo off\r\nping -n 30 127.0.0.1 > nul\r\n"
                        "#!/bin/sh\nsleep 30\n")))
    (define elapsed (launch-survival! sleeper 0.5))
@@ -108,8 +122,17 @@
 
    (define quitter
      (write-script
+      (if (eq? (system-type 'os) 'windows) "quitter.bat" "quitter")
       (if (eq? (system-type 'os) 'windows) "@echo off\r\nexit /b 0\r\n" "#!/bin/sh\nexit 0\n")))
    (check-exn exn:fail?
               (lambda () (launch-survival! quitter 0.5))
-              "an artifact that exits early fails its survival window"))
+              "an artifact that exits early fails its survival window")
+
+   ;; `measure startup` must forward --seconds/--artifact as keyword
+   ;; arguments; a plain `apply` here once failed with "procedure does not
+   ;; accept keyword arguments" before the artifact ever launched.
+   (parameterize ([current-directory temp-root]
+                  [current-output-port (open-output-string)])
+     (check-not-exn
+      (lambda () (measure-command (list "startup" "--seconds" "0.5" "--artifact" script-name))))))
  (lambda () (delete-directory/files temp-root)))

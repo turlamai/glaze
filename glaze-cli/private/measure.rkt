@@ -35,14 +35,24 @@
 (struct exn:fail:glaze:budget exn:fail () #:transparent)
 
 (define (dist-artifacts root)
+  ;; A macOS .app is a directory; count it as one artifact so size and
+  ;; launch-survival measurement see the bundle the build actually produced.
   (define dist (build-path root dist-directory))
   (if (directory-exists? dist)
       (sort (for/list ([path (in-list (directory-list dist #:build? #t))]
-                       #:when (file-exists? path))
+                       #:when (or (file-exists? path) (directory-exists? path)))
               path)
             #:key path->string
             string<?)
       '()))
+
+(define (artifact-size path)
+  (if (directory-exists? path)
+      (for/fold ([total 0]) ([child (in-directory path)])
+        (if (file-exists? child)
+            (+ total (file-size child))
+            total))
+      (file-size path)))
 
 (define (format-bytes count)
   (define mb (/ count 1024.0 1024.0))
@@ -96,7 +106,7 @@
   (define violations '())
   (define rows
     (for/list ([artifact (in-list artifacts)])
-      (define bytes (file-size artifact))
+      (define bytes (artifact-size artifact))
       (define budget (and rules (budget-for rules artifact)))
       (when (and budget (> bytes budget))
         (set! violations (cons (cons artifact (cons bytes budget)) violations)))
@@ -157,7 +167,7 @@
   (define artifacts (select-artifacts project-root artifact-filter 'measure-startup))
   ;; dist keeps manifests/sidecars too, so smoke the largest non-data file.
   (define artifact
-    (argmax file-size
+    (argmax artifact-size
             (filter (lambda (path)
                       (not (regexp-match? #rx"[.](json|txt|sha256|sig|zip|tar[.]gz|msi|deb|rpm)$"
                                           (path->string path))))
@@ -208,14 +218,9 @@
     (cond
       [(null? args)
        (define report
-         (apply measure-startup
-                root
-                (append (if artifact
-                            (list #:artifact artifact)
-                            '())
-                        (if seconds
-                            (list #:seconds seconds)
-                            '()))))
+         (if seconds
+             (measure-startup root #:artifact artifact #:seconds seconds)
+             (measure-startup root #:artifact artifact)))
        (display-startup-report report)]
       [(equal? (car args) "--artifact")
        (loop (cddr args) (require-option-value 'measure "--artifact" args) seconds)]

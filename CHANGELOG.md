@@ -7,8 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Add `examples/taskboard/`, a maintained product-level example: one typed
+  route declaration for `tasks`/`tasksCreate`/`tasksToggle`/`tasksDelete`/
+  `tasksClearDone`, a lazily opened `glaze/store` in the application data
+  directory (overridable with `TASKBOARD_DATA_DIR`), SSE snapshot broadcasts,
+  a no-build-step HTML/CSS/JS interface, a committed `glaze-schema.json`,
+  `verify.rkt` for native-window acceptance, and three test layers (pure
+  domain, store persistence, live routes with authentication and 400 paths).
+  CI runs the example's tests, schema check, native verify and build on
+  Windows, macOS and Linux.
+
 ### Fixed
 
+- `raco glaze measure startup` forwarded `--seconds` and `--artifact` through
+  `apply`, which raised "procedure does not accept keyword arguments" before
+  launching anything; the command now calls `measure-startup` with keyword
+  arguments directly.
+- `raco glaze measure` treats a macOS `.app` as one artifact: directory
+  entries are listed, `size` reports their recursive byte count, and
+  `startup` selects the bundle. Previously `size` silently ignored the app
+  and `startup` failed with "no packaged artifacts".
+- Rebuilding a macOS application into an existing `dist/` replaces the
+  previous `.app` instead of failing because the rename destination exists.
 - Verify update manifests and artifacts without the OpenSSL 3 CLI. `verify-bytes`
   and `public-key-fingerprint` now parse the PEM or 44-byte DER Ed25519
   SubjectPublicKeyInfo directly and verify with the pure Racket `ed25519`

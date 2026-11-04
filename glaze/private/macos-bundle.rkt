@@ -38,6 +38,11 @@
   (define exe-src (build-path dist-bin app-name))
   (unless (file-exists? exe-src)
     (error 'build-app "macOS bundle assembly failed: no executable at ~a" exe-src))
+  ;; Rebuilding into the same dist must replace the previous bundle: on
+  ;; macOS rename-file-or-directory refuses an existing destination, so a
+  ;; second `raco glaze build` used to fail after the app already existed.
+  (when (directory-exists? bundle)
+    (delete-directory/files bundle))
   (make-directory* macos-dir)
   (rename-file-or-directory exe-src (build-path macos-dir app-name))
   (file-or-directory-permissions

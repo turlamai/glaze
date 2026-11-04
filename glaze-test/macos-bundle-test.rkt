@@ -71,4 +71,15 @@
   (check-true (string-contains? patched "CFBundleIconFile</key><string>BundleApp.icns")
               "the plist references the bundled icon"))
 
+;; Rebuilding into the same dist replaces the bundle instead of failing on
+;; the existing destination (the second `raco glaze build` regression).
+(make-directory* (build-path dist "bin"))
+(call-with-output-file (build-path dist "bin" "BundleApp")
+                       (lambda (out) (display "second payload" out))
+                       #:exists 'replace)
+(assemble-macos-bundle dist "BundleApp" "1.2.4" '())
+(check-equal? (file->string (build-path contents "MacOS" "BundleApp")) "second payload")
+(check-false (directory-exists? (build-path contents "lib"))
+             "a rebuild does not keep the previous bundle's library tree")
+
 (delete-directory/files work-root)
