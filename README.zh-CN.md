@@ -207,6 +207,8 @@ raco glaze build --name myapp --sign 40HEXCHARS --installer
 
 `check-update` 仍是小型、向后兼容的通知助手。对已安装应用，完整更新器会校验签名清单、选择平台/架构与发布通道、执行分阶段发布与下载大小限制、校验 SHA-256 以及可选的制品签名，并执行带回滚的安装计划：
 
+更新验签使用纯 Racket 的 [`ed25519`](https://pkgs.racket-lang.org/package/ed25519) 后端，因此已安装应用无需 OpenSSL 3 CLI 即可验证自己的更新；签名、密钥生成和加密私钥仍使用 OpenSSL 3 CLI。
+
 所有更新器拉取都跟随绝对与相对重定向，最多十跳。签名清单与制品在每一次重定向中都只允许 HTTPS，因此发布别名无法把校验流量降级为明文。
 
 ```racket

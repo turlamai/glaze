@@ -205,6 +205,8 @@ Product licensing is intentionally outside Glaze's framework boundary. Applicati
 
 `check-update` remains the small, backward-compatible notification helper. For installed applications, the full updater validates a signed manifest, selects the platform/architecture and release channel, enforces staged-rollout and download-size limits, verifies SHA-256 plus an optional artifact signature, and executes an install plan with rollback:
 
+Update verification uses the pure-Racket [`ed25519`](https://pkgs.racket-lang.org/package/ed25519) backend, so an installed application can verify its own updates without an OpenSSL 3 CLI. Signing, key generation, and encrypted private keys still use the OpenSSL 3 CLI at release time.
+
 All updater fetches follow absolute and relative redirects for up to ten hops.
 Signed manifests and artifacts remain HTTPS-only across every redirect, so a
 release alias cannot downgrade verification traffic to plaintext.

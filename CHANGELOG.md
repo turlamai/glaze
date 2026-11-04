@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Verify update manifests and artifacts without the OpenSSL 3 CLI. `verify-bytes`
+  and `public-key-fingerprint` now parse the PEM or 44-byte DER Ed25519
+  SubjectPublicKeyInfo directly and verify with the pure Racket `ed25519`
+  package, so an installed application needs no developer toolchain to check
+  its own updates. Signing, key generation, and encrypted private keys still
+  use the OpenSSL 3 CLI.
+
 - Generate `api.d.ts` under the namespace the runtime actually creates:
   `declare namespace glaze.api { function ... }`. The generator emitted
   top-level `declare function glaze.<name>` declarations, so TypeScript

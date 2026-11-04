@@ -19,6 +19,9 @@
     ;; The floor is the lowest version this suite actually covers; raise
     ;; it in the same CHANGELOG entry that raises the tested version.
     ["keel" #:version "0.3.1"]
+    ;; Update verification uses the pure Ed25519 backend, so installed apps
+    ;; do not need the OpenSSL 3 CLI; signing/keygen still use it.
+    ["ed25519" #:version "0.1"]
     ;; Tests ship inside this package, so rackunit is a runtime dep.
     "rackunit-lib"))
 (define build-deps
