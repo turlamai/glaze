@@ -5,6 +5,9 @@ inputs:
   racket-version:
     description: Racket version to install
     default: '9.3'
+  racket-architecture:
+    description: Racket VM architecture (x64 or arm64)
+    default: 'x64'
   linux-webview-deps:
     description: Install GTK3, WebKitGTK and Xvfb on Linux
     default: 'true'
@@ -16,6 +19,7 @@ runs:
       uses: Bogdanp/setup-racket@2466913449df77df2bad149d1f2fc4e1ea4795dd # v1.15
       with:
         version: ${{ inputs.racket-version }}
+        architecture: ${{ inputs.racket-architecture }}
 
     - name: Install Glaze package
       shell: bash
