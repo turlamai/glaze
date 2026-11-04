@@ -58,6 +58,11 @@ the most specific artifact first:
 | Windows | WebView2 Runtime (preinstalled on hosted runners); WiX for MSI (`dotnet tool install --global wix --version 5.0.2`); `signtool` plus a certificate for signed releases | Unsigned or ad-hoc builds must not be published as release artifacts |
 | Linux | GTK 3 and WebKitGTK 4.1 development packages, `xvfb`, `dpkg`, `rpm`, AppImage tooling | Run windowed commands under `xvfb-run -a`; set `WEBKIT_DISABLE_DMABUF_RENDERER=1` on GPU-less runners |
 
+ARM64: Apple Silicon and Linux ARM64 use native Racket builds. Windows ARM64
+runs the x64 build under emulation because Glaze ships only the x64
+`WebView2Loader.dll`; that leg is host-compatibility evidence, not native
+Windows ARM64 support.
+
 Set `GLAZE_NO_STARTUP_DIALOG=1` in unattended jobs so a failed WebView startup
 reports an error instead of waiting on an OS dialog. The dialog is for
 interactive desktops; suppressing it does not suppress the failure.

@@ -52,6 +52,10 @@ raco glaze measure size --budget budgets.json
 | Windows | WebView2 Runtime（托管 runner 已预装）；MSI 需要 WiX（`dotnet tool install --global wix --version 5.0.2`）；签名发布需要 `signtool` 与证书 | 未签名或 ad-hoc 构建不得作为发布产物 |
 | Linux | GTK 3、WebKitGTK 4.1 开发包、`xvfb`、`dpkg`、`rpm`、AppImage 工具 | 窗口命令放在 `xvfb-run -a` 下；无 GPU 的 runner 设置 `WEBKIT_DISABLE_DMABUF_RENDERER=1` |
 
+ARM64：Apple Silicon 与 Linux ARM64 使用原生 Racket 构建。Windows ARM64 以模拟方式
+跑 x64 构建，因为 Glaze 只提供 x64 `WebView2Loader.dll`；该 leg 是主机兼容性证据，
+不代表原生 Windows ARM64 支持。
+
 无人值守 job 设置 `GLAZE_NO_STARTUP_DIALOG=1`，让 WebView 启动失败直接报错，
 而不是卡在系统对话框上。该变量只抑制对话框，不抑制失败。
 

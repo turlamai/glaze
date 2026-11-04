@@ -767,6 +767,7 @@ evidence: [CI contract](docs/ci.md).
 - **Linux qualification is bounded** — CI proves Xvfb + WebKitGTK window behavior and deb/rpm/AppImage metadata on Ubuntu. Real distribution and desktop behavior (GNOME/KDE, Wayland compositors, scaling, portals, IME) belongs to each product's release evidence. Native dialogs need `zenity` or `kdialog`; global shortcuts are X11/XWayland-only.
 - **macOS needs an interactive session** — WKWebView startup requires a logged-in graphical desktop; headless or SSH sessions fail with guidance instead of falling back to a browser.
 - **Windows needs the WebView2 Runtime** — Glaze stages `WebView2Loader.dll`, not the Evergreen Runtime. A missing Runtime is diagnosed at startup.
+- **Native Windows ARM64 is not shipped** — Glaze stages the x64 `WebView2Loader.dll`, so a native arm64 Racket process cannot load the WebView. CI runs the x64 build on an ARM64 host under emulation; a native ARM64 build needs an arm64 loader and packaged evidence.
 - **Installer toolchains are external** — WiX for MSI, macOS tooling for dmg/notarization, dpkg/rpm/AppImage tooling on Linux. `--installer` falls back to zip/tar.gz with a warning when a toolchain is absent; that is a distribution-format downgrade, not a UI runtime fallback.
 - **Accessibility and IME are application-owned** — Glaze hosts the system WebView and adds no accessibility layer. Semantic HTML, focus order, names/roles, large text and IME behavior must be designed and tested by the product on each platform.
 - **No mobile targets** — Windows, macOS and Linux desktops only.
