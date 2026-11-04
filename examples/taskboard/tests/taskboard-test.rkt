@@ -6,7 +6,6 @@
 (require json
          rackunit
          racket/list
-         racket/string
          "../taskboard.rkt")
 
 (define (titles tasks)
