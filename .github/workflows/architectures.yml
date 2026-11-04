@@ -45,7 +45,7 @@ jobs:
       - name: Report architecture
         shell: bash
         run: |
-          racket -e '(displayln (system-type "os"))'
+          racket -e '(begin (displayln (system-type (quote os))) (displayln (system-type (quote arch))))'
           uname -m 2>/dev/null || true
 
       - name: Run framework tests
