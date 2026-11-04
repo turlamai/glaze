@@ -30,10 +30,13 @@ jobs:
         include:
           - os: macos-15-intel
             label: macOS Intel (x86_64)
+            architecture: x64
           - os: ubuntu-24.04-arm
             label: Linux ARM64 (aarch64)
+            architecture: arm64
           - os: windows-11-arm
             label: Windows ARM64
+            architecture: arm64
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -41,6 +44,7 @@ jobs:
       - uses: ./.github/actions/setup-glaze
         with:
           racket-version: '9.3'
+          racket-architecture: ${{ matrix.architecture }}
 
       - name: Report architecture
         shell: bash
