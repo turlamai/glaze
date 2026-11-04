@@ -1,0 +1,89 @@
+name: Desktop Architectures
+
+# The default CI matrix covers the hosted x64/arm64 defaults only. This
+# workflow keeps one real run per supported desktop architecture: Intel macOS,
+# Linux ARM64 (packages, WebKitGTK, Xvfb) and Windows ARM64. A green run here
+# is architecture evidence; a skipped or failed leg is missing evidence.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: architectures-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  native-architecture:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15-intel
+            label: macOS Intel (x86_64)
+          - os: ubuntu-24.04-arm
+            label: Linux ARM64 (aarch64)
+          - os: windows-11-arm
+            label: Windows ARM64
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Racket
+        uses: Bogdanp/setup-racket@2466913449df77df2bad149d1f2fc4e1ea4795dd # v1.15
+        with:
+          version: '9.3'
+
+      - name: Install Glaze package
+        shell: bash
+        run: raco pkg install --auto --no-docs --link "$PWD"
+
+      - name: Install webview deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev xvfb
+
+      - name: Report architecture
+        shell: bash
+        run: |
+          racket -e '(displayln (system-type "os"))'
+          uname -m 2>/dev/null || true
+
+      - name: Run framework tests
+        run: raco test glaze-test/
+
+      - name: Run webview e2e
+        env:
+          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
+          GLAZE_NO_STARTUP_DIALOG: '1'
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a racket scripts/webview-e2e.rkt
+          else
+            racket scripts/webview-e2e.rkt
+          fi
+
+      - name: Build a sample app
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP"
+          raco glaze init arch-smoke
+          cd arch-smoke
+          raco glaze schema check --json
+          raco glaze build --name arch-smoke --version 0.0.1 --out dist
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a raco glaze measure startup --seconds 3
+          else
+            raco glaze measure startup --seconds 3
+          fi
