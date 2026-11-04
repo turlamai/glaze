@@ -47,12 +47,14 @@
     ;; data for the user to inspect or repair.
     [else (error 'taskboard "tasks.json does not contain a valid task list")]))
 
-(define (snapshot)
-  (define current (tasks))
+(define (snapshot-of current)
   (hasheq 'tasks current 'stats (task-stats current)))
 
-(define (notify!)
-  (bus-broadcast! bus 'tasks-changed (snapshot)))
+(define (snapshot)
+  (snapshot-of (tasks)))
+
+(define (notify! snapshot)
+  (bus-broadcast! bus 'tasks-changed snapshot))
 
 (define (invalid! message)
   (raise (exn:fail:glaze:bad-param message (current-continuation-marks))))
@@ -62,13 +64,12 @@
 (define (mutate! update)
   (call-with-semaphore state-lock
                        (lambda ()
-                         (define before (tasks))
-                         (define after (update before))
+                         (define after (update (tasks)))
                          (and after
-                              (begin
+                              (let ([fresh (snapshot-of after)])
                                 (store-set! (task-store) 'tasks after)
-                                (notify!)
-                                (snapshot))))))
+                                (notify! fresh)
+                                fresh)))))
 
 (define-api-routes api
                    [(GET "api/tasks") (listTasks) (snapshot)]

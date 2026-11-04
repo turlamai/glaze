@@ -101,7 +101,7 @@
          (check-equal? (hash-ref (body-json delete-body) 'tasks) '())
 
          ;; Invalid input is a 400, not a 500.
-         (define-values (bad-status bad-body)
+         (define-values (bad-status _bad-body)
            (call "POST" "/api/tasks/create" (jsexpr->string (hasheq 'title "   "))))
          (check-true (string-contains? (status-text bad-status) "400")))
        (lambda ()
