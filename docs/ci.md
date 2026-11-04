@@ -111,15 +111,9 @@ scoped to that job.
 
 ## What not to gate on
 
-- **A unit suite alone.** It never opens a window and cannot prove WebView
-  startup, focus, IME, dialogs or packaged launch.
-- **`doctor` alone.** It checks the environment and project metadata, not
-  application behavior.
-- **A screenshot alone.** `verify` proves the page loaded and captured; the
-  application's workflow needs route, persistence and recovery assertions.
-- **A green build with a missing format.** If the installer toolchain is
-  absent, `--installer` falls back to zip/tar.gz with a warning; assert the
-  formats you promise instead of accepting the fallback silently.
+A unit suite, a `doctor` run, or a screenshot alone is not a gate: they prove
+logic, environment, or a single frame respectively. [Product acceptance](product-acceptance.md)
+owns the evidence levels; this page owns the commands that produce them.
 
 ## Evidence to record
 
