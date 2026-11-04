@@ -347,8 +347,10 @@ The embedded frontend uses the generated, transport-neutral JavaScript client (`
 
 Capabilities are opt-in and strict. Once `#:capability` is supplied, every API
 route must declare `#:permission`; unmarked or ungranted routes return 403 and
-their handlers never run. `run-app` automatically generates and bootstraps an
-API token when a capability is active.
+their handlers never run. `run-app` protects the API with a generated token by
+default (`#:api-token #t`); `#:api-token #f` is an explicit opt-out, and
+supplying `#:capability` requires a non-empty token. The native window obtains
+the token through a one-time bootstrap URL.
 
 ```racket
 (define main-capability
@@ -625,7 +627,7 @@ The event stream uses the same local origin as the embedded WebView frontend.
 
 - Requests are only served for Host headers `127.0.0.1` / `localhost` / `[::1]`.
 - API handler parameter errors become 400 JSON; handler exceptions become 500 JSON and reach `run-app`'s `#:on-error` hook.
-- Optional `#:api-token` protects API routes and SSE. The native app window uses a one-time bootstrap URL to obtain an HttpOnly cookie; programmatic clients use `X-Glaze-Token`.
+- `#:api-token` (default `#t`) protects API routes and SSE; `#:api-token #f` is the explicit opt-out and cannot be combined with `#:capability`. The native app window uses a one-time bootstrap URL to obtain an HttpOnly cookie; programmatic clients use `X-Glaze-Token`.
 - Optional `#:capability` enables default-deny runtime authority. Declared route permissions may be unscoped, path-scoped, or command/argument-scoped; denied handlers are never invoked.
 - Update checks remain opt-in through `run-app #:check-update ...`.
 

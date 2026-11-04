@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Generate `api.d.ts` under the namespace the runtime actually creates:
+  `declare namespace glaze.api { function ... }`. The generator emitted
+  top-level `declare function glaze.<name>` declarations, so TypeScript
+  consumers were told to call a binding that does not exist while the real
+  `glaze.api.<name>` call was rejected by the type checker.
+- Document `glaze/window-state` in the manual (its structs and helpers were
+  linked through `@racketmodname` without a `@defmodule`, producing an
+  undefined-tag warning in every docs build).
+- Correct the API-token wording in both READMEs: `run-app` token-protects the
+  HTTP adapter by default (`#:api-token #t`); `#:api-token #f` is an explicit
+  opt-out and cannot be combined with `#:capability`. The previous text said
+  a token was generated only when a capability was active.
+- Add the missing "Application schema contract" and "Update integrity"
+  sections to `README.zh-CN.md` so the Chinese guide matches the English one.
+
 ### Changed
 
 - G3-S2 internalized the 22 private-tier reviewed-layer exports

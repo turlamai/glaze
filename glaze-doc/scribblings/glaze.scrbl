@@ -881,58 +881,35 @@ instead of widening silently.
 (@racketmodname[glaze/webview/main] and @racketmodname[glaze/window-state]
 re-exported).}
 
-@subsection{Persistent Window State}
+@defmodule[glaze/window-state]{Persistence for window geometry: the
+@racket[window-state] and @racket[screen-area] structs plus helpers that read,
+normalize, and atomically write the per-application state file. The module has
+no FFI dependency and is safe to require on every platform.}
 
-@defmodule[glaze/window-state]
+@defstruct*[window-state ([x real?] [y real?] [width real?] [height real?] [maximized? boolean?])]{
+  A restorable window geometry. Coordinates and sizes are device-independent
+  units as reported by the platform host.}
 
-The layer @racketmodname[glaze/window] re-exports this module; applications
-may import @racketmodname[glaze/window-state] on its own when they need only
-state persistence. State consists of the outer window position, size, and
-maximized flag. Coordinates and dimensions use the native window's coordinate
-system, not CSS pixels. Do not treat a saved geometry as safe to restore
-unchanged after monitor removal or DPI/layout changes.
+@defstruct*[screen-area ([x real?] [y real?] [width real?] [height real?])]{
+  The usable screen rectangle used to clamp a restored window.}
 
-@defstruct*[window-state ([x any/c] [y any/c] [width any/c]
-                           [height any/c] [maximized? any/c])] {
-A transparent stored window geometry. Struct construction does not validate
-fields; only finite numeric positions, strictly positive finite dimensions,
-and a boolean maximized flag are accepted by the JSON reader.
-}
+@defproc[(default-window-state-path [app-id string?]) path?]{
+  Returns the per-user state file for @racket[app-id] under the platform
+  preference directory. Components are sanitized before use.}
 
-@defstruct*[screen-area ([x any/c] [y any/c] [width any/c]
-                         [height any/c])] {
-A transparent virtual-desktop rectangle used when normalizing a restored
-window. Supply a valid positive-size desktop area from the native backend.
-}
-
-@defproc[(default-window-state-path [app-id any/c]) path?]{
-Builds an application-specific @filepath{window-state.json} path under the
-user preferences directory. The @racket[app-id] component is sanitized before
-it is used as a directory name; callers should provide a stable application
-identifier across upgrades.
-}
-
-@defproc[(read-window-state [path (or/c #f path-string?)])
-         (or/c #f window-state?)]{
-Reads the saved JSON geometry. Returns @racket[#f] if the file is absent,
-malformed, or does not contain valid finite coordinates, positive dimensions
-and a boolean maximized flag. Do not rely on an exception for invalid saved
-state.
-}
+@defproc[(read-window-state [path (or/c path-string? #f)]) (or/c window-state? #f)]{
+  Reads a state file, returning @racket[#f] when @racket[path] is @racket[#f],
+  the file is missing, or its contents are malformed. Valid stored geometry
+  has finite numeric coordinates, positive finite dimensions, and a boolean
+  maximized flag. Never signals on a corrupt or partially written file.}
 
 @defproc[(write-window-state! [path path-string?] [state window-state?]) path?]{
-Creates parent directories and replaces the saved JSON atomically. Returns
-@racket[path]; I/O errors propagate to the caller. Use this after obtaining
-a valid geometry from the native window.
-}
+  Atomically replaces the state file, creating parent directories as needed,
+  and returns the saved path. I/O errors propagate to callers.}
 
-@defproc[(normalize-window-state [state window-state?]
-                                  [area screen-area?]) window-state?]{
-Clamps the window into @racket[area], shrinking dimensions first when the
-stored window is larger than the current desktop. Preserves the maximized
-flag. Call before applying restored geometry to avoid stranding the window
-off screen after display changes.
-}
+@defproc[(normalize-window-state [state window-state?] [area screen-area?]) window-state?]{
+  Clamps a restored window to @racket[area] so a display change cannot place
+  it entirely off-screen.}
 
 @defmodule[glaze/services]{The capability services: filesystem scopes,
 the key-value store, SQL, shell, the HTTP proxy, logging, dialogs, tray,
