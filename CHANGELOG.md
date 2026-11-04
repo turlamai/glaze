@@ -18,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   domain, store persistence, live routes with authentication and 400 paths).
   CI runs the example's tests, schema check, native verify and build on
   Windows, macOS and Linux.
+- Support native Windows ARM64 builds. Glaze now ships
+  `glaze/native/win-arm64/WebView2Loader.dll` (Microsoft.Web.WebView2
+  1.0.4314.35, SHA-256 recorded beside it) and selects `win-x64` or
+  `win-arm64` from the Racket process architecture in both the runtime
+  backend and `build` staging. Previously a native arm64 Racket process
+  would try to load the x64 DLL and fail; the x64 build under emulation is
+  unchanged.
 
 ### Fixed
 
