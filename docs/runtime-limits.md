@@ -18,7 +18,7 @@ application's own contract.
 
 The native carrier has no HTTP listener and therefore no body-size middleware;
 it trusts the WebView message handler as the transport boundary. Both carriers
-enforce the same typed envelope rules (see [protocol](protocol.md)); a client
+enforce the same typed envelope rules (see the GLZ1 section of the [API manual](../glaze-doc/scribblings/glaze.scrbl)); a client
 that sends an oversized JSON message to the native carrier is bounded only by
 the WebView's own message limits, so application arguments still need their own
 validation.
@@ -97,12 +97,6 @@ never interpolated.
 If an application accepts large files, enforce its own byte limit before
 reading or writing; the framework limit applies to the HTTP envelope, not to a
 direct Racket call.
-
-## Fuzzing budgets
-
-The GLZ1 fuzz suite runs a fixed corpus per `raco test`: 5,000 random JSON
-values and 1,000 hostile atoms for the envelope decoder, 5,000 and 500 for the
-result validator; see `glaze-test/fuzz-test.rkt`.
 
 ## Diagnosing a limit
 
