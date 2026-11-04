@@ -8,7 +8,7 @@ failure behavior are owned by [the GUI-first contract](gui-first.md).
 Start with the two read-only reports:
 
 ```bash
-raco glaze doctor --json    # package table, collection resolution, WebView, project schema; nonzero on problems
+raco glaze doctor --json    # package table, collection resolution, WebView; nonzero on package/WebView problems
 raco glaze inspect --json   # project contract, expected files, schema status, native backend
 ```
 
