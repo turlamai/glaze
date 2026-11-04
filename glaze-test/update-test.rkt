@@ -29,6 +29,12 @@
                           #:exists 'truncate/replace
                           #:mode 'binary
                           (lambda (output) (write-bytes #"test" output)))
+   ;; SHA-256 must be available even when no OpenSSL 3 executable is installed.
+   ;; Anchor it to an independent published digest, not just a round trip.
+   (check-equal? (sha256-file artifact-file)
+                 "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08")
+   (check-equal? (sha256-string #"test")
+                 "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08")
    (define artifact
      (update-artifact 'windows
                       'x64

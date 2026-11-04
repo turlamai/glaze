@@ -899,11 +899,13 @@ no FFI dependency and is safe to require on every platform.}
 
 @defproc[(read-window-state [path (or/c path-string? #f)]) (or/c window-state? #f)]{
   Reads a state file, returning @racket[#f] when @racket[path] is @racket[#f],
-  the file is missing, or its contents are malformed. Never signals on a
-  corrupt or partially written file.}
+  the file is missing, or its contents are malformed. Valid stored geometry
+  has finite numeric coordinates, positive finite dimensions, and a boolean
+  maximized flag. Never signals on a corrupt or partially written file.}
 
-@defproc[(write-window-state! [path path-string?] [state window-state?]) void?]{
-  Atomically replaces the state file, creating parent directories as needed.}
+@defproc[(write-window-state! [path path-string?] [state window-state?]) path?]{
+  Atomically replaces the state file, creating parent directories as needed,
+  and returns the saved path. I/O errors propagate to callers.}
 
 @defproc[(normalize-window-state [state window-state?] [area screen-area?]) window-state?]{
   Clamps a restored window to @racket[area] so a display change cannot place
