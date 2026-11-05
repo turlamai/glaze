@@ -290,6 +290,55 @@ jobs:
           if ($secondPackage.Version -ne '0.0.2') {
             throw "unexpected MSI version: $($secondPackage.Version)"
           }
+      - name: Install, upgrade and uninstall the MSI
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function Invoke-Msi([string]$path) {
+            $proc = Start-Process msiexec.exe -ArgumentList @('/i', "`"$path`"", '/qn', '/norestart') -Wait -PassThru
+            if ($proc.ExitCode -notin @(0, 3010)) {
+              throw "msiexec install failed ($($proc.ExitCode)): $path"
+            }
+          }
+          function Find-Product {
+            @(Get-ChildItem 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall' |
+              Where-Object { $_.GetValue('DisplayName') -eq 'sampleapp' })
+          }
+          $first = (Resolve-Path 'sampleapp/dist/sampleapp.msi').Path
+          $second = (Resolve-Path 'sampleapp/dist-next/sampleapp.msi').Path
+          $installDir = 'C:\Program Files\sampleapp'
+          try {
+            Invoke-Msi $first
+            if (-not (Test-Path "$installDir\sampleapp.exe")) {
+              throw 'MSI did not install sampleapp.exe'
+            }
+            $entries = Find-Product
+            if ($entries.Count -ne 1) { throw "expected one uninstall entry, got $($entries.Count)" }
+            if ($entries[0].GetValue('DisplayVersion') -ne '0.0.1') {
+              throw "unexpected installed version: $($entries[0].GetValue('DisplayVersion'))"
+            }
+            Invoke-Msi $second
+            $entries = Find-Product
+            if ($entries.Count -ne 1) {
+              throw "upgrade left $($entries.Count) uninstall entries"
+            }
+            if ($entries[0].GetValue('DisplayVersion') -ne '0.0.2') {
+              throw "upgrade did not update DisplayVersion: $($entries[0].GetValue('DisplayVersion'))"
+            }
+            $productCode = $entries[0].PSChildName
+            $uninstall = Start-Process msiexec.exe -ArgumentList @('/x', $productCode, '/qn', '/norestart') -Wait -PassThru
+            if ($uninstall.ExitCode -notin @(0, 3010)) {
+              throw "msiexec uninstall failed ($($uninstall.ExitCode))"
+            }
+            if (Test-Path $installDir) { throw 'uninstall left the install directory' }
+            if ((Find-Product).Count -ne 0) { throw 'uninstall left an uninstall entry' }
+          } finally {
+            foreach ($entry in (Find-Product)) {
+              Start-Process msiexec.exe -ArgumentList @('/x', $entry.PSChildName, '/qn', '/norestart') -Wait | Out-Null
+            }
+          }
+
       - name: Verify macOS bundle signature
         if: runner.os == 'macOS'
         run: |
