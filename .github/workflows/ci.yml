@@ -274,7 +274,7 @@ jobs:
           sudo dpkg -r sampleapp
           test ! -e /usr/lib/sampleapp
           test ! -e /usr/bin/sampleapp
-          sudo rpm -i dist/sampleapp.rpm
+          sudo rpm -i --nodeps dist/sampleapp.rpm
           test -x /usr/bin/sampleapp
           test "$(rpm -q --qf '%{VERSION}' sampleapp)" = "0.0.1"
           sudo rpm -e sampleapp
