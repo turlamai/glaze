@@ -37,6 +37,34 @@
 (check-true (string-contains? (desktop-entry "Notes") "Name=Notes"))
 (check-true (string-contains? (desktop-entry "Notes") "Exec=Notes"))
 (check-true (string-contains? (desktop-entry "Notes") "Type=Application"))
+
+;; AppRun is executed from the mounted AppDir; it must resolve the payload
+;; relative to itself, not from the host's /usr/lib.
+(define apprun (appimage-apprun "Stage App"))
+(check-true (string-contains? apprun "$APPDIR/usr/lib/Stage App/bin/Stage App"))
+(check-false (string-contains? apprun "exec /usr/lib/") "AppRun must not hard-code the host /usr/lib")
+
+;; Execute AppRun from a fake AppDir and prove it runs that payload rather
+;; than a host path.
+(unless (eq? (system-type 'os) 'windows)
+  (define appdir (make-temporary-file "glaze-appdir-~a" 'directory))
+  (dynamic-wind
+   void
+   (lambda ()
+     (define payload (build-path appdir "usr" "lib" "Demo" "bin" "Demo"))
+     (make-parent-directory* payload)
+     (call-with-output-file payload
+                            (lambda (out) (display "#!/bin/sh\necho appdir-payload\n" out))
+                            #:exists 'replace)
+     (file-or-directory-permissions payload #o755)
+     (define run (build-path appdir "AppRun"))
+     (call-with-output-file run
+                            (lambda (out) (display (appimage-apprun "Demo") out))
+                            #:exists 'replace)
+     (file-or-directory-permissions run #o755)
+     (check-equal? (with-output-to-string (lambda () (system* (build-path appdir "AppRun"))))
+                   "appdir-payload\n"))
+   (lambda () (delete-directory/files appdir))))
 (check-false (string-contains? (desktop-entry "Notes") "Icon=") "no icon line without an icon name")
 (check-true (string-contains? (desktop-entry "Test App" "test-app") "Icon=test-app")
             "the icon line names the hicolor/AppDir icon stem")

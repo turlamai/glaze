@@ -51,6 +51,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- AppImage `AppRun` now resolves the payload through `$APPDIR` instead of
+  hard-coding `/usr/lib`. The previous wrapper executed the host's files (or
+  nothing) when the AppImage was mounted, so the packaged app could not launch
+  from its own bundle.
 - `make-replace-install-plan` now replaces a directory as well as a file, so a
   macOS `.app` or a self-contained tree can be updated through the same atomic
   staging/backup/rollback plan. A failure before the swap leaves the installed
