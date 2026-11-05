@@ -275,6 +275,24 @@ jobs:
           test ! -e /usr/lib/sampleapp
           test ! -e /usr/bin/sampleapp
 
+      - name: Install, upgrade and erase the rpm on Fedora
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm             -v "$PWD/sampleapp/dist:/dist:ro"             -v "$PWD/sampleapp/dist-next:/dist-next:ro"             fedora:latest bash -euxo pipefail -c '
+              dnf install -y /dist/sampleapp.rpm
+              test -x /usr/bin/sampleapp
+              test -d /usr/lib/sampleapp
+              test -f /usr/share/applications/sampleapp.desktop
+              test "$(rpm -q --qf "%{VERSION}" sampleapp)" = "0.0.1"
+              dnf install -y /dist-next/sampleapp.rpm
+              test "$(rpm -q --qf "%{VERSION}" sampleapp)" = "0.0.2"
+              dnf remove -y sampleapp
+              test ! -e /usr/lib/sampleapp
+              test ! -e /usr/bin/sampleapp
+            '
+
       - name: Validate Windows installer upgrade identity
         if: runner.os == 'Windows'
         shell: pwsh
