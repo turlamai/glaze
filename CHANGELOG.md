@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- The tag release can sign and notarize its installers when the repository
+  provides the documented Apple/Windows signing secrets. A
+  `GLAZE_REQUIRE_SIGNED_INSTALLERS=1` repository variable makes the release
+  fail before building if an identity is missing; the default remains an
+  explicitly unsigned release.
 - Add `examples/taskboard/`, a maintained product-level example: one typed
   route declaration for `tasks`/`tasksCreate`/`tasksToggle`/`tasksDelete`/
   `tasksClearDone`, a lazily opened `glaze/store` in the application data

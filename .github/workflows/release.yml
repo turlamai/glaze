@@ -50,6 +50,15 @@ jobs:
             exit 1
           fi
 
+      - name: Check release signing readiness
+        shell: bash
+        env:
+          GLAZE_REQUIRE_SIGNED_INSTALLERS: ${{ vars.GLAZE_REQUIRE_SIGNED_INSTALLERS }}
+          APPLE_SIGN_IDENTITY: ${{ secrets.APPLE_SIGN_IDENTITY }}
+          APPLE_NOTARY_PROFILE: ${{ secrets.APPLE_NOTARY_PROFILE }}
+          WINDOWS_SIGN_IDENTITY: ${{ secrets.WINDOWS_SIGN_IDENTITY }}
+        run: bash scripts/check-release-signing.sh
+
       - name: Install Racket
         uses: Bogdanp/setup-racket@2466913449df77df2bad149d1f2fc4e1ea4795dd # v1.15
         with:
@@ -183,9 +192,22 @@ jobs:
     needs: source
     runs-on: windows-latest
     timeout-minutes: 25
+    env:
+      WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+      WINDOWS_SIGN_IDENTITY: ${{ secrets.WINDOWS_SIGN_IDENTITY }}
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Import Windows signing certificate
+        if: env.WINDOWS_CERTIFICATE_BASE64 != ''
+        shell: pwsh
+        run: |
+          $path = Join-Path $env:RUNNER_TEMP 'cert.pfx'
+          [IO.File]::WriteAllBytes($path, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
+          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          Import-PfxCertificate -FilePath $path -CertStoreLocation Cert:\CurrentUser\My -Password $password
 
       - name: Install Racket
         uses: Bogdanp/setup-racket@2466913449df77df2bad149d1f2fc4e1ea4795dd # v1.15
@@ -204,13 +226,17 @@ jobs:
           $ErrorActionPreference = 'Stop'
           raco pkg install --auto --no-docs --name glaze --link $PWD
           Push-Location examples/showcase
+          $signing = @()
+          if ($env:WINDOWS_SIGN_IDENTITY) {
+            $signing += @('--sign', $env:WINDOWS_SIGN_IDENTITY)
+          }
           raco glaze build `
             --name Glaze `
             --version '${{ needs.source.outputs.version }}' `
             --publisher 'Turing Lambda' `
             --identifier 'TuringLambda.Glaze' `
             --out dist `
-            --installer
+            --installer @signing
           Pop-Location
           $msi = 'examples/showcase/dist/Glaze.msi'
           if (-not (Test-Path -LiteralPath $msi -PathType Leaf)) {
@@ -321,9 +347,36 @@ jobs:
     needs: source
     runs-on: macOS-latest
     timeout-minutes: 25
+    env:
+      APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGN_IDENTITY: ${{ secrets.APPLE_SIGN_IDENTITY }}
+      APPLE_NOTARY_PROFILE: ${{ secrets.APPLE_NOTARY_PROFILE }}
+      APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+      APPLE_NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
+      APPLE_NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Import Apple signing certificate
+        if: env.APPLE_CERTIFICATE_BASE64 != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p actions build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p actions build.keychain
+          security import "$RUNNER_TEMP/cert.p12" -k build.keychain             -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:             -s -k actions build.keychain
+
+      - name: Store notary credentials
+        if: env.APPLE_NOTARY_APPLE_ID != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun notarytool store-credentials "$APPLE_NOTARY_PROFILE"             --apple-id "$APPLE_NOTARY_APPLE_ID"             --team-id "$APPLE_NOTARY_TEAM_ID"             --password "$APPLE_NOTARY_PASSWORD"
 
       # This release is explicitly named macos-arm64. A runner label
       # migration must fail instead of silently mislabeling an Intel DMG.
@@ -344,13 +397,20 @@ jobs:
         run: |
           set -euo pipefail
           cd examples/showcase
+          signing=()
+          if [ -n "${APPLE_SIGN_IDENTITY:-}" ]; then
+            signing+=(--sign "$APPLE_SIGN_IDENTITY")
+          fi
+          if [ -n "${APPLE_NOTARY_PROFILE:-}" ]; then
+            signing+=(--notarize-profile "$APPLE_NOTARY_PROFILE")
+          fi
           raco glaze build \
             --name Glaze \
             --version '${{ needs.source.outputs.version }}' \
             --publisher 'Turing Lambda' \
             --identifier 'TuringLambda.Glaze' \
             --out dist \
-            --installer
+            --installer "${signing[@]}"
           test -f dist/Glaze.dmg
           # G4-S2: packaged-size budget gate (fails the release on violation).
           raco glaze measure size --budget budgets.json
