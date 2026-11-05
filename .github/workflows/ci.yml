@@ -293,6 +293,25 @@ jobs:
               test ! -e /usr/bin/sampleapp
             '
 
+      - name: Launch the AppImage under Xvfb
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y libwebkit2gtk-4.1-0 xvfb
+          chmod +x sampleapp/dist/sampleapp.AppImage
+          set +e
+          timeout 10 xvfb-run -a sampleapp/dist/sampleapp.AppImage \
+            --appimage-extract-and-run > "$RUNNER_TEMP/appimage.log" 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 124 ]; then
+            cat "$RUNNER_TEMP/appimage.log"
+            echo "AppImage exited before the timeout (status $status)" >&2
+            exit 1
+          fi
+          test -s "$RUNNER_TEMP/appimage.log"
+
       - name: Validate Windows installer upgrade identity
         if: runner.os == 'Windows'
         shell: pwsh
