@@ -16,7 +16,10 @@
 (check-equal? (sanitize-package-name "Notes++") "notes++")
 (check-equal? (sanitize-package-name " Glaze ") "glaze")
 (check-equal? (sanitize-package-name "---") "app" "a name with no legal characters falls back")
-(check-equal? (sanitize-package-version "1.0.0-beta") "1.0.0.beta")
+(check-equal? (sanitize-package-version "1.0.0-beta") "1.0.0~beta")
+(check-equal? (sanitize-package-version "1.0.0-beta.1") "1.0.0~beta.1")
+(check-equal? (sanitize-package-version "1.0.0-rc-1") "1.0.0~rc.1")
+(check-equal? (sanitize-package-version "1.0.0+build.5") "1.0.0+build.5")
 (check-equal? (sanitize-package-version "0.0.1") "0.0.1")
 (check-equal? (sanitize-package-version "") "0.0.0")
 
