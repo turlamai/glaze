@@ -396,6 +396,20 @@ jobs:
             }
           }
 
+      - name: Install NSIS
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install nsis --no-progress -y
+          "${env:ProgramFiles(x86)}\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Install and uninstall the NSIS fallback
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          GLAZE_NSIS_SMOKE: '1'
+        run: racket scripts/nsis-smoke.rkt
+
       - name: Verify macOS bundle signature
         if: runner.os == 'macOS'
         run: |
