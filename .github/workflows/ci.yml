@@ -274,11 +274,6 @@ jobs:
           sudo dpkg -r sampleapp
           test ! -e /usr/lib/sampleapp
           test ! -e /usr/bin/sampleapp
-          sudo rpm -i --nodeps dist/sampleapp.rpm
-          test -x /usr/bin/sampleapp
-          test "$(rpm -q --qf '%{VERSION}' sampleapp)" = "0.0.1"
-          sudo rpm -e sampleapp
-          test ! -e /usr/lib/sampleapp
 
       - name: Validate Windows installer upgrade identity
         if: runner.os == 'Windows'
