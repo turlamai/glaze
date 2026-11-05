@@ -89,8 +89,9 @@
   (parameterize ([current-directory work])
     (run! (find-executable-path "tar" #f) "-czf" "app.tar.gz" "-C" "v2" "."))
 
-  ;; One dedicated test port; CI runs a single instance.
-  (define port 28443)
+  ;; Random high port so repeated local runs do not collide with a
+  ;; TIME_WAIT listener.
+  (define port (+ 18000 (random 20000)))
 
   (define private-key (build-path work "private.pem"))
   (define public-key (build-path work "public.pem"))
