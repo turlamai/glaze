@@ -20,7 +20,8 @@
          post-process-macos-bundle
          make-macos-installer
          create-branded-dmg!
-         stage-dmg-root)
+         stage-dmg-root
+         dmg-volume-name)
 
 ;; Assemble a canonical macOS .app bundle from whatever `raco distribute`
 ;; produced. Current versions lay out <dist>/bin/<name> + <dist>/lib/; older
@@ -91,21 +92,29 @@
 
 ;; macOS: branded drag-to-install layout when a background is declared,
 ;; else prefer create-dmg, then plain hdiutil; else zip the .app.
-(define (make-macos-installer out-dir app-name [dmg-background #f])
+;; A volume name that is unique per build. Reusing the bare application name
+;; collides with a mounted image from an earlier build and makes hdiutil fail
+;; with "Resource busy" instead of replacing the output.
+(define (dmg-volume-name app-name version)
+  (string-append app-name " " version))
+
+(define (make-macos-installer out-dir app-name version [dmg-background #f])
   (define dist (path->complete-path out-dir))
   (define bundle (build-path dist (string-append app-name ".app")))
   (define dmg-path (build-path dist (string-append app-name ".dmg")))
+  (define volume-name (dmg-volume-name app-name version))
   (cond
     [(and dmg-background (find-executable-path "hdiutil" #f))
      (create-branded-dmg! (find-executable-path "hdiutil" #f)
                           dmg-background
                           bundle
                           dmg-path
-                          app-name)]
+                          app-name
+                          volume-name)]
     [(find-tool "create-dmg")
      (and (run (find-executable-path "create-dmg" #f)
                "--volname"
-               app-name
+               volume-name
                (path->string dmg-path)
                (path->string bundle))
           dmg-path)]
@@ -117,7 +126,7 @@
                      (and (run (find-executable-path "hdiutil" #f)
                                "create"
                                "-volname"
-                               app-name
+                               volume-name
                                "-srcfolder"
                                (path->string staging)
                                "-ov"
@@ -149,7 +158,7 @@
   (make-file-or-directory-link "/Applications" apps-link)
   staging)
 
-(define (create-branded-dmg! hdiutil background bundle dmg-path app-name)
+(define (create-branded-dmg! hdiutil background bundle dmg-path app-name volume-name)
   (define staging (make-temporary-file "glaze-dmg-~a" 'directory))
   (define rw-image (build-path staging "dmg-rw.dmg"))
   (define script-path (build-path staging "dmg-style.applescript"))
@@ -167,7 +176,7 @@
                        "-fs"
                        "HFS+"
                        "-volname"
-                       app-name
+                       volume-name
                        "-srcfolder"
                        (path->string staging)
                        "-format"
