@@ -32,6 +32,12 @@
     (displayln "HTTPS update flow skipped: OpenSSL 3 is unavailable")
     (cleanup!)
     (exit 0))
+  (when (eq? (system-type 'os) 'windows)
+    ;; OpenSSL's -WWW mode truncates binary files on Windows; use a real
+    ;; HTTPS client test on Unix instead of silently testing a text row.
+    (displayln "HTTPS update flow skipped on Windows: s_server -WWW is text-only")
+    (cleanup!)
+    (exit 0))
   (define ca-key (build-path work "ca.key"))
   (define ca-pem (build-path work "ca.pem"))
   (define server-key (build-path work "server.key"))
