@@ -296,6 +296,28 @@ jobs:
           codesign --verify --strict sampleapp/dist/sampleapp.app
           /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" sampleapp/dist/sampleapp.app/Contents/Info.plist | grep -qx "0.0.1"
 
+      - name: Mount dmg and verify the install layout
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          dmg="$PWD/sampleapp/dist/sampleapp.dmg"
+          test -f "$dmg"
+          attach="$(hdiutil attach "$dmg" -nobrowse -readonly)"
+          mount_point="$(printf '%s\n' "$attach" | tail -1 | awk -F'\t' '{print $NF}')"
+          test -d "$mount_point"
+          trap 'hdiutil detach "$mount_point" -force >/dev/null 2>&1 || true' EXIT
+          test -d "$mount_point/sampleapp.app"
+          test -L "$mount_point/Applications"
+          test "$(readlink "$mount_point/Applications")" = "/Applications"
+          mkdir -p "$RUNNER_TEMP/Applications"
+          ditto "$mount_point/sampleapp.app" "$RUNNER_TEMP/Applications/sampleapp.app"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
+            "$RUNNER_TEMP/Applications/sampleapp.app/Contents/Info.plist" | grep -qx "0.0.1"
+          test -x "$RUNNER_TEMP/Applications/sampleapp.app/Contents/MacOS/sampleapp"
+          hdiutil detach "$mount_point"
+          trap - EXIT
+
       - name: Record packaged size (informational)
         shell: bash
         run: |
