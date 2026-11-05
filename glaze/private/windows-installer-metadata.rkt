@@ -227,13 +227,13 @@ Unicode True
 Name "~a"
 OutFile "~a\~a-setup.exe"
 RequestExecutionLevel admin
-SetRegView 64
 InstallDir "$PROGRAMFILES64\~a"
 InstallDirRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\~a" "InstallLocation"
 Page directory
 Page instfiles
 UninstPage instfiles
 Section "Install"
+  SetRegView 64
   SetOutPath "$INSTDIR"
   File /r /x "*.msi" /x "*-setup.exe" /x "*.wxs" /x "*.nsi" "~a\*.*"
   CreateShortcut "$DESKTOP\~a.lnk" "$INSTDIR\~a.exe"
@@ -249,6 +249,7 @@ Section "Install"
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\~a" "NoRepair" 1
 SectionEnd
 Section "Uninstall"
+  SetRegView 64
   Delete "$DESKTOP\~a.lnk"
   RMDir /r "$INSTDIR"
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\~a"

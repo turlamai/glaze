@@ -29,12 +29,12 @@
 (copy-file (find-executable-path "cmd.exe" #f) fake-exe)
 
 (define nsi (build-path work "sampleapp.nsi"))
-(call-with-output-file nsi
-  (lambda (out)
-    (display (windows-nsis "sampleapp" dist "0.0.1" "Turing Lambda"
-                           "TuringLambda.Glaze.CISample")
-             out))
-  #:exists 'replace)
+(call-with-output-file
+ nsi
+ (lambda (out)
+   (display (windows-nsis "sampleapp" dist "0.0.1" "Turing Lambda" "TuringLambda.Glaze.CISample")
+            out))
+ #:exists 'replace)
 
 (define setup (build-path dist "sampleapp-setup.exe"))
 (define program-files (or (getenv "ProgramW6432") (getenv "ProgramFiles")))
@@ -56,26 +56,25 @@
   (when (directory-exists? work)
     (delete-directory/files work)))
 
-(dynamic-wind
- void
- (lambda ()
-   (run! makensis nsi)
-   (unless (file-exists? setup)
-     (error 'nsis-smoke "makensis did not produce ~a" setup))
-   (run! setup "/S")
-   (unless (file-exists? (build-path install-dir "sampleapp.exe"))
-     (error 'nsis-smoke "NSIS did not install sampleapp.exe"))
-   (unless (file-exists? (build-path install-dir "Uninstall.exe"))
-     (error 'nsis-smoke "NSIS did not write Uninstall.exe"))
-   (run! (build-path install-dir "Uninstall.exe") "/S")
-   (let loop ([tries 30])
-     (cond
-       [(directory-exists? install-dir)
-        (when (zero? tries)
-          (error 'nsis-smoke "uninstall left ~a" install-dir))
-        (sleep 0.2)
-        (loop (sub1 tries))]
-       [else (void)])))
- (lambda () (cleanup!)))
+(dynamic-wind void
+              (lambda ()
+                (run! makensis nsi)
+                (unless (file-exists? setup)
+                  (error 'nsis-smoke "makensis did not produce ~a" setup))
+                (run! setup "/S")
+                (unless (file-exists? (build-path install-dir "sampleapp.exe"))
+                  (error 'nsis-smoke "NSIS did not install sampleapp.exe"))
+                (unless (file-exists? (build-path install-dir "Uninstall.exe"))
+                  (error 'nsis-smoke "NSIS did not write Uninstall.exe"))
+                (run! (build-path install-dir "Uninstall.exe") "/S")
+                (let loop ([tries 30])
+                  (cond
+                    [(directory-exists? install-dir)
+                     (when (zero? tries)
+                       (error 'nsis-smoke "uninstall left ~a" install-dir))
+                     (sleep 0.2)
+                     (loop (sub1 tries))]
+                    [else (void)])))
+              (lambda () (cleanup!)))
 
 (displayln "NSIS install/uninstall smoke passed")
