@@ -20,6 +20,8 @@ This directory has one owner for each durable decision. New documents must link 
 - [Production signing](production-signing.md): trust domains, certificate and notary prerequisites, key handling in CI, and the verification checklist.
 - [Releasing and updating applications](release-and-updates.md): release identity, update channels, staged rollout, signed manifests, rollback and the N→N+1 evidence per installation shape.
 - [GLZ1 fuzzing](fuzzing.md): the decoders under fuzz, the invariant, the seeded inputs and how to extend the corpus.
+- GLZ1 wire contract: the normative section in the [API manual](../glaze-doc/scribblings/glaze.scrbl); this map does not keep a second copy.
+- [Runtime limits](runtime-limits.md): request-body, timeout, redirect, output, row, history and process defaults, and where each can be changed.
 - [Releasing](RELEASING.md): framework release procedure and provenance requirements.
 - [Performance baseline](benchmarks.md): what the framework measures, the recorded baseline, and the honesty rules for comparing results.
 

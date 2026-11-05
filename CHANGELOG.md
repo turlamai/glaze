@@ -38,6 +38,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   owns release identity, channels, rollout, signed manifests, rollback and the
   N→N+1 evidence per installation shape; and `docs/fuzzing.md` records the GLZ1
   fuzz targets, invariant, seeded corpus and limits.
+- Add `docs/runtime-limits.md`: the current request-body, invoke-timeout,
+  redirect, outbound HTTP, update, shell, SQLite, logging, store and filesystem
+  defaults, with the keyword or configuration that changes each.
 
 ### Fixed
 
