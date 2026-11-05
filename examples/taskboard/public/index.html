@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Taskboard</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app">
+    <header class="header">
+      <div>
+        <h1>Taskboard</h1>
+        <p class="subtitle">Glaze example · typed routes + persisted store</p>
+      </div>
+      <dl class="stats" aria-label="Task counts">
+        <div><dt>All</dt><dd id="stat-total">0</dd></div>
+        <div><dt>Open</dt><dd id="stat-open">0</dd></div>
+        <div><dt>Done</dt><dd id="stat-done">0</dd></div>
+      </dl>
+    </header>
+
+    <form id="new-task" class="composer" autocomplete="off">
+      <label class="sr-only" for="title">New task</label>
+      <input id="title" name="title" type="text" maxlength="120"
+             placeholder="What needs doing?" required>
+      <button type="submit">Add task</button>
+    </form>
+
+    <div class="toolbar">
+      <div class="filters" role="group" aria-label="Filter tasks">
+        <button type="button" data-filter="all" aria-pressed="true">All</button>
+        <button type="button" data-filter="open" aria-pressed="false">Open</button>
+        <button type="button" data-filter="done" aria-pressed="false">Done</button>
+      </div>
+      <button type="button" id="clear-done" class="ghost">Clear done</button>
+    </div>
+
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+
+    <ul id="tasks" class="tasks" aria-label="Tasks"></ul>
+    <p id="empty" class="empty" hidden>Nothing here yet. Add the first task above.</p>
+  </main>
+
+  <script src="/glaze/api.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

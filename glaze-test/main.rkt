@@ -117,22 +117,27 @@
 (check-equal? (procedure? tray-set-menu!) #t)
 (check-equal? (procedure? tray-close) #t)
 
-;; make-tray must always return a tray? handle, on every platform: native
-;; backends on supported hosts, stub fallback elsewhere. The result must be
-;; usable without raising.
-(define t
-  (parameterize ([current-error-port (open-output-string)])
-    (make-tray #:icon #f
-               #:tooltip "Glaze Test"
-               #:menu (list (make-menu-item "Quit" #:action (lambda () (void)))
-                            (menu-separator)
-                            (make-menu-item "Hi" #:action (lambda () (void)))))))
-(check-true (tray? t) "make-tray returns a tray?")
-(check-not-false (memq (tray-backend t) '(windows macos linux stub)) "valid backend tag")
-(check-not-exn (lambda () (tray-set-tooltip! t "updated")) "set-tooltip! does not raise")
-(check-not-exn (lambda () (tray-set-menu! t (list (make-menu-item "Only" #:action void))))
-               "set-menu! does not raise")
-(check-not-exn (lambda () (tray-close t)) "close does not raise")
+;; Headless CI runners cannot create a status-bar item; GLAZE_TEST_NO_TRAY=1
+;; skips the native tray construction while keeping the API checks above.
+(define skip-tray? (and (getenv "GLAZE_TEST_NO_TRAY") #t))
+
+(unless skip-tray?
+  ;; make-tray must always return a tray? handle, on every platform: native
+  ;; backends on supported hosts, stub fallback elsewhere. The result must be
+  ;; usable without raising.
+  (define t
+    (parameterize ([current-error-port (open-output-string)])
+      (make-tray #:icon #f
+                 #:tooltip "Glaze Test"
+                 #:menu (list (make-menu-item "Quit" #:action (lambda () (void)))
+                              (menu-separator)
+                              (make-menu-item "Hi" #:action (lambda () (void)))))))
+  (check-true (tray? t) "make-tray returns a tray?")
+  (check-not-false (memq (tray-backend t) '(windows macos linux stub)) "valid backend tag")
+  (check-not-exn (lambda () (tray-set-tooltip! t "updated")) "set-tooltip! does not raise")
+  (check-not-exn (lambda () (tray-set-menu! t (list (make-menu-item "Only" #:action void))))
+                 "set-menu! does not raise")
+  (check-not-exn (lambda () (tray-close t)) "close does not raise"))
 
 ;; ---- Windows backend end-to-end (only on 'windows) ----
 (when (eq? (system-type 'os) 'windows)

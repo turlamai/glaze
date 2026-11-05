@@ -711,7 +711,8 @@ The tray is an optional integration. If its backend is unavailable it may degrad
 
 | Example | What it shows |
 |---|---|
-| [`examples/showcase/`](examples/showcase/) | **Kitchen sink (start here)** — every capability in one native window |
+| [`examples/taskboard/`](examples/taskboard/) | **Product-level example (start here)** — typed routes, persisted store, SSE, tests and native acceptance |
+| [`examples/showcase/`](examples/showcase/) | **Kitchen sink** — every capability in one native window |
 | [`examples/hello/`](examples/hello/) | Minimal native app — `run-app` in 8 lines |
 | [`examples/counter/`](examples/counter/) | JS↔Racket bridge — `fetch` calls Racket state |
 | [`examples/webview-demo.rkt`](examples/webview-demo.rkt) | Cross-platform native WebView lifecycle: load, navigate, close, verification APIs |

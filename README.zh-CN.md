@@ -617,6 +617,7 @@ SSE 与嵌入式 WebView 前端共享同一个本地 origin。
 
 | 示例 | 内容 |
 |---|---|
+| [`examples/taskboard/`](examples/taskboard/) | **产品级完整示例（推荐先跑）** —— 类型化路由、持久化 store、SSE、测试与真窗口验收 |
 | [`examples/showcase/`](examples/showcase/) | 综合演示 —— 全部能力在一个原生窗口里 |
 | [`examples/hello/`](examples/hello/) | 最小原生应用 |
 | [`examples/counter/`](examples/counter/) | JS↔Racket 桥接 |

@@ -3,6 +3,7 @@
 | 示例 | 一句话 | 展示的能力 |
 |---|---|---|
 | [`showcase/`](showcase/) | **一屏看尽全部能力（推荐先看）** | 宏路由全形态（类型校验/400/:path/500）、SSE 事件流 + 后端错误回流（on-error）、系统功能（剪贴板/通知/Finder/窗口控制）、Agent 验证（title/url/capture + 截图回传）、API token（401 演示）、更新检查、托盘、单实例 |
+| [`taskboard/`](taskboard/) | **产品级完整示例（推荐先跑）** | 类型化路由 + store 持久化 + SSE 快照推送、生成客户端、懒启动、`verify.rkt` 真窗口验收、域/store/HTTP 三层测试、schema 基线 |
 | [`hello/`](hello/) | 8 行最小应用 | run-app 一键入口、原生窗口、静态页面 |
 | [`counter/`](counter/) | JS↔Racket 桥接主打 | define-api-routes、SSE 广播驱动 UI、api.js 生成客户端、模块可组合（provide api/bus） |
 | [`webview-demo.rkt`](webview-demo.rkt) | 跨平台 WebView 生命周期 | 原生窗口、加载/导航/关闭/on-close/验证 API 实时打印、看门狗 |

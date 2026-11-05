@@ -40,12 +40,13 @@
         #f])]
     ;; .tar.gz via tar -czf.
     [(and (equal? fmt "tar.gz") (find-executable-path "tar" #f))
-     (and (run (find-executable-path "tar" #f)
-               "-czf"
-               (path->string archive-path)
-               "-C"
-               (path->string parent)
-               base)
+     ;; Run from the parent and pass a relative archive name: some Windows tar
+     ;; builds mishandle absolute drive paths, especially under emulation.
+     (and (parameterize ([current-directory parent])
+            (run (find-executable-path "tar" #f)
+                 "-czf"
+                 (path->string (file-name-from-path archive-path))
+                 base))
           archive-path)]
     [else
      (displayln "[glaze] No archive tool found; skipping." (current-error-port))

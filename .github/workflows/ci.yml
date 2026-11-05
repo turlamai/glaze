@@ -17,22 +17,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-latest, macOS-latest]
+        os: [ubuntu-24.04, windows-latest, macos-15]
         racket-version: ['9.3', '9.0']
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install Racket
-        uses: Bogdanp/setup-racket@2466913449df77df2bad149d1f2fc4e1ea4795dd # v1.15
+      - uses: ./.github/actions/setup-glaze
         with:
-          version: ${{ matrix.racket-version }}
-
-      - name: Install Glaze package
-        shell: bash
-        run: raco pkg install --auto --no-docs --link "$PWD"
+          racket-version: ${{ matrix.racket-version }}
+          linux-webview-deps: 'false'
 
       - name: Run tests
+        env:
+          # Hosted macOS runners have no menu bar for NSStatusItem; the
+          # native tray construction is covered by local/self-hosted runs.
+          GLAZE_TEST_NO_TRAY: ${{ runner.os == 'macOS' && '1' || '' }}
         run: raco test glaze-test/
 
       - name: Build Scribble documentation
@@ -68,26 +68,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-latest, macOS-latest]
+        os: [ubuntu-24.04, windows-latest, macos-15]
         racket-version: ['9.3']
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install Racket
-        uses: Bogdanp/setup-racket@2466913449df77df2bad149d1f2fc4e1ea4795dd # v1.15
+      - uses: ./.github/actions/setup-glaze
         with:
-          version: ${{ matrix.racket-version }}
-
-      - name: Install Glaze package
-        shell: bash
-        run: raco pkg install --auto --no-docs --link "$PWD"
-
-      - name: Install webview deps (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev xvfb
+          racket-version: ${{ matrix.racket-version }}
 
       - name: Probe webview libraries (Linux debug)
         if: runner.os == 'Linux'
@@ -134,6 +123,50 @@ jobs:
             raco glaze verify
           fi
 
+  example:
+    # The maintained Taskboard example is a consumer of the public API; keep
+    # its tests, schema contract, native window and build green on every OS.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-15]
+        racket-version: ['9.3']
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup-glaze
+        with:
+          racket-version: ${{ matrix.racket-version }}
+
+      - name: Run example tests
+        working-directory: examples/taskboard
+        shell: bash
+        run: raco test tests/*.rkt
+
+      - name: Check the example schema contract
+        working-directory: examples/taskboard
+        run: raco glaze schema check --json
+
+      - name: Native acceptance
+        working-directory: examples/taskboard
+        env:
+          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
+          GLAZE_NO_STARTUP_DIALOG: '1'
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a raco glaze verify
+          else
+            raco glaze verify
+          fi
+
+      - name: Build the example
+        working-directory: examples/taskboard
+        shell: bash
+        run: raco glaze build --name taskboard --version 0.1.0 --out dist-example
+
   package:
     # Build a sample app with `raco glaze build --installer` on each platform
     # and upload the resulting distribution + installer as artifacts.
@@ -141,20 +174,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-latest, macOS-latest]
+        os: [ubuntu-24.04, windows-latest, macos-15]
         racket-version: ['9.3']
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install Racket
-        uses: Bogdanp/setup-racket@2466913449df77df2bad149d1f2fc4e1ea4795dd # v1.15
+      - uses: ./.github/actions/setup-glaze
         with:
-          version: ${{ matrix.racket-version }}
-
-      - name: Install Glaze package
-        shell: bash
-        run: raco pkg install --auto --no-docs --link "$PWD"
+          racket-version: ${{ matrix.racket-version }}
+          linux-webview-deps: 'false'
 
       - name: Install installer toolchain (Linux)
         if: runner.os == 'Linux'
