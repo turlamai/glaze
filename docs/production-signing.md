@@ -131,13 +131,39 @@ the repository provides these secrets:
 | `WINDOWS_CERTIFICATE_BASE64`, `WINDOWS_CERTIFICATE_PASSWORD` | Authenticode PFX imported into `Cert:\CurrentUser\My` |
 | `WINDOWS_SIGN_IDENTITY` | `signtool` thumbprint or subject passed to `--sign` |
 
-Set the repository variable `GLAZE_REQUIRE_SIGNED_INSTALLERS=1` to make the
-release fail before building when any identity is missing. Without it, the
-release is explicitly unsigned and must not be described as signed.
+`GLAZE_REQUIRE_SIGNED_INSTALLERS` is a comma-separated platform policy, not a
+single global switch:
+
+| Value | Meaning |
+| --- | --- |
+| unset / `0` / `none` | unsigned installers are allowed |
+| `apple` | Developer ID and notary are required; the Windows installer may stay unsigned |
+| `windows` | Authenticode is required; the macOS dmg may stay unsigned |
+| `apple,windows` | both required |
+| `all` / `1` | same as `apple,windows` (backward compatible) |
+
+This lets a product ship a notarized macOS build before it buys a Windows
+certificate, or the reverse, without pretending the unsigned platform was
+signed. A platform that is not required is still built; it is simply labelled
+unsigned in the release notes.
 
 The certificate import only provisions the runner. A signed release still
 needs the product's own certificate, notarization account and rotation
 process; publish the update signing key separately.
+
+Practical policy:
+
+- **macOS** is the first platform to sign: Developer ID + notarization are
+  expected for a public download. Buy the Apple Developer account before the
+  first public RC.
+- **Windows** Authenticode is optional while distribution is small; an unsigned
+  MSI/NSIS is installable but SmartScreen reputation has to accrue. Keep the
+  capability wired and turn it on when a certificate exists. Microsoft Store
+  distribution has its own signing path and is not a substitute for a desktop
+  MSI certificate.
+- **Linux** has no OS-level installer signature. Publish `SHA256SUMS` with the
+  release; sign repository metadata or a minisign/GPG file if a repository is
+  added. Do not call an AppImage signed because its contents are hashed.
 
 ## Verification checklist
 

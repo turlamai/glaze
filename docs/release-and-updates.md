@@ -137,11 +137,11 @@ the installation shape instead of only inspecting the archive:
 | Portable update | manifest selection, artifact size/SHA-256, same-size corruption rejection, directory replacement, rollback and failed-restart restore (`update-install-flow-test.rkt`); live HTTPS manifest fetch and download against a local CA when OpenSSL 3 is available (`update-download-flow-test.rkt`) |
 
 This is installation-shape evidence, not a claim that every release is signed:
-the tag workflow currently builds unsigned showcase installers. The live
-HTTPS path is covered by a local-CA test only on hosts with OpenSSL 3, not by
-the package job. Installer signing/notarization and a production manifest host
-remain release-credential work, recorded here rather than implied by a green
-package job.
+the tag workflow can sign Apple and Windows installers when the credentials
+exist, and `GLAZE_REQUIRE_SIGNED_INSTALLERS` can require either platform
+independently. Apple notarization is the first target; a Windows certificate is
+optional and its absence is labelled unsigned. The live HTTPS path is covered
+by a local-CA test only on hosts with OpenSSL 3, not by the package job.
 
 ## Don'ts
 
