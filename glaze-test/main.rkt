@@ -140,7 +140,13 @@
   (check-not-exn (lambda () (tray-close t)) "close does not raise"))
 
 ;; ---- Windows backend end-to-end (only on 'windows) ----
-(when (eq? (system-type 'os) 'windows)
+;; Headless Windows hosts (for example the ARM64 runner) have no
+;; notification area, so Shell_NotifyIconW NIM_ADD cannot succeed there.
+;; GLAZE_TEST_NO_TRAY=1 skips only this direct-backend check; the public
+;; make-tray fallback above still runs and must return a usable stub.
+(define skip-windows-tray? (and (getenv "GLAZE_TEST_NO_TRAY") #t))
+
+(when (and (eq? (system-type 'os) 'windows) (not skip-windows-tray?))
   ;; Use dynamic-require since `require` must be at module level; this keeps
   ;; the test gated to the host OS.
   (define mod-make-tray (dynamic-require 'glaze/tray/tray-windows 'make-tray))
