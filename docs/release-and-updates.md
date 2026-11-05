@@ -91,11 +91,14 @@ manifests with it, keep the old key trusted for one release, and use distinct
 
 ## Install and rollback
 
-Use `make-replace-install-plan` for portable artifacts: it stages a copy,
-keeps the previous file as a rollback backup, then renames atomically. For
-MSI/EXE/PKG/DMG, use `make-install-plan` with an adapter that owns elevation
-and process handoff; Glaze still verifies the input and invokes the rollback
-procedure when installation fails.
+Use `make-replace-install-plan` for portable artifacts: it stages a file or a
+whole directory (a macOS `.app` is a directory), moves the previous target to
+the rollback backup, then renames the staged copy into place. A failure before
+that swap leaves the installed target untouched; a restart failure restores the
+backup when the manifest allows rollback. For MSI/EXE/PKG/DMG, use
+`make-install-plan` with an adapter that owns elevation and process handoff;
+Glaze still verifies the input and invokes the rollback procedure when
+installation fails.
 
 Rollback is invoked only when the manifest sets `rollback_allowed: true` and
 the install or restart step raises. Test that path deliberately: a release
