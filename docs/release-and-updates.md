@@ -122,6 +122,26 @@ AppImage), record an N→N+1 run:
 A green unit suite or a surviving process does not prove an update. Record the
 artifact digests, the manifest key id, the platform and the run URL.
 
+## What CI proves today
+
+The package job builds the installer on each hosted platform and then exercises
+the installation shape instead of only inspecting the archive:
+
+| Shape | CI evidence |
+| --- | --- |
+| Windows MSI | silent install of N, payload and one uninstall entry, upgrade to N+1 with a rotated ProductCode and new DisplayVersion, uninstall by ProductCode, directory and registry entry gone |
+| macOS dmg | mount, `.app` plus `/Applications` symlink, drag-style copy, bundle version and executable checked |
+| Linux deb | dpkg install, launcher/library/desktop entry, upgrade to N+1 through dpkg, remove |
+| Linux rpm | dnf install, version query, upgrade to N+1, erase inside a Fedora container |
+| AppImage | `--appimage-extract-and-run` under Xvfb survives the launch window (early crash fails) |
+| Portable update | manifest selection, artifact size/SHA-256, same-size corruption rejection, directory replacement, rollback and failed-restart restore (`update-install-flow-test.rkt`) |
+
+This is installation-shape evidence, not a claim that every release is signed:
+the tag workflow currently builds unsigned showcase installers and the live
+HTTPS download path is not exercised by the package job. Installer
+signing/notarization and a real manifest download remain release-credential
+work, recorded here rather than implied by a green package job.
+
 ## Don'ts
 
 - Do not publish a manifest before its artifacts; a client that selects a
