@@ -21,7 +21,8 @@
                   sanitize-package-name))
 
 (provide make-linux-installer
-         linux-staging-tree)
+         linux-staging-tree
+         appimage-apprun)
 
 ;; POSIX permission bits only exist on Unix hosts; Windows raises for
 ;; anything beyond the write bits, and the staging tree is exercised
@@ -29,6 +30,15 @@
 (define (set-executable-mode! path)
   (unless (eq? (system-type 'os) 'windows)
     (file-or-directory-permissions path #o755)))
+
+;; AppRun runs from the mounted AppDir, so it must resolve the payload
+;; relative to itself. A hard-coded /usr/lib path would execute the host's
+;; files (or nothing) instead of the AppImage contents.
+(define (appimage-apprun app-name)
+  (format
+   "#!/bin/sh\nAPPDIR=\"${APPDIR:-$(cd \"$(dirname \"$0\")\" && pwd)}\"\nexec \"$APPDIR/usr/lib/~a/bin/~a\" \"$@\"\n"
+   app-name
+   app-name))
 
 (define (make-linux-installer out-dir app-name version publisher identifier)
   (define dist (path->complete-path out-dir))
@@ -202,11 +212,9 @@
                                       (string-append (sanitize-package-name app-name) ".png"))
                           (build-path appdir (string-append (sanitize-package-name app-name) ".png"))
                           #t)
-               (call-with-output-file
-                (build-path appdir "AppRun")
-                (lambda (out)
-                  (fprintf out "#!/bin/sh\nexec /usr/lib/~a/bin/~a \"$@\"\n" app-name app-name))
-                #:exists 'replace)
+               (call-with-output-file (build-path appdir "AppRun")
+                                      (lambda (out) (display (appimage-apprun app-name) out))
+                                      #:exists 'replace)
                (set-executable-mode! (build-path appdir "AppRun"))
                (define appimage-path (build-path dist (string-append app-name ".AppImage")))
                (define ok?
