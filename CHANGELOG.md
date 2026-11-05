@@ -51,6 +51,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `make-replace-install-plan` now replaces a directory as well as a file, so a
+  macOS `.app` or a self-contained tree can be updated through the same atomic
+  staging/backup/rollback plan. A failure before the swap leaves the installed
+  target untouched, and a restart failure restores the previous tree.
 - `raco glaze measure startup` forwarded `--seconds` and `--artifact` through
   `apply`, which raised "procedure does not accept keyword arguments" before
   launching anything; the command now calls `measure-startup` with keyword

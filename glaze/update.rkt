@@ -549,9 +549,14 @@
     (raise-argument-error 'make-install-plan "procedure?" rollback))
   (install-plan candidate downloaded-path backup-path install restart rollback))
 
-;; Atomic replacement strategy for portable artifacts such as AppImage or a
-;; self-contained application archive. Native installers (MSI/EXE/PKG/DMG)
-;; use make-install-plan with an adapter that owns elevation and handoff.
+;; Atomic replacement strategy for portable artifacts (files or directories,
+;; including a macOS .app bundle). The previous target moves aside to the
+;; backup path, the staged copy takes its place, and rollback restores the
+;; backup. Staging happens under a sibling name so a failed copy never touches
+;; the installed target.
+(define (file-or-directory-exists? path)
+  (or (file-exists? path) (directory-exists? path)))
+
 (define (make-replace-install-plan candidate
                                    downloaded-path
                                    target-path
@@ -559,17 +564,33 @@
                                    [backup-path (path-add-extension target-path #".rollback")]
                                    #:restart [restart void])
   (define staging (path-add-extension target-path #".installing"))
+  (define moved-old? #f)
+  (define installed? #f)
   (define (install source)
-    (make-parent-directory* target-path)
-    (when (file-exists? staging)
-      (delete-file staging))
-    (copy-file source staging #t)
-    (when (file-exists? target-path)
-      (copy-file target-path backup-path #t))
-    (rename-file-or-directory staging target-path #t))
+    (when (file-or-directory-exists? staging)
+      (delete-directory/files staging))
+    (if (directory-exists? source)
+        (copy-directory/files source staging)
+        (copy-file source staging #t))
+    (when (file-or-directory-exists? target-path)
+      (when (file-or-directory-exists? backup-path)
+        (delete-directory/files backup-path))
+      (rename-file-or-directory target-path backup-path #t)
+      (set! moved-old? #t))
+    (rename-file-or-directory staging target-path #t)
+    (set! installed? #t))
   (define (rollback)
-    (when (file-exists? backup-path)
-      (copy-file backup-path target-path #t)))
+    ;; Only remove a target this plan installed; a failure before the swap
+    ;; leaves the original target untouched.
+    (when installed?
+      (when (file-or-directory-exists? target-path)
+        (delete-directory/files target-path))
+      (set! installed? #f))
+    (when moved-old?
+      (rename-file-or-directory backup-path target-path #t)
+      (set! moved-old? #f))
+    (when (file-or-directory-exists? staging)
+      (delete-directory/files staging)))
   (make-install-plan candidate
                      downloaded-path
                      #:backup-path backup-path

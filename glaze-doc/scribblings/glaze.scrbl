@@ -1340,9 +1340,13 @@ for at most ten hops, and every target must remain HTTPS.
                                     [#:backup-path backup-path path-string?]
                                     [#:restart restart procedure? void])
          install-plan?]{
-Creates the atomic portable-artifact strategy, suitable for AppImage-style or
-self-contained deployments. Native installers use @racket[make-install-plan]
-with a platform adapter that owns elevation and process handoff.
+Creates the atomic portable-artifact strategy for a file or directory,
+suitable for AppImage-style deployments, a self-contained tree, or a macOS
+@filepath{.app} bundle. The new copy is staged beside the target; the previous
+target moves to @racket[backup-path] before the staged copy is renamed into
+place. If installation or restart raises and the manifest allows rollback, the
+backup is restored. Native installers use @racket[make-install-plan] with a
+platform adapter that owns elevation and process handoff.
 }
 
 @defproc[(execute-install-plan! [plan install-plan?]) any]{
