@@ -14,6 +14,10 @@
 
 (define work-root (make-temporary-file "glaze-macos-bundle-test-~a" 'directory))
 
+(check-equal? (dmg-volume-name "BundleApp" "1.2.3")
+              "BundleApp 1.2.3"
+              "the dmg volume name is unique per version, not the bare app name")
+
 ;; ---- assemble a canonical bundle from a flat raco distribute output ----
 
 (define dist (build-path work-root "assemble-dist"))

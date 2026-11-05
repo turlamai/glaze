@@ -291,6 +291,11 @@
                         (asset-path installer-dialog 'installer-dialog))
         #f))
 
+  ;; An explicitly requested installer that silently degrades to nothing is
+  ;; indistinguishable from a successful package gate. Archive fallbacks still
+  ;; return a path; only a total failure reaches this check.
+  (when (and installer? (not installer-artifact))
+    (error 'build-app "installer requested but no installer artifact was produced"))
   ;; Sign the installer artifact too (Windows msi / NSIS setup exe) — it
   ;; embeds the already-signed exe but is itself what SmartScreen judges.
   (when (and sign installer-artifact (eq? os 'windows))
@@ -331,7 +336,7 @@
                              #:license-rtf installer-license
                              #:banner-bmp installer-banner
                              #:dialog-bmp installer-dialog)]
-    [(macosx) (make-macos-installer out-dir app-name dmg-background)]
+    [(macosx) (make-macos-installer out-dir app-name (or version "0.0.0") dmg-background)]
     [else (make-linux-installer out-dir app-name version publisher identifier)]))
 
 ;; Copy the project's public/ into the distribution next to the executable.
