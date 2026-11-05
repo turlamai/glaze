@@ -203,7 +203,7 @@
         (when state
           (write-window-state! state-path state))))
     (on-close))
-  (define h
+  (define (attempt)
     (with-handlers ([exn:fail? (lambda (e)
                                  (remember-webview-error! e)
                                  #f)])
@@ -218,6 +218,22 @@
                            #:devtools? devtools?
                            #:native-transport native-transport
                            #:on-close save-before-close)))
+  ;; WebView2 can abort controller creation with E_ABORT when its runtime is
+  ;; still settling (a known CI-runner race, not a missing dependency). One
+  ;; short retry with a fresh environment is safe; a real failure still
+  ;; raises the final diagnostic.
+  (define h
+    (let loop ([attempts 0])
+      (clear-webview-error!)
+      (define result (attempt))
+      (if (and (not result)
+               (eq? (system-type 'os) 'windows)
+               (< attempts 2)
+               (regexp-match? #rx"0x80004004" (or (webview-last-error) "")))
+          (begin
+            (sleep 0.75)
+            (loop (add1 attempts)))
+          result)))
   (cond
     [h
      (set-box! handle-box h)
