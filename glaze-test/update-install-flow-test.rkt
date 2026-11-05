@@ -31,7 +31,10 @@
 (define (run-tar . args)
   (unless (apply system* tar args)
     (error 'update-install-flow "tar failed: ~a" args)))
-(run-tar "-czf" (path->string archive) "-C" (path->string v2) ".")
+;; Run from the work directory with relative names: Windows tar treats an
+;; absolute C: path as a remote host.
+(parameterize ([current-directory work])
+  (run-tar "-czf" "v2.tar.gz" "-C" "v2" "."))
 
 (define public-key (build-path work "public.pem"))
 (define private-key (build-path work "private.pem"))
@@ -83,7 +86,8 @@
 ;; Extract the verified artifact and replace the installed directory.
 (define extract (build-path work "extract"))
 (make-directory* extract)
-(run-tar "-xzf" (path->string archive) "-C" (path->string extract))
+(parameterize ([current-directory work])
+  (run-tar "-xzf" "v2.tar.gz" "-C" "extract"))
 (execute-install-plan! (make-replace-install-plan candidate extract v1))
 (check-equal? (read-version v1) "2.0.0" "the installed tree is N+1")
 (check-equal? (read-version (build-path work "v1.rollback"))
