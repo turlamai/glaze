@@ -6,7 +6,9 @@
 
 (require racket/file
          racket/path
+         racket/port
          racket/string
+         racket/system
          rackunit
          glaze/private/macos-bundle)
 
@@ -81,5 +83,20 @@
 (check-equal? (file->string (build-path contents "MacOS" "BundleApp")) "second payload")
 (check-false (directory-exists? (build-path contents "lib"))
              "a rebuild does not keep the previous bundle's library tree")
+
+;; ---- dmg staging always carries the /Applications drop target ----
+
+(unless (eq? (system-type 'os) 'windows)
+  (define dmg-stage (build-path work-root "dmg-stage"))
+  (make-directory* dmg-stage)
+  (stage-dmg-root (build-path dist "BundleApp.app") dmg-stage "BundleApp")
+  (check-true (file-exists? (build-path dmg-stage "BundleApp.app" "Contents" "Info.plist"))
+              "the staged dmg contains the bundle")
+  (check-equal? (string-trim (with-output-to-string
+                              (lambda ()
+                                (system* (find-executable-path "readlink" #f)
+                                         (path->string (build-path dmg-stage "Applications"))))))
+                "/Applications"
+                "the dmg offers the conventional Applications drop target"))
 
 (delete-directory/files work-root)
