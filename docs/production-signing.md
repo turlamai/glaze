@@ -118,6 +118,27 @@ bundle; state the verification method the product actually provides.
   Glaze warns and degrades when a *toolchain* is absent; that warning must not
   be ignored for a published artifact.
 
+## Release workflow wiring
+
+The tag release builds unsigned installers by default. It can sign them when
+the repository provides these secrets:
+
+| Secret | Purpose |
+| --- | --- |
+| `APPLE_CERTIFICATE_BASE64`, `APPLE_CERTIFICATE_PASSWORD` | Developer ID Application `.p12` imported into a temporary keychain |
+| `APPLE_SIGN_IDENTITY` | exact `codesign` identity, for example `Developer ID Application: Acme (TEAMID)` |
+| `APPLE_NOTARY_PROFILE`, `APPLE_NOTARY_APPLE_ID`, `APPLE_NOTARY_TEAM_ID`, `APPLE_NOTARY_PASSWORD` | `notarytool` keychain profile used by `--notarize-profile` |
+| `WINDOWS_CERTIFICATE_BASE64`, `WINDOWS_CERTIFICATE_PASSWORD` | Authenticode PFX imported into `Cert:\CurrentUser\My` |
+| `WINDOWS_SIGN_IDENTITY` | `signtool` thumbprint or subject passed to `--sign` |
+
+Set the repository variable `GLAZE_REQUIRE_SIGNED_INSTALLERS=1` to make the
+release fail before building when any identity is missing. Without it, the
+release is explicitly unsigned and must not be described as signed.
+
+The certificate import only provisions the runner. A signed release still
+needs the product's own certificate, notarization account and rotation
+process; publish the update signing key separately.
+
 ## Verification checklist
 
 - [ ] the artifact was built from the tagged commit, not a dirty checkout;
