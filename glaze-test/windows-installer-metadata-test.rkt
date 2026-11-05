@@ -22,7 +22,11 @@
   (check-true (string-contains? wxs upgrade-code))
   (define nsi (windows-nsis "Demo" (string->path "C:/dist") "1.2.3" "Acme" identifier))
   (check-true (string-contains? nsi "DisplayVersion\" \"1.2.3"))
-  (check-true (string-contains? nsi identifier)))
+  (check-true (string-contains? nsi identifier))
+  (check-true (regexp-match? #rx"Section \"Install\"[ \t\r\n]+SetRegView 64" nsi)
+              "SetRegView is only legal inside a Section")
+  (check-false (regexp-match? #rx"admin\r?\nSetRegView" nsi)
+               "SetRegView must not sit at script top level"))
 
 (test-case "the MSI authors the commercial wizard and desktop integration"
   (define identifier "com.acme.demo")
