@@ -255,6 +255,31 @@ jobs:
             grep -q 'usr/lib/sampleapp' "$RUNNER_TEMP/rpm-files.txt"
           fi
 
+      - name: Install, upgrade and remove the Linux packages
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd sampleapp
+          raco glaze build --name sampleapp --version 0.0.2 \
+            --publisher "Turing Lambda" --identifier TuringLambda.Glaze.CISample \
+            --out dist-next --installer
+          sudo dpkg -i dist/sampleapp.deb
+          test -x /usr/bin/sampleapp
+          test -d /usr/lib/sampleapp
+          test -f /usr/share/applications/sampleapp.desktop
+          test "$(dpkg-query -W -f='${Version}' sampleapp)" = "0.0.1"
+          sudo dpkg -i dist-next/sampleapp.deb
+          test "$(dpkg-query -W -f='${Version}' sampleapp)" = "0.0.2"
+          sudo dpkg -r sampleapp
+          test ! -e /usr/lib/sampleapp
+          test ! -e /usr/bin/sampleapp
+          sudo rpm -i dist/sampleapp.rpm
+          test -x /usr/bin/sampleapp
+          test "$(rpm -q --qf '%{VERSION}' sampleapp)" = "0.0.1"
+          sudo rpm -e sampleapp
+          test ! -e /usr/lib/sampleapp
+
       - name: Validate Windows installer upgrade identity
         if: runner.os == 'Windows'
         shell: pwsh
