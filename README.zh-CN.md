@@ -110,6 +110,8 @@ sudo pacman -S gtk3 webkit2gtk-4.1
 raco pkg install --auto glaze
 ```
 
+单一 Racket 包：一次安装 `glaze` 库、`raco glaze` CLI 和文档（之后可用 `raco docs` 浏览）。如需固定到某个 revision 而非 catalog 最新版，使用 `raco glaze install <rev>`；它会以规范的 `glaze` 包名 link 该 checkout，也是 `raco glaze doctor --fix` 指引的修复路径。
+
 ### 2. 创建新项目
 
 ```bash
@@ -146,7 +148,10 @@ raco glaze schema write   # 有意变更 API 时写入基线
 raco glaze schema check --json # 检查 API 兼容性
 raco glaze dev           # 运行当前项目的原生桌面应用
 raco glaze verify        # 断言 title/URL 并捕获原生窗口截图
+raco glaze measure size  # 对照预算报告打包产物体积
+raco glaze measure startup # 启动打包产物并要求存活
 raco glaze build         # 构建可分发包（exe + 内置资源）
+raco glaze install <rev> # 将 glaze 包固定到某个 revision 并 link
 raco glaze updater-keygen # 生成 Ed25519 更新签名密钥对
 raco glaze update-sign    # 签名更新制品
 raco glaze update-verify  # 校验更新制品签名
@@ -181,23 +186,42 @@ raco glaze build --name myapp --version 1.2.0 \
   --publisher "Acme Inc" --identifier com.acme.myapp --installer
 ```
 
-选项：`--name`、`--version`、`--publisher`、`--identifier`、`--icon <.ico/.icns>`、`--entry <path>`（默认 `main.rkt`）、`--out <dir>`（默认 `dist`）、`--embed-dlls`（Windows：单文件 exe）、`--installer`。不同版本必须保持 `--identifier` 不变；Glaze 会用它派生稳定的 WiX `UpgradeCode` 和 NSIS 卸载注册表标识。
+选项：`--name`、`--version`、`--publisher`、`--identifier`、`--icon <.ico/.icns>`、`--entry <path>`（默认 `main.rkt`）、`--out <dir>`（默认 `dist`）、`--embed-dlls`（Windows：单文件 exe）、`--installer`、签名相关 `--sign <id>`、`--entitlements <plist>`、`--no-hardened-runtime`、`--notarize <profile>`、`--timestamp-url <url>`、深链 `--url-scheme <name>`（可重复）、`--dmg-background <.png>`，以及 Windows 向导素材 `--installer-license <.rtf>`、`--installer-banner <.bmp>`、`--installer-dialog <.bmp>`。不同版本必须保持 `--identifier` 不变；Glaze 会用它派生稳定的 WiX `UpgradeCode` 和 NSIS 卸载注册表标识。
 
 > installer 步骤探测原生打包工具链（Windows：WiX / NSIS；macOS：`create-dmg` / `hdiutil`；Linux：`dpkg-deb` / `rpmbuild` / `appimagetool` / `linuxdeploy`），缺失时**优雅降级**为 `.zip` / `.tar.gz` 并响亮告警指明该装什么。Linux 上所有可用格式都从同一棵 FHS 暂存树产出——`/usr/lib/<app>` 载荷、`/usr/bin/<app>` 包装器、`.desktop` 入口与 hicolor 图标——因此 deb、rpm 与 AppImage 载荷完全一致；没有图标的项目也会得到一个有效的生成占位图标。这里降级的是**分发格式**，不是应用 UI；应用启动本身没有浏览器 fallback。
 
-### 代码签名与公证
+### `measure`
+
+测量构建实际产出，而不是用眼睛扫 `dist/`：
 
 ```bash
-# macOS
-raco glaze build --name myapp \
-  --sign "Developer ID Application: Acme Inc (TEAMID)" \
+raco glaze measure size [--budget budgets.json] [--artifact sampleapp.dmg]
+raco glaze measure startup [--artifact sampleapp.app] [--seconds 3]
+```
+
+`size` 以字节列出每个产物；带 `--budget` 时，任一产物超过首个匹配的
+`{"glob": ..., "max-bytes": ...}` 规则就以非 0 退出，体积回归会让 CI 变红。
+`startup` 启动打包产物（macOS 的 `.app` 会展开到内部二进制），要求它在存活窗口内
+不退出，然后终止；提前退出即失败。它测量的是启动存活，不是可交互时间；共享
+runner 上的耗时只作参考。
+
+### 代码签名与公证
+
+`build` 驱动 `codesign`（macOS）与 `signtool`（Windows）；签名失败会中止构建，工具链缺失则告警。
+
+```bash
+# macOS：Developer ID + hardened runtime + 公证/staple
+raco glaze build --name myapp --sign "Developer ID Application: Acme Inc (TEAMID)" \
   --notarize acme-notary --installer
 
-# Windows
+# macOS ad-hoc，仅本地/CI 冒烟
+raco glaze build --name myapp --sign -
+
+# Windows：证书 thumbprint 或 subject，RFC-3161 时间戳
 raco glaze build --name myapp --sign 40HEXCHARS --installer
 ```
 
-签名失败会中止构建；缺失签名工具链时会明确告警。
+`--entitlements`、`--timestamp-url`、`--no-hardened-runtime` 覆盖其余情况。证书保管、CI 密钥与验签命令见[生产签名](docs/production-signing.md)。
 
 ### 产品权益授权
 
@@ -205,16 +229,11 @@ raco glaze build --name myapp --sign 40HEXCHARS --installer
 
 ### 更新完整性
 
-`check-update` 仍是小型、向后兼容的通知助手。对已安装应用，完整更新器会校验签名清单、选择平台/架构与发布通道、执行分阶段发布与下载大小限制、校验 SHA-256 以及可选的制品签名，并执行带回滚的安装计划：
-
-更新验签使用纯 Racket 的 [`ed25519`](https://pkgs.racket-lang.org/package/ed25519) 后端，因此已安装应用无需 OpenSSL 3 CLI 即可验证自己的更新；签名、密钥生成和加密私钥仍使用 OpenSSL 3 CLI。
-
-所有更新器拉取都跟随绝对与相对重定向，最多十跳。签名清单与制品在每一次重定向中都只允许 HTTPS，因此发布别名无法把校验流量降级为明文。
+`check-update` 是轻量通知助手。已安装应用的更新器会校验签名清单与制品，按通道/平台/架构选择，执行分阶段发布与最低版本限制，并运行带回滚的安装计划：
 
 ```racket
 (define manifest
-  (fetch-update-manifest manifest-url pinned-public-key
-                         #:key-id "release-2026"))
+  (fetch-update-manifest manifest-url pinned-public-key #:key-id "release-2026"))
 (define candidate (select-update config manifest))
 (when candidate
   (define artifact (download-update config candidate download-path))
@@ -223,9 +242,7 @@ raco glaze build --name myapp --sign 40HEXCHARS --installer
                               #:restart restart-app)))
 ```
 
-可移植制品（包括 AppImage 风格部署）可以使用上面的原子替换适配器。MSI/EXE/PKG/DMG 安装器使用 `make-install-plan` 与负责提权、进程交接的平台适配器；Glaze 仍控制已验证输入，并在安装失败时触发回滚。
-
-发布自动化可以用同一把固定 Ed25519 密钥签名制品与已验证清单：
+验签使用纯 Racket 的 [`ed25519`](https://pkgs.racket-lang.org/package/ed25519) 后端，已安装应用无需 OpenSSL 3 CLI；签名与密钥生成仍需要。所有拉取仅 HTTPS，最多十次重定向。发布自动化可签名制品与已验证清单：
 
 ```bash
 raco glaze updater-keygen --out updater-keys
@@ -237,6 +254,8 @@ raco glaze manifest-sign --manifest manifest.json --key updater-keys/private.pem
 raco glaze manifest-verify --manifest manifest.signed.json \
   --pub updater-keys/public.pem --key-id release-2026
 ```
+
+通道、分阶段发布、回滚与各安装形态证据见[发布与更新](docs/release-and-updates.md)。
 
 ## 项目结构
 
@@ -565,6 +584,7 @@ SSE 与嵌入式 WebView 前端共享同一个本地 origin。
 - `#:api-token`（默认 `#t`）保护 API 路由与 SSE；`#:api-token #f` 为显式关闭，且不能与 `#:capability` 同时使用；
 - 可选 `#:capability` 启用默认拒绝的路由权限，并可限制文件根目录、命令与参数；
 - 应用窗口通过一次性的 token bootstrap URL 获取 HttpOnly cookie。
+- 疑似漏洞请通过 [SECURITY.md](SECURITY.md) 私下报告；该文件记录了信任模型、安全敏感模块与不在范围内的内容。
 
 ## 系统集成
 
@@ -624,6 +644,33 @@ SSE 与嵌入式 WebView 前端共享同一个本地 origin。
 | [`examples/webview-demo.rkt`](examples/webview-demo.rkt) | 跨平台 Native WebView 生命周期 |
 | [`examples/agent-verify.rkt`](examples/agent-verify.rkt) | 无人值守断言页面状态 + 截图 |
 | [`examples/tray-demo.rkt`](examples/tray-demo.rkt) | 跨平台系统托盘 |
+
+## 测试
+
+```bash
+raco test glaze-test/                       # 框架测试
+racket scripts/webview-e2e.rkt              # 当前系统的真实窗口 e2e
+raco make glaze/main.rkt glaze-cli/cli.rkt  # 编译公开入口
+```
+
+框架测试在 Windows/Linux 无窗口，在 macOS 也会驱动真实 WKWebView 窗口。e2e 在每个系统打开原生窗口，需要图形会话（Linux 用 Xvfb）。生成项目用 `raco glaze verify` 跑自己的 `verify.rkt`。
+
+CI 在三大平台跑两者，并用 `package` job 构建、校验安装器。应用侧门禁、runner 要求与证据见 [CI 契约](docs/ci.md)。
+
+## 已知缺口
+
+- **公开 API 仍为 1.0 之前** —— 模块层级与导出列表有快照检查（[API 稳定性](docs/api-stability.md)），但名称仍可能变化，并会在 CHANGELOG 中给出迁移说明。
+- **0.x 的原生传输是 opt-in** —— `run-app` 在原生窗口内仍默认 `#:transport 'http`。打包产品应显式传 `#:transport 'native`；1.0 计划把默认切换列为发布门槛，需要打包 RC 证据，而不是已完成的切换。
+- **Linux 验证范围有边界** —— CI 只证明 Ubuntu 上 Xvfb + WebKitGTK 窗口行为和 deb/rpm/AppImage 元数据。真实发行版/桌面行为（GNOME/KDE、Wayland compositor、缩放、portal、输入法）属于各产品自己的发布证据。原生对话框需要 `zenity` 或 `kdialog`；全局快捷键仅 X11/XWayland。
+- **macOS 需要交互式会话** —— WKWebView 启动需要已登录的图形桌面；headless 或 SSH 会话会带指引失败，不会回退到浏览器。
+- **Windows 需要 WebView2 Runtime** —— Glaze 只随包提供 `WebView2Loader.dll`，不包含 Evergreen Runtime；缺失 Runtime 会在启动时被诊断。
+- **Windows ARM64 使用独立 loader** —— Glaze 同时提供 `win-x64` 与 `win-arm64` `WebView2Loader.dll`，按 Racket 进程架构选择；CI 在 ARM64 主机上跑原生 arm64。x64 构建仍可在 ARM64 上以模拟方式运行。
+- **Intel macOS 的 CI 只做构建** —— 托管 Intel runner 没有 WindowServer 会话，CI 只能证明原生 x64 构建与打包路径，无法打开真实窗口。真实窗口测试需在桌面 Intel Mac 或自托管 runner 上跑。
+- **安装器工具链是外部依赖** —— MSI 需要 WiX，dmg/公证需要 macOS 工具，Linux 需要 dpkg/rpm/AppImage 工具。工具链缺失时 `--installer` 会告警并降级为 zip/tar.gz；这是分发格式降级，不是 UI runtime 回退。
+- **无障碍与输入法由应用负责** —— Glaze 只承载系统 WebView，不额外提供无障碍层。语义化 HTML、焦点顺序、名称/角色、大字号和输入法行为必须由产品在各平台设计和验证。
+- **没有移动端目标** —— 仅 Windows、macOS、Linux 桌面。
+- **预算是首版** —— `examples/showcase/budgets.json` 是宽松的初始上限，不是性能承诺。共享 runner 的测量只作参考；门槛来自专用硬件历史。
+- **未经过独立安全审计** —— 见 [SECURITY.md](SECURITY.md)。
 
 ## Roadmap
 

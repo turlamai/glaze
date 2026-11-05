@@ -233,10 +233,21 @@ closed?
 ```text
 raco glaze init <name>
 raco glaze dev
+raco glaze verify
+raco glaze inspect [--json]
+raco glaze doctor [--fix] [--json]
 raco glaze schema write|check [--json]
 raco glaze build
+raco glaze measure size|startup
+raco glaze install <rev>
+raco glaze updater-keygen
+raco glaze update-sign|update-verify
+raco glaze manifest-sign|manifest-verify
 raco glaze help
 ```
+
+CLI 的单一事实来源是 `glaze-cli/cli.rkt` 的分发表和 `raco glaze help`；
+新增或改名命令时同步本清单和 README 的中英 CLI 段，不要让这里退化成过期列表。
 
 `init` 生成的 `main.rkt` 必须在 `module+ main` 中直接使用 `run-app`，并导出
 `glaze.rktd` 指定的 route list，使 schema 工具加载模块时不会启动应用。
