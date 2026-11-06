@@ -397,20 +397,21 @@ jobs:
         run: |
           set -euo pipefail
           cd examples/showcase
-          signing=()
+          args=(
+            --name Glaze
+            --version '${{ needs.source.outputs.version }}'
+            --publisher 'Turing Lambda'
+            --identifier 'TuringLambda.Glaze'
+            --out dist
+            --installer
+          )
           if [ -n "${APPLE_SIGN_IDENTITY:-}" ]; then
-            signing+=(--sign "$APPLE_SIGN_IDENTITY")
+            args+=(--sign "$APPLE_SIGN_IDENTITY")
           fi
           if [ -n "${APPLE_NOTARY_PROFILE:-}" ]; then
-            signing+=(--notarize-profile "$APPLE_NOTARY_PROFILE")
+            args+=(--notarize-profile "$APPLE_NOTARY_PROFILE")
           fi
-          raco glaze build \
-            --name Glaze \
-            --version '${{ needs.source.outputs.version }}' \
-            --publisher 'Turing Lambda' \
-            --identifier 'TuringLambda.Glaze' \
-            --out dist \
-            --installer "${signing[@]}"
+          raco glaze build "${args[@]}"
           test -f dist/Glaze.dmg
           # G4-S2: packaged-size budget gate (fails the release on violation).
           raco glaze measure size --budget budgets.json
