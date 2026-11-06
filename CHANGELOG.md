@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-11-06
+
 ### Added
 
 - The tag release can sign and notarize its installers when the repository
@@ -168,6 +170,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the transport shutdown on the pump / main-loop thread, which cannot
   block on the shutdown owner's thread joins. The close path now removes
   the native wiring and defers the shutdown to its own thread.
+
+### Release notes
+
+- The 0.18.0 macOS dmg and Windows MSI/NSIS are **unsigned** unless the
+  release signing secrets are configured. Linux artifacts carry SHA-256
+  checksums. Do not describe this release as signed or notarized.
 
 ## [0.17.0] - 2026-10-23
 
