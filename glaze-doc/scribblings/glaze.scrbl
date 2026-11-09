@@ -1229,6 +1229,14 @@ are also suppressed automatically under common CI environments.
 @defproc[(reveal-path [path (or/c path? string?)]) boolean?]{}
 @defproc[(single-instance? [app-id any/c]) boolean?]{}
 
+@defproc[(release-single-instance! [app-id (or/c #f string?) #f]) void?]{
+Releases the single-instance claim held by this process. On Windows this closes
+the named kernel mutex so a second launch is not blocked while the current
+process finishes native teardown; call it after deciding to quit, before
+waiting for windows or WebView2 to exit. Passing no @racket[app-id] releases
+every claim held by this process. It is a no-op on macOS and Linux, where the
+per-process TCP claim disappears with the process/custodian.}
+
 These helpers are best-effort integrations. Their failure semantics are
 separate from the WebView startup contract: the WebView is required for the
 application itself, while an optional integration may report failure without

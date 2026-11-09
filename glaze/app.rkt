@@ -33,7 +33,8 @@
          "events.rkt"
          "native-transport.rkt"
          (rename-in "update.rkt" [check-update do-check-update])
-         "webview/main.rkt")
+         "webview/main.rkt"
+         "sys/main.rkt")
 
 (provide run-app
          make-api-token
@@ -377,6 +378,11 @@
                              ;; stopping — startup and on-ready failures
                              ;; included.
                              (transition-app-to-stopping! app)
+                             ;; Release the single-instance claim before the
+                             ;; native teardown. A lingering WebView2/window
+                             ;; cleanup must not block the next launch (#124).
+                             (with-handlers ([exn:fail? (lambda (_) (void))])
+                               (release-single-instance! (app-id app)))
                              ;; Leftover windows (quit via app-quit! or a raising path) close
                              ;; here, on the caller's thread — the thread run-app was called
                              ;; on, which owns the native window calls.

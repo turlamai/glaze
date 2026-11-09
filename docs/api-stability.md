@@ -208,6 +208,7 @@ charter.
 | `shell-process?` | expert | |
 | `shell-spawn!` | stable | |
 | `single-instance?` | stable | |
+| `release-single-instance!` | stable | Explicit release of the Windows mutex before native teardown. |
 | `sql-close!` | stable | |
 | `sql-database-path` | expert | |
 | `sql-database?` | expert | |

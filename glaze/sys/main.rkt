@@ -14,7 +14,8 @@
          notify!
          open-path
          reveal-path
-         single-instance?)
+         single-instance?
+         release-single-instance!)
 
 ;; ---- platform backend dispatch ----
 
@@ -86,6 +87,15 @@
 ;; selecting an arbitrary port in the Windows excluded dynamic range can
 ;; fail even when no other instance exists. The other OSes retain their
 ;; existing, compatibility-tested per-process TCP lock for this slice.
+(define (release-single-instance! [app-id #f])
+  ;; Windows owns a kernel mutex and can release it explicitly. The other
+  ;; platforms use a per-process TCP listener owned by the app custodian; it
+  ;; is released when that custodian shuts down, so this is a no-op there.
+  (when (eq? (system-type 'os) 'windows)
+    ((dynamic-require 'glaze/sys/sys-windows
+                      'windows-release-single-instance!)
+     app-id)))
+
 (define (single-instance? app-id)
   (if (eq? (system-type 'os) 'windows)
       ((dynamic-require 'glaze/sys/sys-windows 'windows-single-instance?) app-id)
