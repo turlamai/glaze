@@ -33,6 +33,45 @@
 html:lang(en) .reader-zh,html:lang(zh) .reader-en{display:none!important}@media(max-width:700px){.product-start{margin:40px auto;padding:24px 20px}.product-start-grid{grid-template-columns:1fr;gap:18px}}
 </style>
 <style>.lang-menu li.lang-choice{padding:0}.lang-menu .lang-choice button{display:block;width:100%;padding:8px 12px;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}.lang-menu .lang-choice button:focus-visible{outline:2px solid currentColor;outline-offset:-2px;border-radius:4px}</style>
+<style id="visual-showcase-css">
+/* Visual Showcase: process illustration, intentionally not an app screenshot. */
+.vs-showcase{padding:clamp(48px,7vw,88px) 24px;background:var(--bg,var(--surface,#faf7f2));color:var(--text,var(--ink,#24211d))}
+.vs-showcase *{box-sizing:border-box}
+.vs-showcase .vs-wrap{max-width:1080px;margin:0 auto}
+.vs-showcase .vs-intro{text-align:center;max-width:680px;margin:0 auto 28px}
+.vs-showcase .vs-label{text-transform:uppercase;letter-spacing:.14em;font-size:.7rem;font-weight:700;color:var(--accent,#b85d3f)}
+.vs-showcase h2{font:inherit;font-size:clamp(1.65rem,3.3vw,2.5rem);font-weight:700;line-height:1.2;letter-spacing:-.04em;margin:12px 0}
+.vs-showcase .vs-lead,.vs-showcase .vs-caption{color:var(--text-2,var(--muted,#6b6660));line-height:1.7}
+.vs-showcase .vs-frame{padding:clamp(18px,3vw,34px);border:1px solid var(--border,var(--line,#e8e2d9));background:var(--bg-card,var(--surface,#fff));border-radius:24px;box-shadow:0 20px 60px rgba(36,29,18,.07);overflow:hidden}
+.vs-showcase .vs-stage{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.vs-showcase .vs-step{position:relative;min-height:170px;padding:22px 18px;border-radius:16px;background:var(--bg,var(--surface,#faf7f2));border:1px solid var(--border,var(--line,#e8e2d9))}
+.vs-showcase .vs-step:not(:last-child):after{content:"→";position:absolute;z-index:1;right:-15px;top:50%;transform:translateY(-50%);width:28px;height:28px;display:grid;place-items:center;border-radius:50%;background:var(--bg-card,var(--surface,#fff));color:var(--accent,#b85d3f);border:1px solid var(--border,var(--line,#e8e2d9))}
+.vs-showcase .vs-glyph{font-size:1.75rem;display:block;margin-bottom:24px;color:var(--accent,#b85d3f)}
+.vs-showcase .vs-step b{display:block;font-size:1.03rem;margin-bottom:7px}
+.vs-showcase .vs-step small{display:block;color:var(--text-2,var(--muted,#6b6660));font-size:.84rem;line-height:1.5}
+.vs-showcase .vs-caption{font-size:.79rem;text-align:center;margin:16px 0 0}
+.vs-showcase .vs-art{margin-bottom:22px;background:var(--bg,var(--surface,#f6f3ed));border:1px solid var(--border,var(--line,#e8e2d9));border-radius:18px;padding:22px;overflow:hidden;min-height:185px}
+.vs-showcase .vs-task-art{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+.vs-showcase .vs-mini-board{background:var(--bg-card,var(--surface,#fff));border-radius:14px;border:1px solid var(--border,var(--line,#e8e2d9));padding:15px;box-shadow:0 6px 24px rgba(10,10,10,.04)}
+.vs-showcase .vs-mini-title{font-size:.76rem;color:var(--text-2,var(--muted,#6b6660));font-weight:700;margin-bottom:12px}
+.vs-showcase .vs-mini-task{display:flex;align-items:center;gap:10px;padding:9px 3px;border-top:1px solid var(--border,var(--line,#e8e2d9));font-size:.9rem}
+.vs-showcase .vs-ring{flex:none;height:17px;width:17px;border:2px solid var(--accent,#b85d3f);border-radius:50%}
+.vs-showcase .vs-ring.done{background:var(--accent,#b85d3f);position:relative}.vs-showcase .vs-ring.done:after{content:"✓";color:#fff;font-size:12px;position:absolute;left:2px;top:-3px}
+.vs-showcase .vs-mini-tag{margin-left:auto;color:var(--accent,#b85d3f);background:var(--accent-soft,#f7e5dd);font-size:.7rem;padding:3px 6px;border-radius:6px}
+.vs-showcase .vs-reader-art{display:grid;grid-template-columns:1.5fr 1fr;gap:18px}
+.vs-showcase .vs-paper,.vs-showcase .vs-annotation{border-radius:14px;background:var(--bg-card,var(--surface,#fff));border:1px solid var(--border,var(--line,#e8e2d9));padding:18px}
+.vs-showcase .vs-paper-title{font-size:.75rem;letter-spacing:.1em;color:var(--text-2,var(--muted,#6b6660));margin-bottom:22px}
+.vs-showcase .vs-line{height:9px;background:var(--border,var(--line,#e8e2d9));border-radius:8px;margin:12px 0;max-width:100%}
+.vs-showcase .vs-line.short{width:57%}.vs-showcase .vs-line.mid{width:82%}
+.vs-showcase .vs-highlight{height:15px;border-radius:3px;width:72%;background:color-mix(in srgb,var(--accent,#d97757) 32%,transparent)}
+.vs-showcase .vs-note-label{font-size:.72rem;letter-spacing:.09em;color:var(--accent,#b85d3f);font-weight:800}
+.vs-showcase .vs-note-body{font-size:.93rem;line-height:1.7;margin:18px 0}
+.vs-showcase .vs-note-foot{font-size:.75rem;color:var(--text-2,var(--muted,#6b6660))}
+html:lang(en) .vs-zh,html:lang(zh) .vs-en{display:none!important}
+@media(max-width:700px){.vs-showcase .vs-stage{grid-template-columns:1fr}.vs-showcase .vs-step{min-height:120px}.vs-showcase .vs-step:not(:last-child):after{right:calc(50% - 14px);top:auto;bottom:-15px;transform:rotate(90deg)}.vs-showcase .vs-glyph{margin-bottom:12px}.vs-showcase .vs-reader-art{grid-template-columns:1fr 1fr}.vs-showcase .vs-art{padding:14px}}
+@media(prefers-reduced-motion:reduce){.vs-showcase *, .vs-showcase *:before,.vs-showcase *:after{animation:none!important;transition:none!important}}
+.vs-showcase .vs-art img{display:block;max-width:100%;height:auto;margin:0 auto;border-radius:12px}.vs-showcase .vs-art .vs-mini-board{min-height:146px}.vs-showcase .vs-mini-task{line-height:1.5}.vs-showcase .vs-mini-task .vs-mono{font-family:ui-monospace,monospace;font-size:.77rem}
+</style>
 </head>
 
 <body>
@@ -104,6 +143,8 @@ racket main.rkt</code></pre>
             </div>
         </div>
     </section>
+<!-- Visual Showcase: conceptual diagram, not an application screenshot --><section class="vs-showcase" id="visual-showcase" aria-label="Product workflow illustration"><div class="vs-wrap"><div class="vs-intro"><span class="vs-label">PRODUCT IN CONTEXT · 产品如何工作</span><h2><span class="vs-zh" lang="zh-CN">Racket 在后台，Web UI 在原生窗口中。</span><span class="vs-en" lang="en">Racket behind a web UI in a native window.</span></h2><p class="vs-lead"><span class="vs-zh" lang="zh-CN">用仓库维护的架构图直接解释各层职责，避免将示例页面误称为最终用户产品。</span><span class="vs-en" lang="en">The repository's maintained architecture diagram explains responsibilities without mistaking an example app for a finished product.</span></p></div><div class="vs-frame"><div class="vs-art" style="text-align:center"><img src="glaze-architecture.svg" alt="Glaze architecture: application, public modules, runtime kernel, native adapters and Keel contracts" width="800" height="520" loading="lazy"></div><div class="vs-stage"><div class="vs-step"><span class="vs-glyph" aria-hidden="true">{}</span><b><span class="vs-zh" lang="zh-CN">编写后端</span><span class="vs-en" lang="en">Write backend</span></b><small><span class="vs-zh" lang="zh-CN">在 Racket 实现应用逻辑</span><span class="vs-en" lang="en">Implement behavior in Racket</span></small></div><div class="vs-step"><span class="vs-glyph" aria-hidden="true">▣</span><b><span class="vs-zh" lang="zh-CN">构建界面</span><span class="vs-en" lang="en">Build UI</span></b><small><span class="vs-zh" lang="zh-CN">使用 HTML / CSS / JS 呈现</span><span class="vs-en" lang="en">Render through HTML / CSS / JS</span></small></div><div class="vs-step"><span class="vs-glyph" aria-hidden="true">◈</span><b><span class="vs-zh" lang="zh-CN">桌面交付</span><span class="vs-en" lang="en">Ship desktop</span></b><small><span class="vs-zh" lang="zh-CN">经平台 WebView 和打包验证</span><span class="vs-en" lang="en">Use native WebView and packaging checks</span></small></div></div><p class="vs-caption"><span class="vs-zh" lang="zh-CN">架构或工作流程示意，非当前 GUI 截图；实际可用能力以项目文档和验收记录为准。</span><span class="vs-en" lang="en">Architecture/workflow illustration, not a current GUI screenshot. Refer to project docs and acceptance evidence for available capabilities.</span></p></div></div></section><!-- End Visual Showcase -->
+
 
     <!-- Features -->
     <section id="features">
