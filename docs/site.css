@@ -1,0 +1,280 @@
+/* ============================================================
+   Glaze site.css — per-site sections only.
+   Shared frame lives in family.css (site-kit); do not duplicate.
+   ============================================================ */
+
+/* ---------- Install block (library CTA; no installer binaries) ---------- */
+.kit-install {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    max-width: 100%;
+    padding: 13px 18px;
+    background: var(--kit-surface);
+    border: 1px solid var(--kit-border-strong);
+    border-radius: var(--kit-radius-m);
+}
+.kit-install code {
+    background: none;
+    padding: 0;
+    font-size: 14.5px;
+    color: var(--kit-text);
+    overflow-x: auto;
+    white-space: nowrap;
+}
+.kit-install-prompt {
+    font-family: var(--kit-font-mono);
+    font-weight: 700;
+    color: var(--kit-accent-strong);
+    user-select: none;
+}
+html[data-theme="dark"] .kit-install-prompt { color: var(--kit-accent); }
+
+/* ---------- Hero mini window: verifiable first app ---------- */
+.mini-window {
+    margin: 52px auto 0;
+    max-width: 560px;
+    background: #1E1E22;
+    border-radius: var(--kit-radius-m);
+    box-shadow: var(--kit-shadow-lift);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    padding: 24px;
+    text-align: left;
+}
+.mini-title {
+    margin: 0 0 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--kit-accent);
+    letter-spacing: 0.02em;
+}
+.mini-window pre {
+    margin: 0;
+    background: none;
+    padding: 0;
+}
+.mini-window code {
+    display: block;
+    font-family: var(--kit-font-mono);
+    font-size: 13.5px;
+    line-height: 1.8;
+    color: rgba(255, 255, 255, 0.86);
+    overflow-x: auto;
+    white-space: pre;
+}
+.mini-note {
+    margin: 14px 0 0;
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+/* ---------- Terminal window (quick start) ---------- */
+.code-window {
+    background: #1E1E22;
+    border-radius: var(--kit-radius-m);
+    box-shadow: var(--kit-shadow-lift);
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.window-header {
+    display: flex;
+    align-items: center;
+    padding: 11px 14px;
+    background: rgba(255, 255, 255, 0.045);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.window-controls { display: flex; gap: 7px; }
+.traffic-light { width: 11px; height: 11px; border-radius: 50%; }
+.traffic-light.close { background: #FF5F57; }
+.traffic-light.minimize { background: #FEBC2E; }
+.traffic-light.maximize { background: #28C840; }
+.window-title {
+    flex: 1;
+    text-align: center;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.45);
+    font-family: var(--kit-font-mono);
+    margin-right: 54px;
+}
+.code-body {
+    padding: 20px 22px;
+    font-family: var(--kit-font-mono);
+    font-size: 13.5px;
+    line-height: 1.75;
+    color: rgba(255, 255, 255, 0.86);
+    overflow-x: auto;
+    white-space: pre;
+}
+.code-body .comment { color: rgba(255, 255, 255, 0.38); }
+.code-body .prompt { color: #C792EA; font-weight: 700; }
+.code-body .cmd { color: #7EE2A8; }
+.code-body .flag { color: rgba(255, 255, 255, 0.45); }
+.code-body .ok { color: #7EE2A8; font-weight: 700; }
+
+/* ---------- Visual showcase: architecture illustration ---------- */
+.vs-showcase { padding: clamp(48px, 7vw, 88px) 0; }
+.vs-showcase .vs-intro { text-align: center; max-width: 680px; margin: 0 auto 28px; }
+.vs-showcase .vs-label {
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--kit-accent-strong);
+}
+html[data-theme="dark"] .vs-showcase .vs-label { color: var(--kit-accent); }
+.vs-showcase .vs-lead { color: var(--kit-text-2); line-height: 1.7; }
+.vs-showcase .vs-frame {
+    padding: clamp(18px, 3vw, 34px);
+    border: 1px solid var(--kit-border);
+    background: var(--kit-bg-elevated);
+    border-radius: 24px;
+    box-shadow: var(--kit-shadow);
+    overflow: hidden;
+}
+.vs-showcase .vs-art {
+    margin-bottom: 22px;
+    background: var(--kit-bg);
+    border: 1px solid var(--kit-border);
+    border-radius: 18px;
+    padding: 22px;
+    overflow: hidden;
+    min-height: 185px;
+}
+.vs-showcase .vs-art img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 0 auto;
+    border-radius: 12px;
+}
+.vs-showcase .vs-stage {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+}
+.vs-showcase .vs-step {
+    position: relative;
+    min-height: 170px;
+    padding: 22px 18px;
+    border-radius: 16px;
+    background: var(--kit-bg);
+    border: 1px solid var(--kit-border);
+}
+.vs-showcase .vs-step:not(:last-child):after {
+    content: "→";
+    position: absolute;
+    z-index: 1;
+    right: -15px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--kit-bg-elevated);
+    color: var(--kit-accent-strong);
+    border: 1px solid var(--kit-border);
+}
+html[data-theme="dark"] .vs-showcase .vs-step:not(:last-child):after { color: var(--kit-accent); }
+.vs-showcase .vs-glyph {
+    font-size: 1.75rem;
+    display: block;
+    margin-bottom: 24px;
+    color: var(--kit-accent-strong);
+}
+html[data-theme="dark"] .vs-showcase .vs-glyph { color: var(--kit-accent); }
+.vs-showcase .vs-step b { display: block; font-size: 1.03rem; margin-bottom: 7px; }
+.vs-showcase .vs-step small {
+    display: block;
+    color: var(--kit-text-2);
+    font-size: 0.84rem;
+    line-height: 1.5;
+}
+.vs-showcase .vs-caption {
+    font-size: 0.79rem;
+    color: var(--kit-text-2);
+    text-align: center;
+    margin: 16px 0 0;
+}
+
+/* ---------- Design facts table ---------- */
+.compare-table-wrap {
+    margin-top: 44px;
+    overflow-x: auto;
+    border-radius: var(--kit-radius-l);
+    border: 1px solid var(--kit-border);
+    background: var(--kit-bg-elevated);
+    box-shadow: var(--kit-shadow);
+}
+table.compare {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    min-width: 560px;
+}
+.compare th, .compare td {
+    padding: 13px 18px;
+    text-align: left;
+    border-bottom: 1px solid var(--kit-border);
+}
+.compare th {
+    font-weight: 600;
+    background: var(--kit-accent-soft);
+    color: var(--kit-text);
+    white-space: nowrap;
+    width: 42%;
+}
+.compare td { color: var(--kit-text); }
+.compare tr:last-child th, .compare tr:last-child td { border-bottom: none; }
+
+/* ---------- Quick start extras ---------- */
+#start .code-window { text-align: left; }
+.callout {
+    margin-top: 26px;
+    padding: 16px 20px;
+    border: 1px solid var(--kit-border);
+    border-left: 3px solid var(--kit-accent);
+    border-radius: var(--kit-radius-m);
+    background: var(--kit-bg-elevated);
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--kit-text-2);
+    text-align: left;
+}
+.callout strong { color: var(--kit-text); }
+
+/* ---------- Adoption prose ---------- */
+.adoption-prose { max-width: var(--kit-prose-width); margin-top: 32px; }
+.start-links a {
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--kit-accent-strong);
+}
+html[data-theme="dark"] .start-links a { color: var(--kit-accent); }
+.start-links a:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 760px) {
+    .vs-showcase .vs-stage { grid-template-columns: 1fr; }
+    .vs-showcase .vs-step { min-height: 120px; }
+    .vs-showcase .vs-step:not(:last-child):after {
+        right: calc(50% - 14px);
+        top: auto;
+        bottom: -15px;
+        transform: rotate(90deg);
+    }
+    .vs-showcase .vs-glyph { margin-bottom: 12px; }
+    .vs-showcase .vs-art { padding: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .vs-showcase, .vs-showcase *, .vs-showcase *::before, .vs-showcase *::after {
+        animation: none !important;
+        transition: none !important;
+    }
+}
+
+/* ---------- Icon visibility per theme ---------- */
+html[data-theme="light"] .kit-icon-moon { display: none; }
+html[data-theme="dark"] .kit-icon-sun { display: none; }

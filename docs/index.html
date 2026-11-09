@@ -1,241 +1,198 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN" data-kit-id="glaze" data-kit-lang-key="glaze-lang-override-v2">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Glaze — Racket backend, web UI, native desktop</title>
-    <meta name="description" content="Build desktop apps with a Racket backend and a web frontend — write your app logic in Racket, build your UI with HTML/CSS/JS, and ship a desktop application.">
-    <link rel="stylesheet" href="styles.css">
-    <link rel="preload" href="fonts/newsreader-latin-var.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="preload" href="fonts/newsreader-latin-var-italic.woff2" as="font" type="font/woff2" crossorigin>
-    <script>document.documentElement.classList.add('js-anim')</script>
-    <style>
-        :root {
-            --accent: #5856D6;
-            --accent-hover: #4644C8;
-            --accent-soft: rgba(88, 86, 214, 0.15);
-            --accent-tint: rgba(88, 86, 214, 0.08);
-            --accent-bright: #9B99FF;
-        }
+    <title>Glaze — Racket 后端、Web UI、原生桌面应用</title>
+    <meta name="description" content="用 Racket 编写应用逻辑，用 HTML/CSS/JS 构建界面，并通过系统 WebView 交付原生桌面应用。面向 Racket 的桌面应用框架。">
+    <link rel="canonical" href="https://glaze.jrtx.site/">
+    <meta name="theme-color" content="#D97757">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Glaze">
+    <meta property="og:title" content="Glaze — Racket backend, web UI, native desktop">
+    <meta property="og:description" content="Build desktop apps with a Racket backend and a web frontend — write your app logic in Racket, build your UI with HTML/CSS/JS, and ship a desktop application.">
+    <meta property="og:url" content="https://glaze.jrtx.site/">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Glaze — Racket backend, web UI, native desktop">
+    <meta name="twitter:description" content="Build desktop apps with a Racket backend and a web frontend — write your app logic in Racket, build your UI with HTML/CSS/JS, and ship a desktop application.">
 
-        .showcase-img {
-            width: 100%;
-            border-radius: var(--radius-m);
-            box-shadow: var(--shadow-window);
-            border: 1px solid var(--border);
-            display: block;
-        }
-    </style>
-<style id="product-start-style">
-.product-start{max-width:1120px;margin:64px auto;padding:32px 24px;border-top:1px solid var(--border,#aaa);font:inherit;line-height:1.65}
-.product-start h2{font-size:clamp(1.7rem,3vw,2.4rem);letter-spacing:-.025em;margin:0 0 16px}.product-start h3{font-size:1.05rem;margin:0 0 10px}.product-start p{margin:0 0 16px;max-width:74ch}.product-start-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px;margin:28px 0}.product-start a{text-decoration:underline;text-underline-offset:4px;overflow-wrap:anywhere}.product-start a:focus-visible{outline:2px solid currentColor;outline-offset:5px}.product-start .start-links{display:flex;gap:16px 24px;flex-wrap:wrap}.product-start .start-status{font-weight:600}.product-start .start-limits{font-size:.95em}
-html:lang(en) .reader-zh,html:lang(zh) .reader-en{display:none!important}@media(max-width:700px){.product-start{margin:40px auto;padding:24px 20px}.product-start-grid{grid-template-columns:1fr;gap:18px}}
-</style>
-<style>.lang-menu li.lang-choice{padding:0}.lang-menu .lang-choice button{display:block;width:100%;padding:8px 12px;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}.lang-menu .lang-choice button:focus-visible{outline:2px solid currentColor;outline-offset:-2px;border-radius:4px}</style>
-<style id="visual-showcase-css">
-/* Visual Showcase: process illustration, intentionally not an app screenshot. */
-.vs-showcase{padding:clamp(48px,7vw,88px) 24px;background:var(--bg,var(--surface,#faf7f2));color:var(--text,var(--ink,#24211d))}
-.vs-showcase *{box-sizing:border-box}
-.vs-showcase .vs-wrap{max-width:1080px;margin:0 auto}
-.vs-showcase .vs-intro{text-align:center;max-width:680px;margin:0 auto 28px}
-.vs-showcase .vs-label{text-transform:uppercase;letter-spacing:.14em;font-size:.7rem;font-weight:700;color:var(--accent,#b85d3f)}
-.vs-showcase h2{font:inherit;font-size:clamp(1.65rem,3.3vw,2.5rem);font-weight:700;line-height:1.2;letter-spacing:-.04em;margin:12px 0}
-.vs-showcase .vs-lead,.vs-showcase .vs-caption{color:var(--text-2,var(--muted,#6b6660));line-height:1.7}
-.vs-showcase .vs-frame{padding:clamp(18px,3vw,34px);border:1px solid var(--border,var(--line,#e8e2d9));background:var(--bg-card,var(--surface,#fff));border-radius:24px;box-shadow:0 20px 60px rgba(36,29,18,.07);overflow:hidden}
-.vs-showcase .vs-stage{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
-.vs-showcase .vs-step{position:relative;min-height:170px;padding:22px 18px;border-radius:16px;background:var(--bg,var(--surface,#faf7f2));border:1px solid var(--border,var(--line,#e8e2d9))}
-.vs-showcase .vs-step:not(:last-child):after{content:"→";position:absolute;z-index:1;right:-15px;top:50%;transform:translateY(-50%);width:28px;height:28px;display:grid;place-items:center;border-radius:50%;background:var(--bg-card,var(--surface,#fff));color:var(--accent,#b85d3f);border:1px solid var(--border,var(--line,#e8e2d9))}
-.vs-showcase .vs-glyph{font-size:1.75rem;display:block;margin-bottom:24px;color:var(--accent,#b85d3f)}
-.vs-showcase .vs-step b{display:block;font-size:1.03rem;margin-bottom:7px}
-.vs-showcase .vs-step small{display:block;color:var(--text-2,var(--muted,#6b6660));font-size:.84rem;line-height:1.5}
-.vs-showcase .vs-caption{font-size:.79rem;text-align:center;margin:16px 0 0}
-.vs-showcase .vs-art{margin-bottom:22px;background:var(--bg,var(--surface,#f6f3ed));border:1px solid var(--border,var(--line,#e8e2d9));border-radius:18px;padding:22px;overflow:hidden;min-height:185px}
-.vs-showcase .vs-task-art{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
-.vs-showcase .vs-mini-board{background:var(--bg-card,var(--surface,#fff));border-radius:14px;border:1px solid var(--border,var(--line,#e8e2d9));padding:15px;box-shadow:0 6px 24px rgba(10,10,10,.04)}
-.vs-showcase .vs-mini-title{font-size:.76rem;color:var(--text-2,var(--muted,#6b6660));font-weight:700;margin-bottom:12px}
-.vs-showcase .vs-mini-task{display:flex;align-items:center;gap:10px;padding:9px 3px;border-top:1px solid var(--border,var(--line,#e8e2d9));font-size:.9rem}
-.vs-showcase .vs-ring{flex:none;height:17px;width:17px;border:2px solid var(--accent,#b85d3f);border-radius:50%}
-.vs-showcase .vs-ring.done{background:var(--accent,#b85d3f);position:relative}.vs-showcase .vs-ring.done:after{content:"✓";color:#fff;font-size:12px;position:absolute;left:2px;top:-3px}
-.vs-showcase .vs-mini-tag{margin-left:auto;color:var(--accent,#b85d3f);background:var(--accent-soft,#f7e5dd);font-size:.7rem;padding:3px 6px;border-radius:6px}
-.vs-showcase .vs-reader-art{display:grid;grid-template-columns:1.5fr 1fr;gap:18px}
-.vs-showcase .vs-paper,.vs-showcase .vs-annotation{border-radius:14px;background:var(--bg-card,var(--surface,#fff));border:1px solid var(--border,var(--line,#e8e2d9));padding:18px}
-.vs-showcase .vs-paper-title{font-size:.75rem;letter-spacing:.1em;color:var(--text-2,var(--muted,#6b6660));margin-bottom:22px}
-.vs-showcase .vs-line{height:9px;background:var(--border,var(--line,#e8e2d9));border-radius:8px;margin:12px 0;max-width:100%}
-.vs-showcase .vs-line.short{width:57%}.vs-showcase .vs-line.mid{width:82%}
-.vs-showcase .vs-highlight{height:15px;border-radius:3px;width:72%;background:color-mix(in srgb,var(--accent,#d97757) 32%,transparent)}
-.vs-showcase .vs-note-label{font-size:.72rem;letter-spacing:.09em;color:var(--accent,#b85d3f);font-weight:800}
-.vs-showcase .vs-note-body{font-size:.93rem;line-height:1.7;margin:18px 0}
-.vs-showcase .vs-note-foot{font-size:.75rem;color:var(--text-2,var(--muted,#6b6660))}
-html:lang(en) .vs-zh,html:lang(zh) .vs-en{display:none!important}
-@media(max-width:700px){.vs-showcase .vs-stage{grid-template-columns:1fr}.vs-showcase .vs-step{min-height:120px}.vs-showcase .vs-step:not(:last-child):after{right:calc(50% - 14px);top:auto;bottom:-15px;transform:rotate(90deg)}.vs-showcase .vs-glyph{margin-bottom:12px}.vs-showcase .vs-reader-art{grid-template-columns:1fr 1fr}.vs-showcase .vs-art{padding:14px}}
-@media(prefers-reduced-motion:reduce){.vs-showcase *, .vs-showcase *:before,.vs-showcase *:after{animation:none!important;transition:none!important}}
-.vs-showcase .vs-art img{display:block;max-width:100%;height:auto;margin:0 auto;border-radius:12px}.vs-showcase .vs-art .vs-mini-board{min-height:146px}.vs-showcase .vs-mini-task{line-height:1.5}.vs-showcase .vs-mini-task .vs-mono{font-family:ui-monospace,monospace;font-size:.77rem}
-</style>
+    <!-- Theme + language pre-paint: apply before first paint, no flash.
+         Storage keys carry forward from the previous glaze homepage. -->
+    <script>
+        (function () {
+            var t;
+            try { t = localStorage.getItem('glaze-theme'); } catch (e) {}
+            if (t !== 'dark' && t !== 'light') {
+                t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            document.documentElement.dataset.theme = t;
+            var l;
+            try { l = localStorage.getItem('glaze-lang-override-v2'); } catch (e) {}
+            if (l !== 'zh' && l !== 'en') {
+                l = (navigator.language || 'zh').toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en';
+            }
+            document.documentElement.lang = l === 'zh' ? 'zh-CN' : 'en';
+        })();
+    </script>
+
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='115' fill='%23D97757'/%3E%3Crect x='110' y='128' width='292' height='216' rx='24' fill='none' stroke='%23FFFFFF' stroke-width='26'/%3E%3Ccircle cx='188' cy='192' r='18' fill='%23FFFFFF'/%3E%3Cpath d='M110 290 L210 290 L250 240 L290 320 L330 290 L402 290' fill='none' stroke='%23FFFFFF' stroke-width='24' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M190 410 L256 344 L322 410' fill='none' stroke='%23FFFFFF' stroke-width='26' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+    <link rel="stylesheet" href="family.css">
+    <link rel="stylesheet" href="site.css">
+    <link rel="preload" href="fonts/newsreader-latin-var.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="fonts/inter-latin-var.woff2" as="font" type="font/woff2" crossorigin>
+    <script src="family.js" defer></script>
 </head>
 
 <body>
-
-    <!-- Nav -->
-    <nav class="nav-container">
-        <div class="nav-wrapper">
-            <div class="nav-brand">
-                <svg class="nav-logo" width="28" height="28" viewBox="0 0 512 512" fill="none">
-                    <rect width="512" height="512" rx="115" fill="#5856D6"/>
-                    <rect x="110" y="128" width="292" height="216" rx="24" fill="none" stroke="#FFFFFF" stroke-width="26"/>
-                    <circle cx="188" cy="192" r="18" fill="#FFFFFF"/>
-                    <path d="M110 290 L210 290 L250 240 L290 320 L330 290 L402 290" fill="none" stroke="#FFFFFF" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M190 410 L256 344 L322 410" fill="none" stroke="#FFFFFF" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                Glaze
-            </div>
-            <ul class="nav-menu">
-                <li><a href="#features" class="optional" data-en="Features" data-zh="功能">Features</a></li>
-                <li><a href="#design" class="optional" data-en="Design" data-zh="设计">Design</a></li>
-                <li><a href="#start" data-en="Quick start" data-zh="快速上手">Quick start</a></li>
-                <li><a href="https://github.com/turlamai/glaze" class="optional">GitHub</a></li>
-                <li class="lang-dropdown-wrapper">
-                    <button class="lang-btn" onclick="void 0">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <line x1="2" y1="12" x2="22" y2="12"></line>
-                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-                        </svg>
-                        <span id="current-lang-label" data-en="English" data-zh="简体中文">English</span>
+    <header class="kit-nav">
+        <div class="kit-container kit-nav-inner">
+            <a class="kit-brand" href="/">
+                <svg class="kit-brand-mark" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="115" fill="#D97757"/><rect x="110" y="128" width="292" height="216" rx="24" fill="none" stroke="#FFFFFF" stroke-width="26"/><circle cx="188" cy="192" r="18" fill="#FFFFFF"/><path d="M110 290 L210 290 L250 240 L290 320 L330 290 L402 290" fill="none" stroke="#FFFFFF" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/><path d="M190 410 L256 344 L322 410" fill="none" stroke="#FFFFFF" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span>Glaze</span>
+            </a>
+            <nav class="kit-nav-links">
+                <a href="#features" data-i18n="nav.features">功能</a>
+                <a href="#design" data-i18n="nav.design">设计</a>
+                <a href="#start" data-i18n="nav.start">快速上手</a>
+                <a href="https://github.com/turlamai/glaze" data-i18n="nav.github">GitHub</a>
+            </nav>
+            <div class="kit-nav-actions">
+                <div class="kit-lang">
+                    <button class="kit-lang-btn" type="button" aria-haspopup="true" aria-expanded="false">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.2"/><path d="M1.8 8h12.4M8 1.8c-4.6 4-4.6 8.4 0 12.4 4.6-4 4.6-8.4 0-12.4z"/></svg>
+                        <span class="kit-lang-current">简体中文</span>
                     </button>
-                    <ul class="lang-menu">
-                        <li class="lang-choice"><button type="button" onclick="setLanguage('en')">English</button></li>
-                        <li class="lang-choice"><button type="button" onclick="setLanguage('zh')">简体中文</button></li>
+                    <ul class="kit-lang-menu">
+                        <li><button type="button" data-kit-lang="zh">简体中文</button></li>
+                        <li><button type="button" data-kit-lang="en">English</button></li>
                     </ul>
-                </li>
-            </ul>
-        </div>
-    </nav>
-
-    <!-- Hero -->
-    <section class="hero" id="overview">
-        <div class="container">
-            <span class="eyebrow animate-on-scroll" data-en="Racket framework · MIT · Cross-platform" data-zh="Racket 框架 · MIT · 跨平台">Racket framework · MIT · Cross-platform</span>
-            <h1 class="animate-on-scroll">
-                <span data-en="Racket for logic." data-zh="Racket 写逻辑，">Racket for logic.</span>
-                <span class="accent" data-en="Web for UI. One native window." data-zh="Web 画界面，一个原生窗口。">Web for UI. One native window.</span>
-            </h1>
-            <p class="lead animate-on-scroll"
-                data-en="Glaze is a desktop application framework for Racket: your app logic runs in Racket, your UI is HTML/CSS/JS, and everything ships inside a native desktop window backed by the OS WebView — WebView2 on Windows, WKWebView on macOS, WebKitGTK on Linux. The page calls Racket with plain fetch(&quot;/api/...&quot;)."
-                data-zh="Glaze 是面向 Racket 的桌面应用框架：应用逻辑跑在 Racket 里，界面用 HTML/CSS/JS 写，最终装进一个由系统 WebView 驱动的原生桌面窗口——Windows 用 WebView2，macOS 用 WKWebView，Linux 用 WebKitGTK。页面里一句 fetch(&quot;/api/...&quot;) 就能调用 Racket。">
-                Glaze is a desktop application framework for Racket: your app logic runs in Racket, your UI is HTML/CSS/JS, and everything ships inside a native desktop window backed by the OS WebView.
-            </p>
-
-            <div class="hero-buttons animate-on-scroll">
-                <a href="#start" class="btn btn-primary" data-en="Get started" data-zh="快速上手">Get started</a>
-                <a href="https://github.com/turlamai/glaze" class="btn btn-secondary" data-en="View on GitHub" data-zh="在 GitHub 查看">View on GitHub</a>
+                </div>
+                <button class="kit-icon-btn kit-theme-toggle" type="button" aria-pressed="false" aria-label="Theme">
+                    <svg class="kit-icon-sun" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="10" cy="10" r="4"/><path d="M10 1.5v2M10 16.5v2M1.5 10h2M16.5 10h2M4 4l1.4 1.4M14.6 14.6L16 16M16 4l-1.4 1.4M5.4 14.6L4 16"/></svg>
+                    <svg class="kit-icon-moon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M16.5 12.2A7 7 0 0 1 7.8 3.5a7 7 0 1 0 8.7 8.7z"/></svg>
+                </button>
             </div>
+        </div>
+    </header>
 
-            <div class="hero-visual animate-on-scroll">
-                <div class="code-window" style="padding:24px;text-align:left;">
-                    <p data-en="A verifiable first app" data-zh="可验证的第一个应用">A verifiable first app</p>
+    <main>
+        <!-- Hero -->
+        <section class="kit-hero" id="overview">
+            <div class="kit-container">
+                <span class="kit-eyebrow" data-i18n="hero.eyebrow">Racket 框架 · MIT · 跨平台</span>
+                <h1><span data-i18n="hero.h1">Racket 写逻辑，</span> <span class="kit-accent-word" data-i18n="hero.h1-accent">Web 画界面，一个原生窗口。</span></h1>
+                <p class="kit-lead" data-i18n="hero.lead">Glaze 是面向 Racket 的桌面应用框架：应用逻辑跑在 Racket 里，界面用 HTML/CSS/JS 写，最终装进一个由系统 WebView 驱动的原生桌面窗口——Windows 用 WebView2，macOS 用 WKWebView，Linux 用 WebKitGTK。页面里一句 fetch("/api/...") 就能调用 Racket。</p>
+                <div class="kit-btn-row">
+                    <div class="kit-install" role="group" aria-label="Install command">
+                        <span class="kit-install-prompt" aria-hidden="true">$</span>
+                        <code>raco pkg install --auto glaze</code>
+                    </div>
+                </div>
+                <div class="kit-btn-row">
+                    <a class="kit-btn kit-btn--primary" href="#start" data-i18n="hero.cta-start">快速上手</a>
+                    <a class="kit-btn kit-btn--secondary" href="https://github.com/turlamai/glaze" data-i18n="hero.cta-github">在 GitHub 查看</a>
+                </div>
+                <p class="kit-hero-meta"><span class="kit-badge" data-i18n="hero.badge">MIT 许可 · Racket 9.0+ · WebView2 / WKWebView / WebKitGTK</span></p>
+
+                <div class="mini-window">
+                    <p class="mini-title" data-i18n="hero.mini-title">可验证的第一个应用</p>
                     <pre><code>raco pkg install --auto glaze
 raco glaze init myapp
 cd myapp
 racket main.rkt</code></pre>
-                    <p data-en="Expected result: a native desktop window opens. If it does not, follow the runtime diagnostic and repair guidance below." data-zh="预期结果：原生桌面窗口启动。若未启动，请根据下方运行时诊断和修复说明处理。">Expected result: a native desktop window opens.</p>
+                    <p class="mini-note" data-i18n="hero.mini-note">预期结果：原生桌面窗口启动。若未启动，请根据下方运行时诊断和修复说明处理。</p>
                 </div>
             </div>
-        </div>
-    </section>
-<!-- Visual Showcase: conceptual diagram, not an application screenshot --><section class="vs-showcase" id="visual-showcase" aria-label="Product workflow illustration"><div class="vs-wrap"><div class="vs-intro"><span class="vs-label">PRODUCT IN CONTEXT · 产品如何工作</span><h2><span class="vs-zh" lang="zh-CN">Racket 在后台，Web UI 在原生窗口中。</span><span class="vs-en" lang="en">Racket behind a web UI in a native window.</span></h2><p class="vs-lead"><span class="vs-zh" lang="zh-CN">用仓库维护的架构图直接解释各层职责，避免将示例页面误称为最终用户产品。</span><span class="vs-en" lang="en">The repository's maintained architecture diagram explains responsibilities without mistaking an example app for a finished product.</span></p></div><div class="vs-frame"><div class="vs-art" style="text-align:center"><img src="glaze-architecture.svg" alt="Glaze architecture: application, public modules, runtime kernel, native adapters and Keel contracts" width="800" height="520" loading="lazy"></div><div class="vs-stage"><div class="vs-step"><span class="vs-glyph" aria-hidden="true">{}</span><b><span class="vs-zh" lang="zh-CN">编写后端</span><span class="vs-en" lang="en">Write backend</span></b><small><span class="vs-zh" lang="zh-CN">在 Racket 实现应用逻辑</span><span class="vs-en" lang="en">Implement behavior in Racket</span></small></div><div class="vs-step"><span class="vs-glyph" aria-hidden="true">▣</span><b><span class="vs-zh" lang="zh-CN">构建界面</span><span class="vs-en" lang="en">Build UI</span></b><small><span class="vs-zh" lang="zh-CN">使用 HTML / CSS / JS 呈现</span><span class="vs-en" lang="en">Render through HTML / CSS / JS</span></small></div><div class="vs-step"><span class="vs-glyph" aria-hidden="true">◈</span><b><span class="vs-zh" lang="zh-CN">桌面交付</span><span class="vs-en" lang="en">Ship desktop</span></b><small><span class="vs-zh" lang="zh-CN">经平台 WebView 和打包验证</span><span class="vs-en" lang="en">Use native WebView and packaging checks</span></small></div></div><p class="vs-caption"><span class="vs-zh" lang="zh-CN">架构或工作流程示意，非当前 GUI 截图；实际可用能力以项目文档和验收记录为准。</span><span class="vs-en" lang="en">Architecture/workflow illustration, not a current GUI screenshot. Refer to project docs and acceptance evidence for available capabilities.</span></p></div></div></section><!-- End Visual Showcase -->
+        </section>
 
-
-    <!-- Features -->
-    <section id="features">
-        <div class="container">
-            <span class="eyebrow animate-on-scroll" data-en="Why Glaze" data-zh="为什么是 Glaze">Why Glaze</span>
-            <h2 class="section-title animate-on-scroll">
-                <span data-en="racket/gui works," data-zh="racket/gui 能用，">racket/gui works,</span>
-                <span class="accent" data-en="but it's hard to style." data-zh="但很难做出产品级 UI。">but it's hard to style.</span>
-            </h2>
-
-            <div class="bento-grid">
-                <div class="bento-card animate-on-scroll">
-                    <div class="card-icon">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-                    </div>
-                    <h3 data-en="The full power of Racket" data-zh="Racket 的全部威力">The full power of Racket</h3>
-                    <p data-en="Macros, contracts, pattern matching — your domain logic lives in a real programming language, not in a build script."
-                       data-zh="宏、合约、模式匹配——领域逻辑住在一门真正的编程语言里，而不是构建脚本里。">Macros, contracts, pattern matching — your domain logic lives in a real programming language.</p>
+        <!-- Visual Showcase: conceptual diagram, not an application screenshot -->
+        <section class="vs-showcase" id="visual-showcase" aria-label="Product workflow illustration">
+            <div class="kit-container">
+                <div class="vs-intro">
+                    <span class="vs-label">PRODUCT IN CONTEXT · 产品如何工作</span>
+                    <h2 class="kit-h2"><span data-i18n="vs.title">Racket 在后台，Web UI 在原生窗口中。</span></h2>
+                    <p class="vs-lead" data-i18n="vs.lead">用仓库维护的架构图直接解释各层职责，避免将示例页面误称为最终用户产品。</p>
                 </div>
-                <div class="bento-card animate-on-scroll">
-                    <div class="card-icon">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                <div class="vs-frame">
+                    <div class="vs-art" style="text-align:center"><img src="glaze-architecture.svg" alt="Glaze architecture: application, public modules, runtime kernel, native adapters and Keel contracts" width="800" height="520" loading="lazy"></div>
+                    <div class="vs-stage">
+                        <div class="vs-step"><span class="vs-glyph" aria-hidden="true">{}</span><b data-i18n="vs.s1">编写后端</b><small data-i18n="vs.s1-small">在 Racket 实现应用逻辑</small></div>
+                        <div class="vs-step"><span class="vs-glyph" aria-hidden="true">▣</span><b data-i18n="vs.s2">构建界面</b><small data-i18n="vs.s2-small">使用 HTML / CSS / JS 呈现</small></div>
+                        <div class="vs-step"><span class="vs-glyph" aria-hidden="true">◈</span><b data-i18n="vs.s3">桌面交付</b><small data-i18n="vs.s3-small">经平台 WebView 和打包验证</small></div>
                     </div>
-                    <h3 data-en="Any web frontend" data-zh="任意 Web 前端">Any web frontend</h3>
-                    <p data-en="Tailwind, Svelte, React, or plain HTML/CSS/JS — the UI is just what the browser is already good at."
-                       data-zh="Tailwind、Svelte、React 或纯 HTML/CSS/JS——界面就用浏览器最擅长的那套。">Tailwind, Svelte, React, or plain HTML/CSS/JS — the UI is just what the browser is already good at.</p>
-                </div>
-                <div class="bento-card animate-on-scroll">
-                    <div class="card-icon">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 8l10 6 10-6"/></svg>
-                    </div>
-                    <h3 data-en="JSON API bridge" data-zh="JSON API 桥">JSON API bridge</h3>
-                    <p data-en="The page calls Racket with plain fetch(&quot;/api/...&quot;) — no IPC ceremony, no serialization layer to learn."
-                       data-zh="页面用一句 fetch(&quot;/api/...&quot;) 调 Racket——没有 IPC 仪式感，没有额外序列化层要学。">The page calls Racket with plain fetch("/api/...") — no IPC ceremony.</p>
-                </div>
-                <div class="bento-card animate-on-scroll">
-                    <div class="card-icon">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
-                    </div>
-                    <h3 data-en="GUI-first, fail-fast" data-zh="GUI 优先，快速失败">GUI-first, fail-fast</h3>
-                    <p data-en="If the native WebView runtime is missing or broken, startup stops with platform-specific install/repair instructions. It never silently degrades into a browser tab."
-                       data-zh="若系统 WebView 运行时缺失或损坏，启动即停，并给出各平台的安装/修复指引。绝不悄悄退化成一个浏览器标签页。">If the native WebView runtime is missing, startup fails with actionable guidance — never a silent browser-tab fallback.</p>
-                </div>
-                <div class="bento-card animate-on-scroll">
-                    <div class="card-icon">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                    </div>
-                    <h3 data-en="Agent-friendly verification" data-zh="代理友好的可验证性">Agent-friendly verification</h3>
-                    <p data-en="webview-title, webview-url and webview-capture! (screenshot) are built in — UI automation and CI can see what the window shows."
-                       data-zh="webview-title、webview-url、webview-capture!（截图）均为内建能力——UI 自动化与 CI 能「看见」窗口里是什么。">webview-title, webview-url and webview-capture! are built in — CI can see what the window shows.</p>
-                </div>
-                <div class="bento-card animate-on-scroll">
-                    <div class="card-icon">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                    </div>
-                    <h3 data-en="Real-window CI e2e" data-zh="真实窗口 CI 端到端">Real-window CI e2e</h3>
-                    <p data-en="All three WebView backends pass the same real-window e2e in CI — open, load, capture, navigate, close, on-close."
-                       data-zh="三个 WebView 后端跑同一套真实窗口端到端 CI——打开、加载、截图、导航、关闭、on-close。">All three WebView backends pass the same real-window e2e in CI.</p>
+                    <p class="vs-caption" data-i18n="vs.caption">架构或工作流程示意，非当前 GUI 截图；实际可用能力以项目文档和验收记录为准。</p>
                 </div>
             </div>
-        </div>
-    </section>
+        </section>
 
-    <!-- Product design -->
-    <section id="design">
-        <div class="container">
-            <span class="eyebrow animate-on-scroll" data-en="Product design" data-zh="产品设计">Product design</span>
-            <h2 class="section-title animate-on-scroll" data-en="Racket logic, a web frontend, one desktop window" data-zh="Racket 逻辑、Web 界面、一个桌面窗口">Racket logic, a web frontend, one desktop window</h2>
-            <p class="section-lead animate-on-scroll" data-en="Glaze provides the runtime and explicit capability boundaries; applications own their features, permissions, data and release policy." data-zh="Glaze 提供运行时与明确的权限边界；应用自身负责功能、权限、数据与发行策略。">Glaze provides the runtime and explicit capability boundaries.</p>
-            <div class="compare-table-wrap animate-on-scroll">
-                <table class="compare">
-                    <tbody>
-                        <tr><th data-en="Application logic" data-zh="应用逻辑">Application logic</th><td>Racket CS</td></tr>
-                        <tr><th data-en="User interface" data-zh="界面">User interface</th><td>HTML / CSS / JavaScript</td></tr>
-                        <tr><th data-en="Desktop window" data-zh="桌面窗口">Desktop window</th><td>WebView2 / WKWebView / WebKitGTK</td></tr>
-                        <tr><th data-en="Backend transport" data-zh="后端通信">Backend transport</th><td data-en="Native GLZ1 when selected; HTTP adapter by default in 0.x" data-zh="可显式选择原生 GLZ1；0.x 默认使用 HTTP 适配器">Native GLZ1 when selected; HTTP adapter by default in 0.x</td></tr>
-                        <tr><th data-en="Missing WebView" data-zh="缺失 WebView 时">Missing WebView</th><td data-en="Diagnostic and repair guidance, not an external browser fallback" data-zh="输出诊断与修复提示，不回退到外部浏览器">Diagnostic and repair guidance, not an external browser fallback</td></tr>
-                    </tbody>
-                </table>
+        <!-- Features -->
+        <section class="kit-section" id="features">
+            <div class="kit-container">
+                <span class="kit-kicker" data-i18n="features.kicker">为什么是 Glaze</span>
+                <h2 class="kit-h2"><span data-i18n="features.title">racket/gui 能用，</span> <span class="kit-accent-word" data-i18n="features.title-accent">但很难做出产品级 UI。</span></h2>
+                <div class="kit-grid kit-grid--3" style="margin-top: 44px;">
+                    <div class="kit-card">
+                        <span class="kit-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></span>
+                        <h3 data-i18n="features.f1.title">Racket 的全部威力</h3>
+                        <p data-i18n="features.f1.body">宏、合约、模式匹配——领域逻辑住在一门真正的编程语言里，而不是构建脚本里。</p>
+                    </div>
+                    <div class="kit-card">
+                        <span class="kit-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span>
+                        <h3 data-i18n="features.f2.title">任意 Web 前端</h3>
+                        <p data-i18n="features.f2.body">Tailwind、Svelte、React 或纯 HTML/CSS/JS——界面就用浏览器最擅长的那套。</p>
+                    </div>
+                    <div class="kit-card">
+                        <span class="kit-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 8l10 6 10-6"/></svg></span>
+                        <h3 data-i18n="features.f3.title">JSON API 桥</h3>
+                        <p data-i18n="features.f3.body">页面用一句 fetch("/api/...") 调 Racket——没有 IPC 仪式感，没有额外序列化层要学。</p>
+                    </div>
+                    <div class="kit-card">
+                        <span class="kit-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg></span>
+                        <h3 data-i18n="features.f4.title">GUI 优先，快速失败</h3>
+                        <p data-i18n="features.f4.body">若系统 WebView 运行时缺失或损坏，启动即停，并给出各平台的安装/修复指引。绝不悄悄退化成一个浏览器标签页。</p>
+                    </div>
+                    <div class="kit-card">
+                        <span class="kit-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+                        <h3 data-i18n="features.f5.title">代理友好的可验证性</h3>
+                        <p data-i18n="features.f5.body">webview-title、webview-url、webview-capture!（截图）均为内建能力——UI 自动化与 CI 能「看见」窗口里是什么。</p>
+                    </div>
+                    <div class="kit-card">
+                        <span class="kit-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span>
+                        <h3 data-i18n="features.f6.title">真实窗口 CI 端到端</h3>
+                        <p data-i18n="features.f6.body">三个 WebView 后端跑同一套真实窗口端到端 CI——打开、加载、截图、导航、关闭、on-close。</p>
+                    </div>
+                </div>
             </div>
-        </div>
-    </section>
+        </section>
 
-    <!-- Quick start -->
-    <section id="start">
-        <div class="container">
-            <span class="eyebrow animate-on-scroll" data-en="Quick start" data-zh="快速上手">Quick start</span>
-            <h2 class="section-title animate-on-scroll" data-en="Three commands to a window." data-zh="三条命令，一个窗口。">Three commands to a window.</h2>
+        <!-- Product design -->
+        <section class="kit-section kit-section--alt" id="design">
+            <div class="kit-container">
+                <span class="kit-kicker" data-i18n="design.kicker">产品设计</span>
+                <h2 class="kit-h2" data-i18n="design.title">Racket 逻辑、Web 界面、一个桌面窗口</h2>
+                <p class="kit-lead" data-i18n="design.lead">Glaze 提供运行时与明确的权限边界；应用自身负责功能、权限、数据与发行策略。</p>
+                <div class="compare-table-wrap">
+                    <table class="compare">
+                        <tbody>
+                            <tr><th data-i18n="design.r1">应用逻辑</th><td>Racket CS</td></tr>
+                            <tr><th data-i18n="design.r2">界面</th><td>HTML / CSS / JavaScript</td></tr>
+                            <tr><th data-i18n="design.r3">桌面窗口</th><td>WebView2 / WKWebView / WebKitGTK</td></tr>
+                            <tr><th data-i18n="design.r4">后端通信</th><td data-i18n="design.v4">可显式选择原生 GLZ1；0.x 默认使用 HTTP 适配器</td></tr>
+                            <tr><th data-i18n="design.r5">缺失 WebView 时</th><td data-i18n="design.v5">输出诊断与修复提示，不回退到外部浏览器</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
 
-            <div class="hero-visual animate-on-scroll" style="margin-top: 40px;">
-                <div class="code-window">
+        <!-- Quick start -->
+        <section class="kit-section" id="start">
+            <div class="kit-container">
+                <span class="kit-kicker" data-i18n="start.kicker">快速上手</span>
+                <h2 class="kit-h2" data-i18n="start.title">三条命令，一个窗口。</h2>
+
+                <div class="code-window" style="margin-top: 44px;">
                     <div class="window-header">
                         <div class="window-controls">
                             <div class="traffic-light close"></div>
@@ -254,124 +211,165 @@ racket main.rkt</code></pre>
 <span class="prompt">$</span> <span class="cmd">racket main.rkt</span>
 <span class="ok">✓</span> native desktop window opened</div>
                 </div>
-            </div>
 
-            <p class="animate-on-scroll" style="margin-top: 22px; text-align: center;">
-                <a href="https://github.com/turlamai/glaze/blob/main/docs/getting-started.md" data-en="Complete first-app tutorial: typed route, schema, verify, build →" data-zh="完整入门：类型化路由、schema、窗口验证与构建 →">Complete first-app tutorial: typed route, schema, verify, build →</a>
-            </p>
-            <div class="callout animate-on-scroll">
-                <strong data-en="Requirements." data-zh="环境要求。">Requirements.</strong>
-                <span data-en=" Racket 9.0+ (CS runtime) everywhere; Microsoft Edge WebView2 Runtime on Windows; WKWebView is built into macOS; GTK 3 + WebKitGTK on Linux. When startup cannot initialize the native backend, Glaze preserves the underlying error and adds actionable repair guidance."
-                      data-zh=" 所有平台需要 Racket 9.0+（CS 运行时）；Windows 需要 Microsoft Edge WebView2 运行时；macOS 的 WKWebView 系统内建；Linux 需要 GTK 3 + WebKitGTK。启动失败时，Glaze 会保留底层错误并附上可执行的修复指引。"> Racket 9.0+ (CS) everywhere; WebView2 on Windows, WKWebView on macOS, WebKitGTK on Linux.</span>
+                <p style="margin-top: 22px; text-align: center;">
+                    <a href="https://github.com/turlamai/glaze/blob/main/docs/getting-started.md" data-i18n="start.tutorial">完整入门：类型化路由、schema、窗口验证与构建 →</a>
+                </p>
+                <div class="callout">
+                    <strong data-i18n="start.req-label">环境要求。</strong>
+                    <span data-i18n="start.req-body"> 所有平台需要 Racket 9.0+（CS 运行时）；Windows 需要 Microsoft Edge WebView2 运行时；macOS 的 WKWebView 系统内建；Linux 需要 GTK 3 + WebKitGTK。启动失败时，Glaze 会保留底层错误并附上可执行的修复指引。</span>
+                </div>
             </div>
-        </div>
-    </section>
+        </section>
 
-    <!-- Footer -->
-    <section id="adoption" class="product-start"><h2 class="reader-en " lang="en">Build one verifiable result.</h2><h2 class="reader-zh " lang="zh">先完成一个可验证的结果。</h2><p class="reader-en " lang="en">Choose Glaze for a Racket backend and a shared HTML/CSS/JS interface inside native system WebViews. A real desktop window is mandatory; there is no external-browser fallback. Product data/permissions and service policy remain application-owned.</p><p class="reader-zh " lang="zh">需要 Racket 后端与共享 HTML/CSS/JS 界面，并运行于系统原生 WebView 时选择 Glaze。必须使用真实桌面窗口，不提供外部浏览器回退；产品数据、权限和服务政策归应用。</p><p class="reader-en " lang="en">Racket CS 9.0+. Windows needs WebView2 Runtime, macOS needs an interactive WKWebView session, and Linux needs GTK 3/WebKitGTK plus a graphical session. Native GLZ1 exists on all desktops; the 0.x run-app default remains the HTTP adapter in a native WebView.</p><p class="reader-zh " lang="zh">需要 Racket CS 9.0+。Windows 需要 WebView2 Runtime，macOS 需要交互式 WKWebView 会话，Linux 需要 GTK 3/WebKitGTK 和图形会话。桌面各端已有原生 GLZ1；0.x 的 run-app 默认仍是在原生 WebView 中使用 HTTP 适配器。</p><p class="reader-en " lang="en">Follow the typed-route tutorial, review schema changes and verify an observable action in your own packaged window. The generated title/URL/screenshot probe is a starting point, not proof of your product flow. Check focus, IME, scale, accessibility, dialogs and cancellation on every supported WebView.</p><p class="reader-zh " lang="zh">按类型化路由教程操作，审阅 schema 变更，并在自己的打包窗口验证可观察操作。生成的标题、URL 和截图探测仅是起点，不能证明产品流程。每个支持的 WebView 都需检查焦点、输入法、缩放、无障碍、对话框和取消。</p><div class="start-links"><a class="reader-en" lang="en" href="https://github.com/turlamai/glaze/blob/main/docs/USING.md">Getting started, compatibility &amp; support</a><a class="reader-zh" lang="zh" href="https://github.com/turlamai/glaze/blob/main/docs/USING.zh-CN.md">入门、兼容与支持</a></div></section>
-<footer>
-        <div class="footer-content">
-            <div class="footer-brand">
-                <svg width="22" height="22" viewBox="0 0 512 512" fill="none">
-                    <rect width="512" height="512" rx="115" fill="#5856D6"/>
-                    <rect x="110" y="128" width="292" height="216" rx="24" fill="none" stroke="#FFFFFF" stroke-width="26"/>
-                    <circle cx="188" cy="192" r="18" fill="#FFFFFF"/>
-                    <path d="M110 290 L210 290 L250 240 L290 320 L330 290 L402 290" fill="none" stroke="#FFFFFF" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M190 410 L256 344 L322 410" fill="none" stroke="#FFFFFF" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                Glaze
+        <!-- Adoption -->
+        <section class="kit-section kit-section--alt" id="adoption">
+            <div class="kit-container">
+                <span class="kit-kicker" data-i18n="adoption.kicker">选型判断</span>
+                <h2 class="kit-h2" data-i18n="adoption.title">先完成一个可验证的结果。</h2>
+                <div class="kit-prose adoption-prose">
+                    <p data-i18n="adoption.p1">需要 Racket 后端与共享 HTML/CSS/JS 界面，并运行于系统原生 WebView 时选择 Glaze。必须使用真实桌面窗口，不提供外部浏览器回退；产品数据、权限和服务政策归应用。</p>
+                    <p data-i18n="adoption.p2">需要 Racket CS 9.0+。Windows 需要 WebView2 Runtime，macOS 需要交互式 WKWebView 会话，Linux 需要 GTK 3/WebKitGTK 和图形会话。桌面各端已有原生 GLZ1；0.x 的 run-app 默认仍是在原生 WebView 中使用 HTTP 适配器。</p>
+                    <p data-i18n="adoption.p3">按类型化路由教程操作，审阅 schema 变更，并在自己的打包窗口验证可观察操作。生成的标题、URL 和截图探测仅是起点，不能证明产品流程。每个支持的 WebView 都需检查焦点、输入法、缩放、无障碍、对话框和取消。</p>
+                    <p class="start-links"><a href="https://github.com/turlamai/glaze/blob/main/docs/USING.md" data-zh-href="https://github.com/turlamai/glaze/blob/main/docs/USING.zh-CN.md" data-en-href="https://github.com/turlamai/glaze/blob/main/docs/USING.md" data-i18n="adoption.link">入门、兼容与支持</a></p>
+                </div>
             </div>
-            <div class="footer-links">
-                <a href="https://github.com/turlamai/glaze">GitHub</a>
-                <a href="https://github.com/turlamai/glaze/blob/main/README.md#quick-start">Docs</a>
-                <a href="https://github.com/turlamai/glaze/blob/main/LICENSE">MIT License</a>
+        </section>
+    </main>
+
+    <footer class="kit-footer">
+        <div class="kit-container">
+            <div class="kit-footer-grid">
+                <div>
+                    <a class="kit-brand" href="/">
+                        <svg class="kit-brand-mark" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="115" fill="#D97757"/><rect x="110" y="128" width="292" height="216" rx="24" fill="none" stroke="#FFFFFF" stroke-width="26"/><circle cx="188" cy="192" r="18" fill="#FFFFFF"/><path d="M110 290 L210 290 L250 240 L290 320 L330 290 L402 290" fill="none" stroke="#FFFFFF" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/><path d="M190 410 L256 344 L322 410" fill="none" stroke="#FFFFFF" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <span>Glaze</span>
+                    </a>
+                    <p class="kit-footer-tagline" data-i18n="footer.tagline">Racket 写逻辑，Web 画界面，一个原生窗口。</p>
+                </div>
+                <div>
+                    <h4 data-i18n="footer.product">产品</h4>
+                    <ul>
+                        <li><a href="#features" data-i18n="nav.features">功能</a></li>
+                        <li><a href="#design" data-i18n="nav.design">设计</a></li>
+                        <li><a href="#start" data-i18n="nav.start">快速上手</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 data-i18n="footer.family">家族</h4>
+                    <ul>
+                        <li><a href="https://jrtx.site/" data-i18n="footer.portal">全部产品</a></li>
+                        <li><a href="https://rivet.jrtx.site/">Rivet</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 data-i18n="footer.legal">条款</h4>
+                    <ul>
+                        <li><a href="https://github.com/turlamai/glaze" data-i18n="nav.github">GitHub</a></li>
+                        <li><a href="https://github.com/turlamai/glaze/blob/main/README.md#quick-start" data-i18n="footer.docs">文档</a></li>
+                        <li><a href="https://github.com/turlamai/glaze/blob/main/LICENSE" data-i18n="footer.license">MIT License</a></li>
+                    </ul>
+                </div>
             </div>
-            <div class="footer-note">© 2026 TurLamAI</div>
+            <div class="kit-footer-bottom">
+                <span data-i18n="footer.copyright">© 2026 TuringLambda AI · MIT · 本地优先，隐私默认。</span>
+                <span class="kit-mono">site-kit v1.0.2</span>
+            </div>
         </div>
     </footer>
 
-    <script>
-        // Unified language policy for product sites:
-        // - explicit user choice persists and always wins;
-        // - otherwise follow the browser/system locale on every visit;
-        // - zh* => Simplified Chinese, other known locales => English;
-        // - if no locale is available at all, fall back to Chinese.
-        //
-        // `site-lang` is deliberately treated as legacy because older versions
-        // could not distinguish a user click from an automatically applied value.
-        var LANGUAGE_OVERRIDE_KEY = 'glaze-lang-override-v2';
-        var LEGACY_LANGUAGE_KEY = 'site-lang';
-        var pageMetadata = {
-            en: {
-                title: 'Glaze — Racket backend, web UI, native desktop',
-                description: 'Build desktop apps with a Racket backend and a web frontend — write your app logic in Racket, build your UI with HTML/CSS/JS, and ship a desktop application.'
-            },
-            zh: {
-                title: 'Glaze — Racket 后端、Web UI、原生桌面应用',
-                description: '用 Racket 编写应用逻辑，用 HTML/CSS/JS 构建界面，并通过系统 WebView 交付原生桌面应用。面向 Racket 的桌面应用框架。'
-            }
-        };
-
-        function readLanguageOverride() {
-            try {
-                var saved = localStorage.getItem(LANGUAGE_OVERRIDE_KEY);
-                return saved === 'zh' || saved === 'en' ? saved : null;
-            } catch (e) {
-                return null;
-            }
+    <!-- Dictionaries: zh canonical, en complete. -->
+    <script type="application/json" id="kit-i18n">
+    {
+        "__meta__": {
+            "zh": { "title": "Glaze — Racket 后端、Web UI、原生桌面应用", "description": "用 Racket 编写应用逻辑，用 HTML/CSS/JS 构建界面，并通过系统 WebView 交付原生桌面应用。面向 Racket 的桌面应用框架。" },
+            "en": { "title": "Glaze — Racket backend, web UI, native desktop", "description": "Build desktop apps with a Racket backend and a web frontend — write your app logic in Racket, build your UI with HTML/CSS/JS, and ship a desktop application." }
+        },
+        "zh": {
+            "nav.features": "功能", "nav.design": "设计", "nav.start": "快速上手", "nav.github": "GitHub",
+            "hero.eyebrow": "Racket 框架 · MIT · 跨平台",
+            "hero.h1": "Racket 写逻辑，", "hero.h1-accent": "Web 画界面，一个原生窗口。",
+            "hero.lead": "Glaze 是面向 Racket 的桌面应用框架：应用逻辑跑在 Racket 里，界面用 HTML/CSS/JS 写，最终装进一个由系统 WebView 驱动的原生桌面窗口——Windows 用 WebView2，macOS 用 WKWebView，Linux 用 WebKitGTK。页面里一句 fetch(\"/api/...\") 就能调用 Racket。",
+            "hero.cta-start": "快速上手", "hero.cta-github": "在 GitHub 查看",
+            "hero.badge": "MIT 许可 · Racket 9.0+ · WebView2 / WKWebView / WebKitGTK",
+            "hero.mini-title": "可验证的第一个应用",
+            "hero.mini-note": "预期结果：原生桌面窗口启动。若未启动，请根据下方运行时诊断和修复说明处理。",
+            "vs.title": "Racket 在后台，Web UI 在原生窗口中。",
+            "vs.lead": "用仓库维护的架构图直接解释各层职责，避免将示例页面误称为最终用户产品。",
+            "vs.s1": "编写后端", "vs.s1-small": "在 Racket 实现应用逻辑",
+            "vs.s2": "构建界面", "vs.s2-small": "使用 HTML / CSS / JS 呈现",
+            "vs.s3": "桌面交付", "vs.s3-small": "经平台 WebView 和打包验证",
+            "vs.caption": "架构或工作流程示意，非当前 GUI 截图；实际可用能力以项目文档和验收记录为准。",
+            "features.kicker": "为什么是 Glaze",
+            "features.title": "racket/gui 能用，", "features.title-accent": "但很难做出产品级 UI。",
+            "features.f1.title": "Racket 的全部威力", "features.f1.body": "宏、合约、模式匹配——领域逻辑住在一门真正的编程语言里，而不是构建脚本里。",
+            "features.f2.title": "任意 Web 前端", "features.f2.body": "Tailwind、Svelte、React 或纯 HTML/CSS/JS——界面就用浏览器最擅长的那套。",
+            "features.f3.title": "JSON API 桥", "features.f3.body": "页面用一句 fetch(\"/api/...\") 调 Racket——没有 IPC 仪式感，没有额外序列化层要学。",
+            "features.f4.title": "GUI 优先，快速失败", "features.f4.body": "若系统 WebView 运行时缺失或损坏，启动即停，并给出各平台的安装/修复指引。绝不悄悄退化成一个浏览器标签页。",
+            "features.f5.title": "代理友好的可验证性", "features.f5.body": "webview-title、webview-url、webview-capture!（截图）均为内建能力——UI 自动化与 CI 能「看见」窗口里是什么。",
+            "features.f6.title": "真实窗口 CI 端到端", "features.f6.body": "三个 WebView 后端跑同一套真实窗口端到端 CI——打开、加载、截图、导航、关闭、on-close。",
+            "design.kicker": "产品设计", "design.title": "Racket 逻辑、Web 界面、一个桌面窗口",
+            "design.lead": "Glaze 提供运行时与明确的权限边界；应用自身负责功能、权限、数据与发行策略。",
+            "design.r1": "应用逻辑", "design.r2": "界面", "design.r3": "桌面窗口", "design.r4": "后端通信", "design.r5": "缺失 WebView 时",
+            "design.v4": "可显式选择原生 GLZ1；0.x 默认使用 HTTP 适配器",
+            "design.v5": "输出诊断与修复提示，不回退到外部浏览器",
+            "start.kicker": "快速上手", "start.title": "三条命令，一个窗口。",
+            "start.tutorial": "完整入门：类型化路由、schema、窗口验证与构建 →",
+            "start.req-label": "环境要求。",
+            "start.req-body": " 所有平台需要 Racket 9.0+（CS 运行时）；Windows 需要 Microsoft Edge WebView2 运行时；macOS 的 WKWebView 系统内建；Linux 需要 GTK 3 + WebKitGTK。启动失败时，Glaze 会保留底层错误并附上可执行的修复指引。",
+            "adoption.kicker": "选型判断", "adoption.title": "先完成一个可验证的结果。",
+            "adoption.p1": "需要 Racket 后端与共享 HTML/CSS/JS 界面，并运行于系统原生 WebView 时选择 Glaze。必须使用真实桌面窗口，不提供外部浏览器回退；产品数据、权限和服务政策归应用。",
+            "adoption.p2": "需要 Racket CS 9.0+。Windows 需要 WebView2 Runtime，macOS 需要交互式 WKWebView 会话，Linux 需要 GTK 3/WebKitGTK 和图形会话。桌面各端已有原生 GLZ1；0.x 的 run-app 默认仍是在原生 WebView 中使用 HTTP 适配器。",
+            "adoption.p3": "按类型化路由教程操作，审阅 schema 变更，并在自己的打包窗口验证可观察操作。生成的标题、URL 和截图探测仅是起点，不能证明产品流程。每个支持的 WebView 都需检查焦点、输入法、缩放、无障碍、对话框和取消。",
+            "adoption.link": "入门、兼容与支持",
+            "footer.tagline": "Racket 写逻辑，Web 画界面，一个原生窗口。",
+            "footer.product": "产品", "footer.family": "家族", "footer.legal": "条款",
+            "footer.portal": "全部产品", "footer.docs": "文档", "footer.license": "MIT License",
+            "footer.copyright": "© 2026 TuringLambda AI · MIT · 本地优先，隐私默认。"
+        },
+        "en": {
+            "nav.features": "Features", "nav.design": "Design", "nav.start": "Quick start", "nav.github": "GitHub",
+            "hero.eyebrow": "Racket framework · MIT · Cross-platform",
+            "hero.h1": "Racket for logic.", "hero.h1-accent": "Web for UI. One native window.",
+            "hero.lead": "Glaze is a desktop application framework for Racket: your app logic runs in Racket, your UI is HTML/CSS/JS, and everything ships inside a native desktop window backed by the OS WebView — WebView2 on Windows, WKWebView on macOS, WebKitGTK on Linux. The page calls Racket with plain fetch(\"/api/...\").",
+            "hero.cta-start": "Get started", "hero.cta-github": "View on GitHub",
+            "hero.badge": "MIT license · Racket 9.0+ · WebView2 / WKWebView / WebKitGTK",
+            "hero.mini-title": "A verifiable first app",
+            "hero.mini-note": "Expected result: a native desktop window opens. If it does not, follow the runtime diagnostic and repair guidance below.",
+            "vs.title": "Racket behind a web UI in a native window.",
+            "vs.lead": "The repository's maintained architecture diagram explains responsibilities without mistaking an example app for a finished product.",
+            "vs.s1": "Write backend", "vs.s1-small": "Implement behavior in Racket",
+            "vs.s2": "Build UI", "vs.s2-small": "Render through HTML / CSS / JS",
+            "vs.s3": "Ship desktop", "vs.s3-small": "Use native WebView and packaging checks",
+            "vs.caption": "Architecture/workflow illustration, not a current GUI screenshot. Refer to project docs and acceptance evidence for available capabilities.",
+            "features.kicker": "Why Glaze",
+            "features.title": "racket/gui works,", "features.title-accent": "but it's hard to style.",
+            "features.f1.title": "The full power of Racket", "features.f1.body": "Macros, contracts, pattern matching — your domain logic lives in a real programming language, not in a build script.",
+            "features.f2.title": "Any web frontend", "features.f2.body": "Tailwind, Svelte, React, or plain HTML/CSS/JS — the UI is just what the browser is already good at.",
+            "features.f3.title": "JSON API bridge", "features.f3.body": "The page calls Racket with plain fetch(\"/api/...\") — no IPC ceremony, no serialization layer to learn.",
+            "features.f4.title": "GUI-first, fail-fast", "features.f4.body": "If the native WebView runtime is missing or broken, startup stops with platform-specific install/repair instructions. It never silently degrades into a browser tab.",
+            "features.f5.title": "Agent-friendly verification", "features.f5.body": "webview-title, webview-url and webview-capture! (screenshot) are built in — UI automation and CI can see what the window shows.",
+            "features.f6.title": "Real-window CI e2e", "features.f6.body": "All three WebView backends pass the same real-window e2e in CI — open, load, capture, navigate, close, on-close.",
+            "design.kicker": "Product design", "design.title": "Racket logic, a web frontend, one desktop window",
+            "design.lead": "Glaze provides the runtime and explicit capability boundaries; applications own their features, permissions, data and release policy.",
+            "design.r1": "Application logic", "design.r2": "User interface", "design.r3": "Desktop window", "design.r4": "Backend transport", "design.r5": "Missing WebView",
+            "design.v4": "Native GLZ1 when selected; HTTP adapter by default in 0.x",
+            "design.v5": "Diagnostic and repair guidance, not an external browser fallback",
+            "start.kicker": "Quick start", "start.title": "Three commands to a window.",
+            "start.tutorial": "Complete first-app tutorial: typed route, schema, verify, build →",
+            "start.req-label": "Requirements.",
+            "start.req-body": " Racket 9.0+ (CS runtime) everywhere; Microsoft Edge WebView2 Runtime on Windows; WKWebView is built into macOS; GTK 3 + WebKitGTK on Linux. When startup cannot initialize the native backend, Glaze preserves the underlying error and adds actionable repair guidance.",
+            "adoption.kicker": "Choosing", "adoption.title": "Build one verifiable result.",
+            "adoption.p1": "Choose Glaze for a Racket backend and a shared HTML/CSS/JS interface inside native system WebViews. A real desktop window is mandatory; there is no external-browser fallback. Product data/permissions and service policy remain application-owned.",
+            "adoption.p2": "Racket CS 9.0+. Windows needs WebView2 Runtime, macOS needs an interactive WKWebView session, and Linux needs GTK 3/WebKitGTK plus a graphical session. Native GLZ1 exists on all desktops; the 0.x run-app default remains the HTTP adapter in a native WebView.",
+            "adoption.p3": "Follow the typed-route tutorial, review schema changes and verify an observable action in your own packaged window. The generated title/URL/screenshot probe is a starting point, not proof of your product flow. Check focus, IME, scale, accessibility, dialogs and cancellation on every supported WebView.",
+            "adoption.link": "Getting started, compatibility & support",
+            "footer.tagline": "Racket for logic. Web for UI. One native window.",
+            "footer.product": "Product", "footer.family": "Family", "footer.legal": "Legal",
+            "footer.portal": "All products", "footer.docs": "Documentation", "footer.license": "MIT License",
+            "footer.copyright": "© 2026 TuringLambda AI · MIT · Local-first, private by default."
         }
-
-        function detectBrowserLanguage() {
-            var locale = (navigator.languages && navigator.languages[0]) || navigator.language || '';
-            if (!locale) return 'zh';
-            return String(locale).toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en';
-        }
-
-        function applyLanguage(lang, persist) {
-            if (persist) {
-                try { localStorage.setItem(LANGUAGE_OVERRIDE_KEY, lang); } catch (e) { /* private mode */ }
-            }
-
-            document.querySelectorAll('[data-en]').forEach(function (el) {
-                var text = el.getAttribute('data-' + lang);
-                if (text !== null) el.textContent = text;
-            });
-            document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
-            document.documentElement.setAttribute('data-language', lang);
-
-            var label = document.getElementById('current-lang-label');
-            if (label) label.textContent = lang === 'zh' ? '简体中文' : 'English';
-
-            var metadata = pageMetadata[lang];
-            if (metadata) {
-                document.title = metadata.title;
-                var description = document.querySelector('meta[name="description"]');
-                if (description) description.setAttribute('content', metadata.description);
-            }
-        }
-
-        function setLanguage(lang) {
-            if (lang !== 'zh' && lang !== 'en') return;
-            applyLanguage(lang, true);
-        }
-
-        try { localStorage.removeItem(LEGACY_LANGUAGE_KEY); } catch (e) { /* private mode */ }
-        applyLanguage(readLanguageOverride() || detectBrowserLanguage(), false);
-
-        window.addEventListener('languagechange', function () {
-            if (!readLanguageOverride()) applyLanguage(detectBrowserLanguage(), false);
-        });
-
-        // Scroll-in animation.
-        var observer = new IntersectionObserver(function (entries) {
-            entries.forEach(function (entry) {
-                if (entry.isIntersecting) {
-                    entry.target.classList.add('is-visible');
-                    observer.unobserve(entry.target);
-                }
-            });
-        }, { threshold: 0.12 });
-        document.querySelectorAll('.animate-on-scroll').forEach(function (el) { observer.observe(el); });
+    }
     </script>
 </body>
 
