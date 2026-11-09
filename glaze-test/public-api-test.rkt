@@ -204,6 +204,7 @@
                                             shell-process?
                                             shell-spawn!
                                             single-instance?
+                                            release-single-instance!
                                             sql-close!
                                             sql-database-path
                                             sql-database?
