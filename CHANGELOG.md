@@ -7,7 +7,81 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-11-06
+
+### Added
+
+- The tag release can sign and notarize its installers when the repository
+  provides the documented Apple/Windows signing secrets. A
+  `GLAZE_REQUIRE_SIGNED_INSTALLERS=1` repository variable makes the release
+  fail before building if an identity is missing; the default remains an
+  explicitly unsigned release.
+- Add `examples/taskboard/`, a maintained product-level example: one typed
+  route declaration for `tasks`/`tasksCreate`/`tasksToggle`/`tasksDelete`/
+  `tasksClearDone`, a lazily opened `glaze/store` in the application data
+  directory (overridable with `TASKBOARD_DATA_DIR`), SSE snapshot broadcasts,
+  a no-build-step HTML/CSS/JS interface, a committed `glaze-schema.json`,
+  `verify.rkt` for native-window acceptance, and three test layers (pure
+  domain, store persistence, live routes with authentication and 400 paths).
+  CI runs the example's tests, schema check, native verify and build on
+  Windows, macOS and Linux.
+- Add a repository security policy (`SECURITY.md`): private vulnerability
+  reporting, the supported-version window, the trusted-backend/untrusted-page
+  trust model, security-sensitive owner modules and out-of-scope components.
+  Both READMEs, `docs/USING.md`/`docs/USING.zh-CN.md` and `CONTRIBUTING.md`
+  now point suspected vulnerabilities at that private route instead of a
+  public issue.
+- Document how Glaze is tested and what it does not yet cover. Both READMEs
+  gain "Testing" and "Honest gaps" sections: framework suite, real-window e2e,
+  the CI package job, generated-project `verify`, and the bounded Linux/macOS/
+  WebView2, installer-toolchain, accessibility/IME and pre-1.0 API limits.
+- Add six application-facing owners to the documentation map:
+  `docs/ci.md` (+ `ci.zh-CN.md`) records the consumer CI gates, runner
+  requirements and evidence rules; `docs/diagnostics.md` maps startup, schema,
+  verification, packaging and update symptoms to causes; `docs/product-acceptance.md`
+  defines the scenario record and evidence levels for a packaged app;
+  `docs/production-signing.md` covers OS/update/Permit trust domains,
+  notarization, CI key handling and verification; `docs/release-and-updates.md`
+  owns release identity, channels, rollout, signed manifests, rollback and the
+  N→N+1 evidence per installation shape; and `docs/fuzzing.md` records the GLZ1
+  fuzz targets, invariant, seeded corpus and limits.
+- Add `docs/runtime-limits.md`: the current request-body, invoke-timeout,
+  redirect, outbound HTTP, update, shell, SQLite, logging, store and filesystem
+  defaults, with the keyword or configuration that changes each.
+- Support native Windows ARM64 builds. Glaze now ships
+  `glaze/native/win-arm64/WebView2Loader.dll` (Microsoft.Web.WebView2
+  1.0.4314.35, SHA-256 recorded beside it) and selects `win-x64` or
+  `win-arm64` from the Racket process architecture in both the runtime
+  backend and `build` staging. Previously a native arm64 Racket process
+  would try to load the x64 DLL and fail; the x64 build under emulation is
+  unchanged.
+
 ### Fixed
+
+- AppImage `AppRun` now resolves the payload through `$APPDIR` instead of
+  hard-coding `/usr/lib`. The previous wrapper executed the host's files (or
+  nothing) when the AppImage was mounted, so the packaged app could not launch
+  from its own bundle.
+- `make-replace-install-plan` now replaces a directory as well as a file, so a
+  macOS `.app` or a self-contained tree can be updated through the same atomic
+  staging/backup/rollback plan. A failure before the swap leaves the installed
+  target untouched, and a restart failure restores the previous tree.
+- `raco glaze measure startup` forwarded `--seconds` and `--artifact` through
+  `apply`, which raised "procedure does not accept keyword arguments" before
+  launching anything; the command now calls `measure-startup` with keyword
+  arguments directly.
+- `raco glaze measure` treats a macOS `.app` as one artifact: directory
+  entries are listed, `size` reports their recursive byte count, and
+  `startup` selects the bundle. Previously `size` silently ignored the app
+  and `startup` failed with "no packaged artifacts".
+- Rebuilding a macOS application into an existing `dist/` replaces the
+  previous `.app` instead of failing because the rename destination exists.
+- Verify update manifests and artifacts without the OpenSSL 3 CLI. `verify-bytes`
+  and `public-key-fingerprint` now parse the PEM or 44-byte DER Ed25519
+  SubjectPublicKeyInfo directly and verify with the pure Racket `ed25519`
+  package, so an installed application needs no developer toolchain to check
+  its own updates. Signing, key generation, and encrypted private keys still
+  use the OpenSSL 3 CLI.
 
 - Generate `api.d.ts` under the namespace the runtime actually creates:
   `declare namespace glaze.api { function ... }`. The generator emitted
@@ -96,6 +170,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the transport shutdown on the pump / main-loop thread, which cannot
   block on the shutdown owner's thread joins. The close path now removes
   the native wiring and defers the shutdown to its own thread.
+
+### Release notes
+
+- The 0.18.0 macOS dmg and Windows MSI/NSIS are **unsigned** unless the
+  release signing secrets are configured. Linux artifacts carry SHA-256
+  checksums. Do not describe this release as signed or notarized.
 
 ## [0.17.0] - 2026-10-23
 

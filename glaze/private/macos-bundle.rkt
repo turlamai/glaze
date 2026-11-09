@@ -19,7 +19,9 @@
 (provide assemble-macos-bundle
          post-process-macos-bundle
          make-macos-installer
-         create-branded-dmg!)
+         create-branded-dmg!
+         stage-dmg-root
+         dmg-volume-name)
 
 ;; Assemble a canonical macOS .app bundle from whatever `raco distribute`
 ;; produced. Current versions lay out <dist>/bin/<name> + <dist>/lib/; older
@@ -38,6 +40,11 @@
   (define exe-src (build-path dist-bin app-name))
   (unless (file-exists? exe-src)
     (error 'build-app "macOS bundle assembly failed: no executable at ~a" exe-src))
+  ;; Rebuilding into the same dist must replace the previous bundle: on
+  ;; macOS rename-file-or-directory refuses an existing destination, so a
+  ;; second `raco glaze build` used to fail after the app already existed.
+  (when (directory-exists? bundle)
+    (delete-directory/files bundle))
   (make-directory* macos-dir)
   (rename-file-or-directory exe-src (build-path macos-dir app-name))
   (file-or-directory-permissions
@@ -85,36 +92,51 @@
 
 ;; macOS: branded drag-to-install layout when a background is declared,
 ;; else prefer create-dmg, then plain hdiutil; else zip the .app.
-(define (make-macos-installer out-dir app-name [dmg-background #f])
+;; A volume name that is unique per build. Reusing the bare application name
+;; collides with a mounted image from an earlier build and makes hdiutil fail
+;; with "Resource busy" instead of replacing the output.
+(define (dmg-volume-name app-name version)
+  (string-append app-name " " version))
+
+(define (make-macos-installer out-dir app-name version [dmg-background #f])
   (define dist (path->complete-path out-dir))
   (define bundle (build-path dist (string-append app-name ".app")))
   (define dmg-path (build-path dist (string-append app-name ".dmg")))
+  (define volume-name (dmg-volume-name app-name version))
   (cond
     [(and dmg-background (find-executable-path "hdiutil" #f))
      (create-branded-dmg! (find-executable-path "hdiutil" #f)
                           dmg-background
                           bundle
                           dmg-path
-                          app-name)]
+                          app-name
+                          volume-name)]
     [(find-tool "create-dmg")
      (and (run (find-executable-path "create-dmg" #f)
                "--volname"
-               app-name
+               volume-name
                (path->string dmg-path)
                (path->string bundle))
           dmg-path)]
     [(find-tool "hdiutil")
-     (and (run (find-executable-path "hdiutil" #f)
-               "create"
-               "-volname"
-               app-name
-               "-srcfolder"
-               (path->string bundle)
-               "-ov"
-               "-format"
-               "UDZO"
-               (path->string dmg-path))
-          dmg-path)]
+     (define staging (make-temporary-file "glaze-dmg-~a" 'directory))
+     (dynamic-wind void
+                   (lambda ()
+                     (stage-dmg-root bundle staging app-name)
+                     (and (run (find-executable-path "hdiutil" #f)
+                               "create"
+                               "-volname"
+                               volume-name
+                               "-srcfolder"
+                               (path->string staging)
+                               "-ov"
+                               "-format"
+                               "UDZO"
+                               (path->string dmg-path))
+                          dmg-path))
+                   (lambda ()
+                     (when (directory-exists? staging)
+                       (delete-directory/files staging))))]
     [else
      (display "[glaze] No macOS dmg toolchain found (create-dmg / hdiutil); " (current-error-port))
      (displayln "producing a .zip instead." (current-error-port))
@@ -124,16 +146,26 @@
 ;; /Applications link, hidden background asset), attach a read/write image
 ;; through /Volumes (Finder only addresses volumes there), let Finder size
 ;; the window and place both icons, then convert to the compressed output.
-(define (create-branded-dmg! hdiutil background bundle dmg-path app-name)
+;; Stage the volume contents shared by every dmg layout: the bundle at the
+;; root and the conventional /Applications drop target. Without the link a
+;; plain hdiutil image has no visible install affordance.
+(define (stage-dmg-root bundle staging app-name)
+  (define staged-app (build-path staging (string-append app-name ".app")))
+  (copy-directory/files bundle staged-app)
+  (define apps-link (build-path staging "Applications"))
+  (when (file-exists? apps-link)
+    (delete-file apps-link))
+  (make-file-or-directory-link "/Applications" apps-link)
+  staging)
+
+(define (create-branded-dmg! hdiutil background bundle dmg-path app-name volume-name)
   (define staging (make-temporary-file "glaze-dmg-~a" 'directory))
-  (define staging-app (build-path staging (string-append app-name ".app")))
   (define rw-image (build-path staging "dmg-rw.dmg"))
   (define script-path (build-path staging "dmg-style.applescript"))
   (dynamic-wind
    (lambda () #f)
    (lambda ()
-     (copy-directory/files bundle staging-app)
-     (make-file-or-directory-link "/Applications" (build-path staging "Applications"))
+     (stage-dmg-root bundle staging app-name)
      (make-directory* (build-path staging ".background"))
      (copy-file background (build-path staging ".background" "background.png"))
      (define attach-output
@@ -144,7 +176,7 @@
                        "-fs"
                        "HFS+"
                        "-volname"
-                       app-name
+                       volume-name
                        "-srcfolder"
                        (path->string staging)
                        "-format"

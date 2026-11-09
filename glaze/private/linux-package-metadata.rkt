@@ -49,13 +49,25 @@
   (if (non-empty-string? cleaned) cleaned "app"))
 
 ;; rpm Version fields reject dashes.
+;; Debian and rpm compare a prerelease after the release when it is written
+;; "1.0.0.beta" (that is newer than 1.0.0); "~" is the ordering marker that
+;; places it before. Map the SemVer prerelease separator to "~" and replace
+;; any other punctuation, so installing stable over a beta is an upgrade.
 (define (sanitize-package-version version)
+  (define seen-prerelease? #f)
   (define cleaned
     (apply string-append
            (for/list ([c (in-string version)])
-             (if (or (char-alphabetic? c) (char-numeric? c) (memq c '(#\. #\_)))
-                 (string c)
-                 "."))))
+             (cond
+               [(or (char-alphabetic? c) (char-numeric? c)) (string c)]
+               [(memq c '(#\. #\+)) (string c)]
+               [(char=? c #\-)
+                (if seen-prerelease?
+                    "."
+                    (begin
+                      (set! seen-prerelease? #t)
+                      "~"))]
+               [else "."]))))
   (if (non-empty-string? cleaned) cleaned "0.0.0"))
 
 ;; The icon name is the hicolor/AppDir icon stem; appimagetool refuses a

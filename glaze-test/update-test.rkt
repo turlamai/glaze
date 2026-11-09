@@ -134,6 +134,36 @@
    (check-equal? (file->bytes target-file) #"test")
    (check-equal? (file->bytes (path-add-extension target-file #".rollback")) #"old")
 
+   ;; The same plan replaces a directory (a macOS .app is a directory), and
+   ;; rollback restores the previous tree when restart fails.
+   (define (write-text path text)
+     (make-parent-directory* path)
+     (call-with-output-file path #:exists 'truncate/replace (lambda (out) (display text out))))
+   (define new-bundle (build-path work "bundle-new"))
+   (define installed-bundle (build-path work "bundle-installed"))
+   (write-text (build-path new-bundle "Contents" "new.txt") "new")
+   (write-text (build-path installed-bundle "Contents" "old.txt") "old")
+   (execute-install-plan! (make-replace-install-plan candidate new-bundle installed-bundle))
+   (check-true (file-exists? (build-path installed-bundle "Contents" "new.txt"))
+               "directory install copies the new tree")
+   (check-false (file-exists? (build-path installed-bundle "Contents" "old.txt"))
+                "directory install replaces the old tree")
+   (check-true (file-exists? (build-path work "bundle-installed.rollback" "Contents" "old.txt"))
+               "directory rollback keeps the previous tree")
+
+   (define current-bundle (build-path work "bundle-current"))
+   (write-text (build-path current-bundle "Contents" "current.txt") "current")
+   (define failing-dir-plan
+     (make-replace-install-plan candidate
+                                new-bundle
+                                current-bundle
+                                #:restart (lambda () (error 'restart "boom"))))
+   (check-exn #rx"boom" (lambda () (execute-install-plan! failing-dir-plan)))
+   (check-true (file-exists? (build-path current-bundle "Contents" "current.txt"))
+               "failed restart restores the current directory")
+   (check-false (file-exists? (build-path current-bundle "Contents" "new.txt"))
+                "failed restart removes the partial new tree")
+
    (define rolled-back? #f)
    (define failing-plan
      (make-install-plan candidate

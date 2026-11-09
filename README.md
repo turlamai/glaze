@@ -4,7 +4,7 @@ Build desktop apps with a [Racket](https://racket-lang.org/) backend and a web f
 
 **Human-first. Agent-native. Local by design.**
 
-[![CI](https://github.com/turlamai/glaze/actions/workflows/ci.yml/badge.svg)](https://github.com/turlamai/glaze/actions/workflows/ci.yml) ![Racket](https://img.shields.io/badge/Racket-9F1D20?logo=racket&logoColor=white) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![Release](https://img.shields.io/badge/release-0.17.0-C15F3C)](CHANGELOG.md)
+[![CI](https://github.com/turlamai/glaze/actions/workflows/ci.yml/badge.svg)](https://github.com/turlamai/glaze/actions/workflows/ci.yml) ![Racket](https://img.shields.io/badge/Racket-9F1D20?logo=racket&logoColor=white) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![Release](https://img.shields.io/badge/release-0.18.0-C15F3C)](CHANGELOG.md)
 
 **English** · [中文](README.zh-CN.md)
 
@@ -91,6 +91,8 @@ raco pkg install --auto glaze
 
 A single Racket package: this installs the `glaze` library, the `raco glaze` CLI, and the documentation (browse it later with `raco docs`).
 
+To pin an application to a revision instead of the catalog head, use `raco glaze install <rev>`; it links the checkout under the canonical `glaze` package name and is the repair path `raco glaze doctor --fix` points to.
+
 ### 2. Create a new project
 
 ```bash
@@ -128,7 +130,10 @@ raco glaze schema write      # Explicitly refresh the application API baseline
 raco glaze schema check --json # Reject breaking application API changes
 raco glaze dev               # Run this project's native desktop app
 raco glaze verify            # Assert title/URL and capture the native window
+raco glaze measure size      # Report packaged artifact sizes against budgets
+raco glaze measure startup   # Launch a packaged artifact and require survival
 raco glaze build             # Build a distributable (exe + bundled assets)
+raco glaze install <rev>     # Pin the glaze package to a revision and link it
 raco glaze updater-keygen    # Create an Ed25519 update-signing keypair
 raco glaze update-sign       # Sign an update artifact
 raco glaze update-verify     # Verify an artifact and pinned-key signature
@@ -174,28 +179,47 @@ raco glaze build --name myapp --version 1.2.0 \
   --publisher "Acme Inc" --identifier com.acme.myapp --installer
 ```
 
-Options: `--name`, `--version`, `--publisher`, `--identifier`, `--icon <.ico/.icns>`, `--entry <path>` (default `main.rkt`), `--out <dir>` (default `dist`), `--embed-dlls` (Windows: single-file exe), `--installer`. Keep `--identifier` stable across releases: Glaze derives the WiX `UpgradeCode` and NSIS uninstall registry identity from it.
+Options: `--name`, `--version`, `--publisher`, `--identifier`, `--icon <.ico/.icns>`, `--entry <path>` (default `main.rkt`), `--out <dir>` (default `dist`), `--embed-dlls` (Windows: single-file exe), `--installer`, the signing flags `--sign <id>`, `--entitlements <plist>`, `--no-hardened-runtime`, `--notarize <profile>`, `--timestamp-url <url>`, the deep-link flag `--url-scheme <name>` (repeatable), `--dmg-background <.png>`, and the Windows wizard assets `--installer-license <.rtf>`, `--installer-banner <.bmp>` and `--installer-dialog <.bmp>`. Keep `--identifier` stable across releases: Glaze derives the WiX `UpgradeCode` and NSIS uninstall registry identity from it.
 
 > The installer step probes for the native packaging toolchain (WiX / NSIS on Windows, `create-dmg` / `hdiutil` on macOS, `dpkg-deb` / `rpmbuild` / `appimagetool` / `linuxdeploy` on Linux) and **degrades gracefully** to a `.zip` / `.tar.gz` when that packaging toolchain is absent, printing a warning naming what to install. On Linux every available format is produced from one FHS staging tree — `/usr/lib/<app>` payload, `/usr/bin/<app>` wrapper, `.desktop` entry, and a hicolor icon — so deb, rpm, and AppImage carry identical payloads; a project without an icon still gets a valid generated placeholder. This packaging fallback is unrelated to application startup: the app itself still requires a native WebView.
 
-### Code signing & notarization
+### `measure`
 
-Unsigned apps get blocked by macOS Gatekeeper and Windows SmartScreen. `build` drives the platform signer for you:
+Measure what a build actually produced instead of eyeballing `dist/`:
 
 ```bash
-# macOS — Developer ID identity, hardened runtime, notarize + staple:
-raco glaze build --name myapp \
-  --sign "Developer ID Application: Acme Inc (TEAMID)" \
+raco glaze measure size [--budget budgets.json] [--artifact sampleapp.dmg]
+raco glaze measure startup [--artifact sampleapp.app] [--seconds 3]
+```
+
+`size` lists every artifact in bytes; with `--budget` it exits nonzero when an
+artifact exceeds the first matching `{"glob": ..., "max-bytes": ...}` rule, so a
+size regression fails CI. `startup` launches a packaged artifact (unwrapping a
+macOS `.app` to its inner binary), requires it to stay alive for the window,
+then terminates it; exiting early is an error. It measures launch survival, not
+time-to-interactive, so treat the elapsed value as informational on shared
+runners.
+
+### Code signing & notarization
+
+`build` drives `codesign` (macOS) and `signtool` (Windows); a signing failure
+aborts the build, while a missing toolchain warns.
+
+```bash
+# macOS: Developer ID + hardened runtime + notarize/staple
+raco glaze build --name myapp --sign "Developer ID Application: Acme Inc (TEAMID)" \
   --notarize acme-notary --installer
 
-# macOS — ad-hoc (no cert; for local testing / CI):
+# macOS ad-hoc for local/CI smoke
 raco glaze build --name myapp --sign -
 
-# Windows — signtool with a certificate thumbprint (RFC-3161 timestamped):
+# Windows: certificate thumbprint or subject, RFC-3161 timestamped
 raco glaze build --name myapp --sign 40HEXCHARS --installer
 ```
 
-Details: `--sign` takes a codesign identity (macOS) or a SHA-1 thumbprint / subject name for `signtool` (Windows). Hardened runtime is applied automatically on macOS unless `--no-hardened-runtime` is passed (and is skipped for ad-hoc, where its library validation would reject the app's own framework). `--notarize <keychain-profile>` submits the built dmg via `notarytool`, waits, and staples the ticket. `--entitlements <file>`, `--timestamp-url <url>` round it out. Signing failures abort the build; a *missing toolchain* degrades with a loud warning.
+`--entitlements`, `--timestamp-url` and `--no-hardened-runtime` round it out.
+Certificate custody, CI secrets and verification commands:
+[production signing](docs/production-signing.md).
 
 ### Product entitlements
 
@@ -203,16 +227,13 @@ Product licensing is intentionally outside Glaze's framework boundary. Applicati
 
 ### Update integrity
 
-`check-update` remains the small, backward-compatible notification helper. For installed applications, the full updater validates a signed manifest, selects the platform/architecture and release channel, enforces staged-rollout and download-size limits, verifies SHA-256 plus an optional artifact signature, and executes an install plan with rollback:
-
-All updater fetches follow absolute and relative redirects for up to ten hops.
-Signed manifests and artifacts remain HTTPS-only across every redirect, so a
-release alias cannot downgrade verification traffic to plaintext.
+`check-update` is the small notification helper. The installed updater verifies
+a signed manifest and artifact, selects by channel/platform/architecture,
+enforces rollout and minimum version, and runs an install plan with rollback:
 
 ```racket
 (define manifest
-  (fetch-update-manifest manifest-url pinned-public-key
-                         #:key-id "release-2026"))
+  (fetch-update-manifest manifest-url pinned-public-key #:key-id "release-2026"))
 (define candidate (select-update config manifest))
 (when candidate
   (define artifact (download-update config candidate download-path))
@@ -221,9 +242,10 @@ release alias cannot downgrade verification traffic to plaintext.
                               #:restart restart-app)))
 ```
 
-Portable artifacts (including AppImage-style deployments) can use the atomic replacement adapter above. MSI/EXE/PKG/DMG installers use `make-install-plan` with a platform adapter that owns elevation and process handoff; Glaze still controls the verified input and invokes rollback when installation fails.
-
-Release automation can sign both artifacts and the validated manifest with the same pinned Ed25519 key:
+Verification uses the pure-Racket [`ed25519`](https://pkgs.racket-lang.org/package/ed25519)
+backend, so an installed application needs no OpenSSL 3 CLI; signing and key
+generation still do. Every fetch is HTTPS-only across at most ten redirects.
+Release automation signs the artifact and the validated manifest:
 
 ```bash
 raco glaze updater-keygen --out updater-keys
@@ -235,6 +257,9 @@ raco glaze manifest-sign --manifest manifest.json --key updater-keys/private.pem
 raco glaze manifest-verify --manifest manifest.signed.json \
   --pub updater-keys/public.pem --key-id release-2026
 ```
+
+Channels, staged rollout, rollback and per-installation evidence:
+[releasing and updating applications](docs/release-and-updates.md).
 
 ## Project Structure
 
@@ -630,6 +655,7 @@ The event stream uses the same local origin as the embedded WebView frontend.
 - `#:api-token` (default `#t`) protects API routes and SSE; `#:api-token #f` is the explicit opt-out and cannot be combined with `#:capability`. The native app window uses a one-time bootstrap URL to obtain an HttpOnly cookie; programmatic clients use `X-Glaze-Token`.
 - Optional `#:capability` enables default-deny runtime authority. Declared route permissions may be unscoped, path-scoped, or command/argument-scoped; denied handlers are never invoked.
 - Update checks remain opt-in through `run-app #:check-update ...`.
+- Report suspected vulnerabilities privately through [SECURITY.md](SECURITY.md); it records the trust model, the security-sensitive owners and what is out of scope.
 
 ## System Integrations (`glaze/sys`)
 
@@ -709,12 +735,45 @@ The tray is an optional integration. If its backend is unavailable it may degrad
 
 | Example | What it shows |
 |---|---|
-| [`examples/showcase/`](examples/showcase/) | **Kitchen sink (start here)** — every capability in one native window |
+| [`examples/taskboard/`](examples/taskboard/) | **Product-level example (start here)** — typed routes, persisted store, SSE, tests and native acceptance |
+| [`examples/showcase/`](examples/showcase/) | **Kitchen sink** — every capability in one native window |
 | [`examples/hello/`](examples/hello/) | Minimal native app — `run-app` in 8 lines |
 | [`examples/counter/`](examples/counter/) | JS↔Racket bridge — `fetch` calls Racket state |
 | [`examples/webview-demo.rkt`](examples/webview-demo.rkt) | Cross-platform native WebView lifecycle: load, navigate, close, verification APIs |
 | [`examples/agent-verify.rkt`](examples/agent-verify.rkt) | Agent workflow: assert page state + screenshot with no human |
 | [`examples/tray-demo.rkt`](examples/tray-demo.rkt) | Cross-platform system tray with a working menu |
+
+## Testing
+
+```bash
+raco test glaze-test/                       # framework suite
+racket scripts/webview-e2e.rkt              # real native window on this OS
+raco make glaze/main.rkt glaze-cli/cli.rkt  # compile public entry points
+```
+
+The framework suite is windowless on Windows and Linux and also drives real
+WKWebView windows on macOS. The e2e opens a native window on every OS and
+needs a graphical session (Xvfb on Linux). Generated projects run their own
+`verify.rkt` with `raco glaze verify`.
+
+CI runs both on Windows, macOS and Linux, and a package job builds and
+validates the installers. Application-side gates, runner requirements and
+evidence: [CI contract](docs/ci.md).
+
+## Honest gaps
+
+- **Pre-1.0 public API** — module tiers and export lists are snapshot-checked ([API stability](docs/api-stability.md)), but names may still change with a CHANGELOG migration note.
+- **Native transport is opt-in in 0.x** — `run-app` still defaults to `#:transport 'http` inside the native window. Packaged products should pass `#:transport 'native`; the 1.0 plan makes the default change a release gate that needs packaged release-candidate evidence, not a completed switch.
+- **Linux qualification is bounded** — CI proves Xvfb + WebKitGTK window behavior and deb/rpm/AppImage metadata on Ubuntu. Real distribution and desktop behavior (GNOME/KDE, Wayland compositors, scaling, portals, IME) belongs to each product's release evidence. Native dialogs need `zenity` or `kdialog`; global shortcuts are X11/XWayland-only.
+- **macOS needs an interactive session** — WKWebView startup requires a logged-in graphical desktop; headless or SSH sessions fail with guidance instead of falling back to a browser.
+- **Windows needs the WebView2 Runtime** — Glaze stages `WebView2Loader.dll`, not the Evergreen Runtime. A missing Runtime is diagnosed at startup.
+- **Windows ARM64 has its own loader** — Glaze ships both `win-x64` and `win-arm64` `WebView2Loader.dll` and selects by the Racket process architecture; CI runs native arm64 on an ARM64 host. The x64 build still runs under emulation on ARM64.
+- **Intel macOS CI is build-only** — the hosted Intel runner has no WindowServer session, so CI proves the native x64 build and package path but cannot open a real window. Run the window tests on a desktop Intel Mac or a self-hosted runner.
+- **Installer toolchains are external** — WiX for MSI, macOS tooling for dmg/notarization, dpkg/rpm/AppImage tooling on Linux. `--installer` falls back to zip/tar.gz with a warning when a toolchain is absent; that is a distribution-format downgrade, not a UI runtime fallback.
+- **Accessibility and IME are application-owned** — Glaze hosts the system WebView and adds no accessibility layer. Semantic HTML, focus order, names/roles, large text and IME behavior must be designed and tested by the product on each platform.
+- **No mobile targets** — Windows, macOS and Linux desktops only.
+- **Budgets are first-pass** — `examples/showcase/budgets.json` records generous initial ceilings, not performance promises. Shared-runner measurements are informational; gates come from dedicated hardware history.
+- **No independent security audit** — see [SECURITY.md](SECURITY.md).
 
 ## Roadmap
 

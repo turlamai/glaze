@@ -16,7 +16,8 @@
          racket/list
          racket/match
          racket/path
-         racket/string)
+         racket/string
+         racket/system)
 
 (provide measure-command
          measure-size
@@ -34,15 +35,28 @@
 ;; from "over budget" without parsing output.
 (struct exn:fail:glaze:budget exn:fail () #:transparent)
 
+;; A macOS .app is a directory but still one shippable artifact. Generic
+;; directories (raco distribute's bin/ and lib/) are layout, not artifacts.
+(define (app-bundle? path)
+  (and (directory-exists? path) (string-suffix? (path->string (file-name-from-path path)) ".app")))
+
 (define (dist-artifacts root)
   (define dist (build-path root dist-directory))
   (if (directory-exists? dist)
       (sort (for/list ([path (in-list (directory-list dist #:build? #t))]
-                       #:when (file-exists? path))
+                       #:when (or (file-exists? path) (app-bundle? path)))
               path)
             #:key path->string
             string<?)
       '()))
+
+(define (artifact-size path)
+  (if (directory-exists? path)
+      (for/fold ([total 0]) ([child (in-directory path)])
+        (if (file-exists? child)
+            (+ total (file-size child))
+            total))
+      (file-size path)))
 
 (define (format-bytes count)
   (define mb (/ count 1024.0 1024.0))
@@ -78,14 +92,16 @@
               #:when (glob-match? (hash-ref rule 'glob) name))
     (hash-ref rule 'max-bytes)))
 
+(define (matching-artifacts artifacts artifact-filter)
+  (if artifact-filter
+      (filter (lambda (path) (equal? (path->string (file-name-from-path path)) artifact-filter))
+              artifacts)
+      artifacts))
+
 (define (select-artifacts root artifact-filter who)
-  (define artifacts
-    (if artifact-filter
-        (filter (lambda (path) (equal? (path->string (file-name-from-path path)) artifact-filter))
-                (dist-artifacts root))
-        (dist-artifacts root)))
+  (define artifacts (matching-artifacts (dist-artifacts root) artifact-filter))
   (when (null? artifacts)
-    (error 'measure
+    (error who
            "no packaged artifacts under ~a; run `raco glaze build` first"
            (build-path root dist-directory)))
   artifacts)
@@ -96,7 +112,7 @@
   (define violations '())
   (define rows
     (for/list ([artifact (in-list artifacts)])
-      (define bytes (file-size artifact))
+      (define bytes (artifact-size artifact))
       (define budget (and rules (budget-for rules artifact)))
       (when (and budget (> bytes budget))
         (set! violations (cons (cons artifact (cons bytes budget)) violations)))
@@ -138,13 +154,25 @@
   (define-values (p _stdout _stdin _stderr)
     (with-handlers ([exn:fail? (lambda (e)
                                  (error 'measure "could not launch ~a: ~a" target (exn-message e)))])
-      (subprocess #f #f #f target)))
+      ;; Do not inherit the caller's working directory: a Windows child keeps
+      ;; it locked until every descendant exits, which makes a temporary
+      ;; staging tree undeletable right after the survival window.
+      (parameterize ([current-directory (find-system-path 'temp-dir)])
+        (subprocess #f #f #f target))))
   (sleep seconds)
   ;; subprocess-status is the SYMBOL 'running while alive, the exit code
   ;; once it terminates — same shape rivet's launch smoke checks.
   (define alive (eq? (subprocess-status p) 'running))
   (when alive
-    (subprocess-kill p #t))
+    ;; Kill the whole tree on Windows. A staged launcher (a .bat/.cmd or an
+    ;; installer stub) can leave descendants that keep the staged directory
+    ;; locked; terminating only the direct process makes later cleanup and
+    ;; repeat builds fail with "permission denied".
+    (if (eq? (system-type 'os) 'windows)
+        (let ([pid (subprocess-pid p)])
+          (unless (zero? (system*/exit-code "taskkill" "/PID" (number->string pid) "/T" "/F"))
+            (subprocess-kill p #t)))
+        (subprocess-kill p #t)))
   (subprocess-wait p)
   (unless alive
     (error 'measure
@@ -153,15 +181,35 @@
            seconds))
   (/ (- (current-inexact-milliseconds) started) 1000.0))
 
+;; Startup can also launch a distribution that keeps its executable under
+;; dist/bin/ (the Linux/Windows `raco distribute` layout).
+(define (startup-candidates root)
+  (define dist (build-path root dist-directory))
+  (define bin (build-path dist "bin"))
+  (define bin-files
+    (if (directory-exists? bin)
+        (filter file-exists? (directory-list bin #:build? #t))
+        '()))
+  (append (dist-artifacts root) bin-files))
+
 (define (measure-startup project-root #:artifact [artifact-filter #f] #:seconds [seconds 3.0])
-  (define artifacts (select-artifacts project-root artifact-filter 'measure-startup))
-  ;; dist keeps manifests/sidecars too, so smoke the largest non-data file.
-  (define artifact
-    (argmax file-size
-            (filter (lambda (path)
-                      (not (regexp-match? #rx"[.](json|txt|sha256|sig|zip|tar[.]gz|msi|deb|rpm)$"
-                                          (path->string path))))
-                    artifacts)))
+  (define artifacts (matching-artifacts (startup-candidates project-root) artifact-filter))
+  (when (null? artifacts)
+    (error 'measure-startup
+           "no packaged artifacts under ~a; run `raco glaze build` first"
+           (build-path project-root dist-directory)))
+  ;; dist and bin/ keep manifests/sidecars too, so smoke the largest non-data
+  ;; file (or .app bundle).
+  (define launchable
+    (filter (lambda (path)
+              (not (regexp-match? #rx"[.](json|txt|sha256|sig|zip|tar[.]gz|msi|deb|rpm)$"
+                                  (path->string path))))
+            artifacts))
+  (when (null? launchable)
+    (error 'measure-startup
+           "no executable artifact under ~a"
+           (build-path project-root dist-directory)))
+  (define artifact (argmax artifact-size launchable))
   (define elapsed (launch-survival! artifact seconds))
   (hash 'artifact
         (path->string (file-name-from-path artifact))
@@ -208,14 +256,9 @@
     (cond
       [(null? args)
        (define report
-         (apply measure-startup
-                root
-                (append (if artifact
-                            (list #:artifact artifact)
-                            '())
-                        (if seconds
-                            (list #:seconds seconds)
-                            '()))))
+         (if seconds
+             (measure-startup root #:artifact artifact #:seconds seconds)
+             (measure-startup root #:artifact artifact)))
        (display-startup-report report)]
       [(equal? (car args) "--artifact")
        (loop (cddr args) (require-option-value 'measure "--artifact" args) seconds)]

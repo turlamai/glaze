@@ -15,6 +15,7 @@
                         open-path
                         reveal-path
                         single-instance?
+                        release-single-instance!
                         sys-supported?
                         webview-set-title!
                         webview-set-size!
@@ -25,6 +26,13 @@
 (check-true (single-instance? "glaze-test-app") "first instance wins")
 (check-false (single-instance? "glaze-test-app") "second instance loses")
 (check-true (single-instance? "glaze-test-other") "different app-id independent")
+
+;; The Windows mutex can be released explicitly before process teardown.
+(when (eq? (system-type 'os) 'windows)
+  (check-true (single-instance? "glaze-release-test") "fresh claim")
+  (release-single-instance! "glaze-release-test")
+  (check-true (single-instance? "glaze-release-test")
+              "released claim can be acquired again in the same process"))
 
 ;; ---- macOS live ----
 (when (and (eq? (system-type 'os) 'macosx) (sys-supported?))

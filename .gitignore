@@ -27,3 +27,6 @@ examples/showcase/public/shots/
 
 # Scribble build output
 glaze-doc/doc/
+
+# Taskboard example build output
+examples/taskboard/dist-example/

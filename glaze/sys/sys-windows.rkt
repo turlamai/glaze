@@ -20,7 +20,8 @@
          notify!
          open-path
          reveal-path
-         windows-single-instance?)
+         windows-single-instance?
+         windows-release-single-instance!)
 
 (define user32 (ffi-lib "user32"))
 (define kernel32 (ffi-lib "kernel32"))
@@ -215,3 +216,21 @@
                               [else
                                (hash-set! instance-mutex-handles app-id handle)
                                #t])]))))
+
+(define (windows-release-single-instance! [app-id #f])
+  ;; Release the named mutex before process teardown. A window/WebView2
+  ;; teardown can linger after the app has logically quit; holding this handle
+  ;; until process exit would keep the next launch blocked (#124).
+  (call-with-semaphore instance-mutex-lock
+                       (lambda ()
+                         (define (close-one! id)
+                           (define handle (hash-ref instance-mutex-handles id #f))
+                           (when handle
+                             (CloseHandle handle)
+                             (hash-remove! instance-mutex-handles id)))
+                         (if app-id
+                             (close-one! app-id)
+                             (begin
+                               (for ([handle (in-hash-values instance-mutex-handles)])
+                                 (CloseHandle handle))
+                               (hash-clear! instance-mutex-handles))))))

@@ -30,4 +30,6 @@ Record the package versions and platforms your application actually tests. Read 
 
 Use [Issues](https://github.com/turlamai/glaze/issues) in English or Chinese. Include package/commit, Racket version, OS/architecture, a minimal reproduction and the first redacted error. Never attach real keys, customer credentials, raw payment data or private documents. Community support has no guaranteed response time.
 
+Report suspected vulnerabilities privately through [SECURITY.md](../SECURITY.md), not a public issue. The policy records the trust model, security-sensitive owners and out-of-scope components.
+
 [Current licence](../LICENSE) · [CHANGELOG](../CHANGELOG.md)

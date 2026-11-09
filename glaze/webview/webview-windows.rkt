@@ -37,8 +37,9 @@
 ;;     advances the next step); our PeekMessage pump on the same thread
 ;;     delivers them.
 ;;
-;; Requires WebView2Loader.dll shipped under glaze/native/win-x64/. The
-;; WebView2 Evergreen Runtime is preinstalled on Windows 11.
+;; Requires the WebView2Loader.dll matching the process architecture, shipped
+;; under glaze/native/win-x64/ or win-arm64/. The WebView2 Evergreen Runtime
+;; is preinstalled on Windows 11.
 
 (require ffi/unsafe
          racket/async-channel
@@ -49,7 +50,8 @@
          racket/runtime-path
          "../native-transport.rkt"
          "../tray/tray-protocol.rkt"
-         "../private/id-allocator.rkt")
+         "../private/id-allocator.rkt"
+         "../private/win32-arch.rkt")
 
 (provide open-webview
          supported?
@@ -70,7 +72,7 @@
          win:webview?)
 
 (define-runtime-path here ".")
-(define loader-path (build-path here ".." "native" "win-x64" "WebView2Loader"))
+(define loader-path (build-path here ".." "native" (webview2-loader-subdir) "WebView2Loader"))
 
 (define user32 (ffi-lib "user32"))
 (define kernel32 (ffi-lib "kernel32"))
@@ -352,6 +354,23 @@
                   [deliver-queue #:mutable]
                   on-close)
   #:transparent)
+
+;; WebView2 locks its user-data folder and keeps the lock briefly after
+;; close. A fixed path, or even one folder per process, made a second window
+;; in the same test (or a concurrent process) abort CreateController with
+;; E_ABORT. Each open gets its own folder; GLAZE_WEBVIEW2_DATA_DIR still
+;; selects a stable path for products that want a shared cache.
+(define webview2-data-counter (box 0))
+(define (new-webview2-data-folder)
+  (or (let ([configured (getenv "GLAZE_WEBVIEW2_DATA_DIR")])
+        (and configured (string->path configured)))
+      (let ()
+        (set-box! webview2-data-counter (add1 (unbox webview2-data-counter)))
+        (build-path (find-system-path 'temp-dir)
+                    (format "glaze-webview2-~a-~a-~a"
+                            (current-seconds)
+                            (unbox webview2-data-counter)
+                            (random 1000000))))))
 
 (define (supported?)
   (and (eq? (system-type 'os) 'windows) loader CreateCoreWebView2EnvironmentWithOptions #t))
@@ -716,8 +735,7 @@
       (hash-set! wndprocs (cast hwnd _pointer _uintptr) wv)
       (ShowWindow hwnd SW_SHOW)
 
-      (define data-folder
-        (wstr (path->string (build-path (find-system-path 'temp-dir) "glaze-webview2"))))
+      (define data-folder (wstr (path->string (new-webview2-data-folder))))
       (define hr (CreateCoreWebView2EnvironmentWithOptions #f data-folder #f env-handler))
       (unless (= (bitwise-and hr #xffffffff) 0)
         (error 'open-webview

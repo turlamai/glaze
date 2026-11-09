@@ -17,22 +17,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-latest, macOS-latest]
+        os: [ubuntu-24.04, windows-latest, macos-26]
         racket-version: ['9.3', '9.0']
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install Racket
-        uses: Bogdanp/setup-racket@2466913449df77df2bad149d1f2fc4e1ea4795dd # v1.15
+      - uses: ./.github/actions/setup-glaze
         with:
-          version: ${{ matrix.racket-version }}
-
-      - name: Install Glaze package
-        shell: bash
-        run: raco pkg install --auto --no-docs --link "$PWD"
+          racket-version: ${{ matrix.racket-version }}
+          linux-webview-deps: 'false'
 
       - name: Run tests
+        env:
+          # Hosted macOS runners have no menu bar for NSStatusItem; the
+          # native tray construction is covered by local/self-hosted runs.
+          GLAZE_TEST_NO_TRAY: ${{ runner.os == 'macOS' && '1' || '' }}
         run: raco test glaze-test/
 
       - name: Build Scribble documentation
@@ -68,26 +68,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-latest, macOS-latest]
+        os: [ubuntu-24.04, windows-latest, macos-26]
         racket-version: ['9.3']
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install Racket
-        uses: Bogdanp/setup-racket@2466913449df77df2bad149d1f2fc4e1ea4795dd # v1.15
+      - uses: ./.github/actions/setup-glaze
         with:
-          version: ${{ matrix.racket-version }}
-
-      - name: Install Glaze package
-        shell: bash
-        run: raco pkg install --auto --no-docs --link "$PWD"
-
-      - name: Install webview deps (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev xvfb
+          racket-version: ${{ matrix.racket-version }}
 
       - name: Probe webview libraries (Linux debug)
         if: runner.os == 'Linux'
@@ -134,6 +123,50 @@ jobs:
             raco glaze verify
           fi
 
+  example:
+    # The maintained Taskboard example is a consumer of the public API; keep
+    # its tests, schema contract, native window and build green on every OS.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-26]
+        racket-version: ['9.3']
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup-glaze
+        with:
+          racket-version: ${{ matrix.racket-version }}
+
+      - name: Run example tests
+        working-directory: examples/taskboard
+        shell: bash
+        run: raco test tests/*.rkt
+
+      - name: Check the example schema contract
+        working-directory: examples/taskboard
+        run: raco glaze schema check --json
+
+      - name: Native acceptance
+        working-directory: examples/taskboard
+        env:
+          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
+          GLAZE_NO_STARTUP_DIALOG: '1'
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a raco glaze verify
+          else
+            raco glaze verify
+          fi
+
+      - name: Build the example
+        working-directory: examples/taskboard
+        shell: bash
+        run: raco glaze build --name taskboard --version 0.1.0 --out dist-example
+
   package:
     # Build a sample app with `raco glaze build --installer` on each platform
     # and upload the resulting distribution + installer as artifacts.
@@ -141,20 +174,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-latest, macOS-latest]
+        os: [ubuntu-24.04, windows-latest, macos-26]
         racket-version: ['9.3']
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install Racket
-        uses: Bogdanp/setup-racket@2466913449df77df2bad149d1f2fc4e1ea4795dd # v1.15
+      - uses: ./.github/actions/setup-glaze
         with:
-          version: ${{ matrix.racket-version }}
-
-      - name: Install Glaze package
-        shell: bash
-        run: raco pkg install --auto --no-docs --link "$PWD"
+          racket-version: ${{ matrix.racket-version }}
+          linux-webview-deps: 'false'
 
       - name: Install installer toolchain (Linux)
         if: runner.os == 'Linux'
@@ -226,6 +255,63 @@ jobs:
             grep -q 'usr/lib/sampleapp' "$RUNNER_TEMP/rpm-files.txt"
           fi
 
+      - name: Install, upgrade and remove the Linux packages
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd sampleapp
+          raco glaze build --name sampleapp --version 0.0.2 \
+            --publisher "Turing Lambda" --identifier TuringLambda.Glaze.CISample \
+            --out dist-next --installer
+          sudo dpkg -i dist/sampleapp.deb
+          test -x /usr/bin/sampleapp
+          test -d /usr/lib/sampleapp
+          test -f /usr/share/applications/sampleapp.desktop
+          test "$(dpkg-query -W -f='${Version}' sampleapp)" = "0.0.1"
+          sudo dpkg -i dist-next/sampleapp.deb
+          test "$(dpkg-query -W -f='${Version}' sampleapp)" = "0.0.2"
+          sudo dpkg -r sampleapp
+          test ! -e /usr/lib/sampleapp
+          test ! -e /usr/bin/sampleapp
+
+      - name: Install, upgrade and erase the rpm on Fedora
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm             -v "$PWD/sampleapp/dist:/dist:ro"             -v "$PWD/sampleapp/dist-next:/dist-next:ro"             fedora:latest bash -euxo pipefail -c '
+              dnf install -y /dist/sampleapp.rpm
+              test -x /usr/bin/sampleapp
+              test -d /usr/lib/sampleapp
+              test -f /usr/share/applications/sampleapp.desktop
+              test "$(rpm -q --qf "%{VERSION}" sampleapp)" = "0.0.1"
+              dnf install -y /dist-next/sampleapp.rpm
+              test "$(rpm -q --qf "%{VERSION}" sampleapp)" = "0.0.2"
+              dnf remove -y sampleapp
+              test ! -e /usr/lib/sampleapp
+              test ! -e /usr/bin/sampleapp
+            '
+
+      - name: Launch the AppImage under Xvfb
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y libwebkit2gtk-4.1-0 xvfb
+          chmod +x sampleapp/dist/sampleapp.AppImage
+          set +e
+          timeout 10 xvfb-run -a sampleapp/dist/sampleapp.AppImage \
+            --appimage-extract-and-run > "$RUNNER_TEMP/appimage.log" 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 124 ]; then
+            cat "$RUNNER_TEMP/appimage.log"
+            echo "AppImage exited before the timeout (status $status)" >&2
+            exit 1
+          fi
+          test -s "$RUNNER_TEMP/appimage.log"
+
       - name: Validate Windows installer upgrade identity
         if: runner.os == 'Windows'
         shell: pwsh
@@ -261,11 +347,96 @@ jobs:
           if ($secondPackage.Version -ne '0.0.2') {
             throw "unexpected MSI version: $($secondPackage.Version)"
           }
+      - name: Install, upgrade and uninstall the MSI
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function Invoke-Msi([string]$path) {
+            $proc = Start-Process msiexec.exe -ArgumentList @('/i', "`"$path`"", '/qn', '/norestart') -Wait -PassThru
+            if ($proc.ExitCode -notin @(0, 3010)) {
+              throw "msiexec install failed ($($proc.ExitCode)): $path"
+            }
+          }
+          function Find-Product {
+            @(Get-ChildItem 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall' |
+              Where-Object { $_.GetValue('DisplayName') -eq 'sampleapp' })
+          }
+          $first = (Resolve-Path 'sampleapp/dist/sampleapp.msi').Path
+          $second = (Resolve-Path 'sampleapp/dist-next/sampleapp.msi').Path
+          $installDir = 'C:\Program Files\sampleapp'
+          try {
+            Invoke-Msi $first
+            if (-not (Test-Path "$installDir\sampleapp.exe")) {
+              throw 'MSI did not install sampleapp.exe'
+            }
+            $entries = Find-Product
+            if ($entries.Count -ne 1) { throw "expected one uninstall entry, got $($entries.Count)" }
+            if ($entries[0].GetValue('DisplayVersion') -ne '0.0.1') {
+              throw "unexpected installed version: $($entries[0].GetValue('DisplayVersion'))"
+            }
+            Invoke-Msi $second
+            $entries = Find-Product
+            if ($entries.Count -ne 1) {
+              throw "upgrade left $($entries.Count) uninstall entries"
+            }
+            if ($entries[0].GetValue('DisplayVersion') -ne '0.0.2') {
+              throw "upgrade did not update DisplayVersion: $($entries[0].GetValue('DisplayVersion'))"
+            }
+            $productCode = $entries[0].PSChildName
+            $uninstall = Start-Process msiexec.exe -ArgumentList @('/x', $productCode, '/qn', '/norestart') -Wait -PassThru
+            if ($uninstall.ExitCode -notin @(0, 3010)) {
+              throw "msiexec uninstall failed ($($uninstall.ExitCode))"
+            }
+            if (Test-Path $installDir) { throw 'uninstall left the install directory' }
+            if ((Find-Product).Count -ne 0) { throw 'uninstall left an uninstall entry' }
+          } finally {
+            foreach ($entry in (Find-Product)) {
+              Start-Process msiexec.exe -ArgumentList @('/x', $entry.PSChildName, '/qn', '/norestart') -Wait | Out-Null
+            }
+          }
+
+      - name: Install NSIS
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install nsis --no-progress -y
+          "${env:ProgramFiles(x86)}\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Install and uninstall the NSIS fallback
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          GLAZE_NSIS_SMOKE: '1'
+        run: racket scripts/nsis-smoke.rkt
+
       - name: Verify macOS bundle signature
         if: runner.os == 'macOS'
         run: |
           codesign --verify --strict sampleapp/dist/sampleapp.app
           /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" sampleapp/dist/sampleapp.app/Contents/Info.plist | grep -qx "0.0.1"
+
+      - name: Mount dmg and verify the install layout
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          dmg="$PWD/sampleapp/dist/sampleapp.dmg"
+          test -f "$dmg"
+          attach="$(hdiutil attach "$dmg" -nobrowse -readonly)"
+          mount_point="$(printf '%s\n' "$attach" | tail -1 | awk -F'\t' '{print $NF}')"
+          test -d "$mount_point"
+          trap 'hdiutil detach "$mount_point" -force >/dev/null 2>&1 || true' EXIT
+          test -d "$mount_point/sampleapp.app"
+          test -L "$mount_point/Applications"
+          test "$(readlink "$mount_point/Applications")" = "/Applications"
+          mkdir -p "$RUNNER_TEMP/Applications"
+          ditto "$mount_point/sampleapp.app" "$RUNNER_TEMP/Applications/sampleapp.app"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
+            "$RUNNER_TEMP/Applications/sampleapp.app/Contents/Info.plist" | grep -qx "0.0.1"
+          test -x "$RUNNER_TEMP/Applications/sampleapp.app/Contents/MacOS/sampleapp"
+          hdiutil detach "$mount_point"
+          trap - EXIT
 
       - name: Record packaged size (informational)
         shell: bash

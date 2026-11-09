@@ -1,0 +1,121 @@
+{
+  "format": "glaze-schema",
+  "format-version": 1,
+  "glz": 1,
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/tasks"
+    },
+    {
+      "method": "POST",
+      "path": "/api/tasks/create"
+    },
+    {
+      "method": "POST",
+      "path": "/api/tasks/toggle"
+    },
+    {
+      "method": "POST",
+      "path": "/api/tasks/delete"
+    },
+    {
+      "method": "POST",
+      "path": "/api/tasks/clear-done"
+    }
+  ],
+  "schema": {
+    "commands": [
+      {
+        "errors": [
+          "invalid-args",
+          "capability-denied",
+          "token-required",
+          "timed-out",
+          "cancelled",
+          "internal"
+        ],
+        "name": "tasks",
+        "parameters": [],
+        "result": {
+          "kind": "scalar",
+          "name": "Value"
+        }
+      },
+      {
+        "errors": [
+          "invalid-args",
+          "capability-denied",
+          "token-required",
+          "timed-out",
+          "cancelled",
+          "internal"
+        ],
+        "name": "tasksClearDone",
+        "parameters": [],
+        "result": {
+          "kind": "scalar",
+          "name": "Value"
+        }
+      },
+      {
+        "errors": [],
+        "name": "tasksCreate",
+        "parameters": [
+          {
+            "name": "title",
+            "type": {
+              "kind": "scalar",
+              "name": "String"
+            }
+          }
+        ],
+        "result": {
+          "kind": "scalar",
+          "name": "Value"
+        }
+      },
+      {
+        "errors": [],
+        "name": "tasksDelete",
+        "parameters": [
+          {
+            "name": "id",
+            "type": {
+              "kind": "scalar",
+              "name": "Int64"
+            }
+          }
+        ],
+        "result": {
+          "kind": "scalar",
+          "name": "Value"
+        }
+      },
+      {
+        "errors": [],
+        "name": "tasksToggle",
+        "parameters": [
+          {
+            "name": "id",
+            "type": {
+              "kind": "scalar",
+              "name": "Int64"
+            }
+          }
+        ],
+        "result": {
+          "kind": "scalar",
+          "name": "Value"
+        }
+      }
+    ],
+    "contract": 1,
+    "enums": [],
+    "events": [],
+    "id": "glaze-routes",
+    "records": [],
+    "revision": 1,
+    "states": []
+  }
+}
