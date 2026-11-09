@@ -92,9 +92,7 @@
   ;; platforms use a per-process TCP listener owned by the app custodian; it
   ;; is released when that custodian shuts down, so this is a no-op there.
   (when (eq? (system-type 'os) 'windows)
-    ((dynamic-require 'glaze/sys/sys-windows
-                      'windows-release-single-instance!)
-     app-id)))
+    ((dynamic-require 'glaze/sys/sys-windows 'windows-release-single-instance!) app-id)))
 
 (define (single-instance? app-id)
   (if (eq? (system-type 'os) 'windows)
