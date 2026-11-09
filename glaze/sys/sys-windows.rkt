@@ -20,7 +20,8 @@
          notify!
          open-path
          reveal-path
-         windows-single-instance?)
+         windows-single-instance?
+         windows-release-single-instance!)
 
 (define user32 (ffi-lib "user32"))
 (define kernel32 (ffi-lib "kernel32"))
