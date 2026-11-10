@@ -30,17 +30,15 @@
   ;; `raco glaze build` (no --name) crashed on exactly this input. The
   ;; derivation must produce the directory name either way.
   (define temp-dir (make-temporary-file "glaze-build-name-~a" 'directory))
-  (dynamic-wind
-   void
-   (lambda ()
-     (define dir-name (path->string (last (explode-path temp-dir))))
-     (check-equal? (project-name-from-entry (build-path temp-dir "main.rkt"))
-                   dir-name)
-     (parameterize ([current-directory temp-dir])
-       (check-equal? (project-name-from-entry "main.rkt") dir-name))
-     ;; A nested entry names the directory holding it, not the project root:
-     ;; the pre-fix behavior derives from the entry's own directory.
-     (make-directory* (build-path temp-dir "app"))
-     (check-equal? (project-name-from-entry (build-path temp-dir "app" "main.rkt"))
-                   "app"))
-   (lambda () (delete-directory/files temp-dir))))
+  (dynamic-wind void
+                (lambda ()
+                  (define dir-name (path->string (last (explode-path temp-dir))))
+                  (check-equal? (project-name-from-entry (build-path temp-dir "main.rkt")) dir-name)
+                  (parameterize ([current-directory temp-dir])
+                    (check-equal? (project-name-from-entry "main.rkt") dir-name))
+                  ;; A nested entry names the directory holding it, not the project root:
+                  ;; the pre-fix behavior derives from the entry's own directory.
+                  (make-directory* (build-path temp-dir "app"))
+                  (check-equal? (project-name-from-entry (build-path temp-dir "app" "main.rkt"))
+                                "app"))
+                (lambda () (delete-directory/files temp-dir))))
