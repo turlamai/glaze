@@ -6,6 +6,7 @@ This directory has one owner for each durable decision. New documents must link 
 
 - [Current architecture](architecture.md): the runtime, transport, trust, module, and dependency boundaries that are true today.
 - [Glaze 1.0 plan](1.0-plan.md): the active sequence, gates, evidence, work ownership, and next implementation handoff. Delete it after the 1.0 gates close.
+- [Glaze 1.0 go/no-go ledger](1.0-g5-ledger.md): the G5 evidence ledger — every gate-closing run, the baseline freeze, the facade-migration proof, and the live documentation-behavior pass, with a dated conditional-go recommendation. Delete it together with the plan after the 1.0 tag.
 - [API stability](api-stability.md): public-module tiers, compatibility rules, and the exact export gate.
 - [AI implementation handoff](agent-handoff.md): the one-slice execution, ownership, validation, and stop rules used by ZCode and other agents.
 
