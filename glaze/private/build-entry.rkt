@@ -5,11 +5,26 @@
 ;; application-startup semantics as well as process and filesystem staging.
 
 (require racket/file
+         racket/list
          racket/path)
 
 (provide entry-declares-main-submodule?
          entry-module-source
+         project-name-from-entry
          default-entry-template)
+
+;; The application name for the bare `raco glaze build` form is the directory
+;; holding the entry. `file-name-from-path` cannot do this job: Racket's
+;; `path-only` may return the directory with a trailing separator, and
+;; `file-name-from-path` answers #f for a path whose last element is empty
+;; (the 0.18 bare-build crash). `explode-path` is insensitive to the
+;; separator, so its last element is the name either way.
+(define (project-name-from-entry user-entry)
+  (define entry-path
+    (if (complete-path? user-entry)
+        user-entry
+        (path->complete-path user-entry)))
+  (path->string (last (explode-path (path-only entry-path)))))
 
 (define (entry-declares-main-submodule? entry-path)
   ;; Read the module form instead of searching its text: a comment or string

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The bare `raco glaze build` form documented in the README quick start no
+  longer crashes: deriving the application name from the project directory
+  used `file-name-from-path` on `path-only` output, which can carry a
+  trailing separator and makes that helper answer `#f`
+  (`path->string: contract violation` on every bare build whose project
+  layout hit the separator form; CI never saw it because every CI build
+  passes `--name`). The derivation moved to
+  `project-name-from-entry` in `glaze/private/build-entry` and is
+  insensitive to the separator; a regression test pins the trailing
+  form and the nested-entry semantics.
+
 ## [0.18.0] - 2026-11-06
 
 ### Added

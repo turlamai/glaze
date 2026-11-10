@@ -150,7 +150,10 @@
     (error 'build-app "entry file not found: ~a" entry-path))
   (define entry-abs (path->complete-path entry-path))
   (define project-dir (path-only entry-abs))
-  (define app-name (or name (path->string (file-name-from-path project-dir))))
+  ;; Derived names must not go through `file-name-from-path`: path-only may
+  ;; keep a trailing separator and that helper answers #f for it (0.18's
+  ;; bare `raco glaze build` crashed here). See project-name-from-entry.
+  (define app-name (or name (project-name-from-entry entry)))
   (define app-publisher (or publisher app-name))
   (define app-identifier (or identifier app-name))
   (unless (and (string? app-publisher) (not (string=? (string-trim app-publisher) "")))
