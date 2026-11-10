@@ -19,6 +19,11 @@ jobs:
   merged-only:
     if: github.event_name != 'pull_request_target' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    # Branch hygiene only: the script keeps any branch it cannot verify or
+    # delete, so a failed run costs nothing but a missed cleanup, and the
+    # job's startup has flaked transiently (~2 in 10 recent runs) with no
+    # actionable log. Do not let it mark main's push red.
+    continue-on-error: true
     steps:
       - name: Delete only unchanged local heads of already merged PRs
         uses: actions/github-script@v7
