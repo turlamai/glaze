@@ -88,7 +88,11 @@
 ;;                  subject name for signtool
 ;;                Linux: signing is not standard; the flag is ignored with a
 ;;                  warning
-;;   #:entitlements — macOS only: path to a .entitlements plist
+;;   #:entitlements — macOS only: path to a .entitlements plist; under
+;;                  hardened runtime (the default for real identities)
+;;                  com.apple.security.cs.allow-jit is always merged in,
+;;                  because the embedded Racket engine's runtime native
+;;                  compilation crashes without it
 ;;   #:no-hardened-runtime? — macOS only: skip `--options runtime`
 ;;                  (hardened runtime is on by default; notarization
 ;;                  requires it)

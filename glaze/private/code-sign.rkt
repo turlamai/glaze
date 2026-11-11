@@ -54,6 +54,72 @@
 ;; to map the framework: "different Team IDs"). Entitlements apply to the
 ;; main executable only; the hardened-runtime option applies to all code
 ;; (notarization requires it everywhere).
+
+;; Every Glaze app embeds the Racket engine, whose Chez-based runtime
+;; compiles to native code at runtime through MAP_JIT. Under hardened
+;; runtime, MAP_JIT requires the com.apple.security.cs.allow-jit
+;; entitlement — without it the first dynamic compilation kills the
+;; process with SIGTRAP (verified on macOS arm64: hardened without the
+;; entitlement crashes on `eval`, with it the same binary runs). So a
+;; hardened-runtime signature always carries the entitlement, merged
+;; into user-supplied entitlements rather than replacing them. This is
+;; the same conclusion rivet ships in its entitlements manifest.
+(define allow-jit-key "com.apple.security.cs.allow-jit")
+
+(define default-entitlements-xml
+  "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<!DOCTYPE plist PUBLIC \"//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
+<plist version=\"1.0\">
+<dict>
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+</dict>
+</plist>
+")
+
+;; Returns a plist path whose contents guarantee allow-jit alongside the
+;; user's own keys, or #f when no entitlements file should be passed to
+;; codesign (ad-hoc builds keep their plain signatures). `created?` reports
+;; whether the caller must delete the returned file.
+(define (effective-entitlements user-path hardened?)
+  (cond
+    [(not hardened?) (values user-path #f)]
+    [(not user-path)
+     ;; the default plist carries the key directly — no plutil needed
+     (define path (make-temporary-file "glaze-entitlements-~a.plist"))
+     (display-to-file default-entitlements-xml path #:exists 'truncate)
+     (values path #t)]
+    [else
+     (define plutil (find-executable-path "plutil"))
+     (unless plutil
+       (error 'build-app "plutil not found; cannot merge hardened-runtime entitlements"))
+     (define path (make-temporary-file "glaze-entitlements-~a.plist"))
+     (display-to-file (file->string user-path) path #:exists 'truncate)
+     ;; plutil semantics: -extract reads a key, -insert adds a missing key,
+     ;; -replace overwrites an existing one. plutil reads dots in key paths
+     ;; as nesting separators, so reverse-DNS keys need their dots escaped.
+     ;; Normalize the key to true in all three states (absent / false /
+     ;; already true).
+     (define escaped-key (string-replace allow-jit-key "." "\\."))
+     (define current
+       (call-with-output-string
+        (lambda (out)
+          (parameterize ([current-output-port out])
+            (system*/exit-code plutil "-extract" escaped-key "raw" "-o" "-"
+                               (path->string path))))))
+     (define fix-args
+       (cond
+         [(string=? (string-trim current) "true") #f]
+         [(string=? (string-trim current) "false")
+          (list "-replace" escaped-key "-bool" "true")]
+         [else (list "-insert" escaped-key "-bool" "true")]))
+     (when fix-args
+       (unless (zero? (apply system*/exit-code plutil
+                             (append fix-args (list (path->string path)))))
+         (delete-file path)
+         (error 'build-app "could not merge allow-jit into the entitlements plist")))
+     (values path #t)]))
+
 (define (sign-macos-bundle bundle identity entitlements hardened-runtime?)
   (define codesign (find-executable-path "codesign" #f))
   (unless codesign
@@ -64,6 +130,8 @@
   ;; framework. Hardened runtime only matters for notarization, which needs
   ;; a real identity anyway; skip it for ad-hoc.
   (define hardened? (and hardened-runtime? (not (equal? identity "-"))))
+  (define-values (effective-entitlements-path entitlements-created?)
+    (effective-entitlements entitlements hardened?))
   ;; codesign rewrites the main executable — make sure it is writable.
   (define main-exe (build-path bundle "Contents" "MacOS" (path->string (file-name-from-path bundle))))
   (when (file-exists? main-exe)
@@ -86,15 +154,21 @@
   ;; 2. the bundle itself: signs the main executable and seals resources.
   (define args
     (append common-args
-            (if entitlements
-                (list "--entitlements" (path->string (path->complete-path entitlements)))
+            (if effective-entitlements-path
+                (list "--entitlements" (path->string (path->complete-path effective-entitlements-path)))
                 '())
             (list (path->string bundle))))
-  (unless (zero? (apply system*/exit-code codesign args))
-    (error 'build-app "codesign failed for ~a (identity ~a)" bundle identity))
-  (unless (zero? (system*/exit-code codesign "--verify" "--strict" (path->string bundle)))
-    (error 'build-app "codesign verify failed for ~a" bundle))
-  (fprintf (current-error-port) "[glaze] signed: ~a (identity ~a)\n" bundle identity))
+  (dynamic-wind
+      void
+      (lambda ()
+        (unless (zero? (apply system*/exit-code codesign args))
+          (error 'build-app "codesign failed for ~a (identity ~a)" bundle identity))
+        (unless (zero? (system*/exit-code codesign "--verify" "--strict" (path->string bundle)))
+          (error 'build-app "codesign verify failed for ~a" bundle))
+        (fprintf (current-error-port) "[glaze] signed: ~a (identity ~a)\n" bundle identity))
+      (lambda ()
+        (when entitlements-created?
+          (delete-file effective-entitlements-path)))))
 
 ;; Sign a file (Windows exe/msi, or anything signtool accepts) with the
 ;; certificate identified by `cert-spec` — a SHA-1 thumbprint (40 hex chars)
