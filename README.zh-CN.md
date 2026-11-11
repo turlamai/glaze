@@ -12,6 +12,8 @@
 
 需要 Racket 后端与共享 HTML/CSS/JS 界面，并运行于系统原生 WebView 时选择 Glaze。必须使用真实桌面窗口，不提供外部浏览器回退；产品数据、权限和服务政策归应用。
 
+双语主页见 [glaze.jrtx.site](https://glaze.jrtx.site/)。
+
 [使用选择、成熟度、升级与支持](docs/USING.zh-CN.md) · [English](docs/USING.md)
 
 ## 为什么选择 Glaze？

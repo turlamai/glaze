@@ -12,6 +12,8 @@ Build desktop apps with a [Racket](https://racket-lang.org/) backend and a web f
 
 Choose Glaze for a Racket backend and a shared HTML/CSS/JS interface inside native system WebViews. A real desktop window is mandatory; there is no external-browser fallback. Product data/permissions and service policy remain application-owned.
 
+The bilingual homepage is [glaze.jrtx.site](https://glaze.jrtx.site/).
+
 [Fit, maturity, upgrades and support](docs/USING.md) · [简体中文](docs/USING.zh-CN.md)
 
 ## Why Glaze?
