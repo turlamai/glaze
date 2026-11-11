@@ -32,9 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   signing/update pipeline pointers, and the taskboard example reference.
   `examples/README.md` is now English-first with the Chinese table retained.
 
-- The vestigial `glaze/public/.gitkeep` stub directory is removed; packaged
-  apps bundle the project's own `public/`, not a library-owned one. CI now
-  asserts the rendered manual produces a real `glaze/index.html`.
+- `glaze/public/` stays in the tree, and the reason is now written down:
+  `glaze/private/public-assets.rkt` declares it with `define-runtime-path`
+  so `raco distribute` copies it next to every packaged executable —
+  removing the placeholder directory breaks `raco glaze build` (caught by
+  the Desktop Architectures job). CI now also asserts the rendered manual
+  produces a real `glaze/index.html`.
 
 - The bare `raco glaze build` form documented in the README quick start no
   longer crashes: deriving the application name from the project directory
