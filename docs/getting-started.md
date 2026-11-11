@@ -134,8 +134,17 @@ raco glaze build --name myapp
 
 Expected: a distributable under `dist/`. For an installer use `--installer` with a reviewed version, publisher and stable `--identifier`. Missing installer tooling can trigger an archive **packaging format** fallback with a warning, but the packaged application still needs its real native WebView. Production shipments require platform smoke checks and signing/notarization when applicable.
 
+After packaging, report the artifact against the family size/startup budgets:
+
+```sh
+raco glaze measure
+```
+
+Signing and notarization flags (`--sign`, `--notarize`, `--timestamp-url`) and the Ed25519 update pipeline (`updater-keygen`, `update-sign`, `update-verify`, `manifest-sign`, `manifest-verify`) are documented by `raco glaze help`; the release workflow lives in [release-and-updates](release-and-updates.md).
+
 ## Explore further
 
+- [Taskboard example](../examples/taskboard/): the product-grade example with typed routes, a persistent store, SSE, tests and real-window acceptance.
 - [Counter example](../examples/counter/): more routes, state and events.
 - [Agent-native workflow](agent-native.md): inspect, doctor, schema and verify.
 - [Current architecture](architecture.md): native transport and compatibility adapter.

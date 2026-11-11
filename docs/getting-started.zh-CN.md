@@ -134,8 +134,17 @@ raco glaze build --name myapp
 
 预期：`dist/` 下产生可分发产物。需要安装器时，使用 `--installer` 并审查版本、发布者和稳定的 `--identifier`。缺少安装器工具可能带警告回退为归档**打包格式**；应用仍需要真正原生 WebView。生产分发需要平台冒烟及适用的签名/公证。
 
+打包完成后，把产物对照家族的体积/启动预算上报：
+
+```sh
+raco glaze measure
+```
+
+签名与公证参数（`--sign`、`--notarize`、`--timestamp-url`）以及 Ed25519 更新管线（`updater-keygen`、`update-sign`、`update-verify`、`manifest-sign`、`manifest-verify`）见 `raco glaze help`；发布流程见[发布与更新（英文）](release-and-updates.md)。
+
 ## 继续探索
 
+- [Taskboard 示例](../examples/taskboard/)：产品级完整示例——类型化路由、持久化 store、SSE、测试与真窗口验收。
 - [Counter 示例](../examples/counter/)：更多路由、状态和事件。
 - [Agent 工作流（英文）](agent-native.md)：inspect、doctor、schema、verify。
 - [当前架构（英文）](architecture.md)：原生传输及兼容适配器。

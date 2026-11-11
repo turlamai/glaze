@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The Chinese README now carries the two sections that had silently drifted
+  away from the English original: Repository Structure and App Platform
+  APIs, restoring full bilingual parity on a public user path. The release
+  badge switched to the dynamic GitHub release badge in both languages so a
+  version bump no longer requires editing two READMEs.
+
+- The Scribble manual's CLI command list no longer lags the shipped CLI: it
+  now mirrors every command in `glaze-cli/cli.rkt`'s dispatch table
+  (adding `measure`, `install`, `updater-keygen`, `update-sign`,
+  `update-verify`, `manifest-sign`, `manifest-verify`), and the manual gains
+  a stable `glaze` anchor, a facade note about the 0.18.0 deprecation shims,
+  the architecture diagram, the stable `glaze/core` facade section, signing,
+  semver, assets, FFI discovery, and WebView startup failure feedback
+  sections, an export index, and Further reading.
+
+- The agent-native workflow document now covers the 0.18.0 additions:
+  `build`'s schema-status warning, `measure`'s budget enforcement, the
+  exit-code contract, and the unattended verification examples
+  (`agent-verify.rkt`, `taskboard/`). The getting-started tutorial
+  (English and Chinese) gained the post-build `measure` step, the
+  signing/update pipeline pointers, and the taskboard example reference.
+  `examples/README.md` is now English-first with the Chinese table retained.
+
+- The vestigial `glaze/public/.gitkeep` stub directory is removed; packaged
+  apps bundle the project's own `public/`, not a library-owned one. CI now
+  asserts the rendered manual produces a real `glaze/index.html`.
+
 - The bare `raco glaze build` form documented in the README quick start no
   longer crashes: deriving the application name from the project directory
   used `file-name-from-path` on `path-only` output, which can carry a

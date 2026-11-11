@@ -4,7 +4,7 @@
 
 **Human-first. Agent-native. Local by design. —— 为人而生，为 Agent 原生设计，本地优先。**
 
-[![CI](https://github.com/turlamai/glaze/actions/workflows/ci.yml/badge.svg)](https://github.com/turlamai/glaze/actions/workflows/ci.yml) ![Racket](https://img.shields.io/badge/Racket-9F1D20?logo=racket&logoColor=white) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![Release](https://img.shields.io/badge/release-0.18.0-C15F3C)](CHANGELOG.md)
+[![CI](https://github.com/turlamai/glaze/actions/workflows/ci.yml/badge.svg)](https://github.com/turlamai/glaze/actions/workflows/ci.yml) ![Racket](https://img.shields.io/badge/Racket-9F1D20?logo=racket&logoColor=white) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![Version](https://img.shields.io/github/v/release/turlamai/glaze?label=version)](https://github.com/turlamai/glaze/releases/latest)
 
 [English](README.md) · **中文**
 
@@ -287,6 +287,20 @@ myapp/
 ```
 
 从这里加入 `define-api-routes`、通过 `glaze.api.*` 调用并更新 schema 的完整流程，请参考[入门教程](docs/getting-started.zh-CN.md)。
+
+## 仓库结构
+
+仓库根目录是一个可安装的包，每个顶层目录是一个 Racket collection：
+
+```text
+glaze/                # 仓库根 = `glaze` 包（info.rkt）
+├── glaze/            # 库：服务器、API 桥、webview、托盘、sys、build、app
+├── glaze-cli/        # CLI 工具（raco glaze init / dev / build）
+├── glaze-doc/        # 文档（Scribble）
+├── glaze-test/       # 测试套件
+├── examples/         # 可运行示例
+└── scripts/          # CI 辅助脚本（webview e2e）
+```
 
 ## API
 
@@ -632,6 +646,30 @@ SSE 与嵌入式 WebView 前端共享同一个本地 origin。
 - Windows：`Shell_NotifyIconW`
 - macOS：`NSStatusItem` / `NSMenu`
 - Linux：`libayatana-appindicator` + GTK
+
+## 应用平台 API
+
+```racket
+(require glaze)
+
+(define f (pick-file #:title "Open report" #:filters '(("Reports" "*.rep" "*.csv"))))
+(define dir (pick-folder #:title "Where?"))
+(define out (save-file-dialog #:title "Save as" #:default-name "out.rep"))
+
+(webview-set-menu! wv
+  (list (make-menu "File"
+                   (list (make-menu-item "Open…" #:accel "CmdOrCtrl+O"
+                                         #:action open-doc)
+                         menu-separator
+                         (make-menu-item "Quit" #:action (lambda () (exit 0)))))))
+
+(ensure-url-scheme! "myapp")
+(auto-launch-set! "MyApp" #t)
+(auto-launch-enabled? "MyApp")
+
+(for ([w (all-webviews)]) (webview-focus! w))
+(wait-for-webviews)
+```
 
 ## 示例
 

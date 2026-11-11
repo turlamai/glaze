@@ -43,6 +43,7 @@ jobs:
           raco scribble ++xref-in setup/xref load-collections-xref \
             --htmls --dest "$RUNNER_TEMP/glaze-doc" \
             glaze-doc/scribblings/glaze.scrbl
+          test -s "$RUNNER_TEMP/glaze-doc/glaze/index.html"
 
       - name: Check formatting
         if: matrix.os == 'ubuntu-24.04' && matrix.racket-version == '9.3'
