@@ -105,17 +105,14 @@
        (call-with-output-string
         (lambda (out)
           (parameterize ([current-output-port out])
-            (system*/exit-code plutil "-extract" escaped-key "raw" "-o" "-"
-                               (path->string path))))))
+            (system*/exit-code plutil "-extract" escaped-key "raw" "-o" "-" (path->string path))))))
      (define fix-args
        (cond
          [(string=? (string-trim current) "true") #f]
-         [(string=? (string-trim current) "false")
-          (list "-replace" escaped-key "-bool" "true")]
+         [(string=? (string-trim current) "false") (list "-replace" escaped-key "-bool" "true")]
          [else (list "-insert" escaped-key "-bool" "true")]))
      (when fix-args
-       (unless (zero? (apply system*/exit-code plutil
-                             (append fix-args (list (path->string path)))))
+       (unless (zero? (apply system*/exit-code plutil (append fix-args (list (path->string path)))))
          (delete-file path)
          (error 'build-app "could not merge allow-jit into the entitlements plist")))
      (values path #t)]))
@@ -155,20 +152,21 @@
   (define args
     (append common-args
             (if effective-entitlements-path
-                (list "--entitlements" (path->string (path->complete-path effective-entitlements-path)))
+                (list "--entitlements"
+                      (path->string (path->complete-path effective-entitlements-path)))
                 '())
             (list (path->string bundle))))
   (dynamic-wind
-      void
-      (lambda ()
-        (unless (zero? (apply system*/exit-code codesign args))
-          (error 'build-app "codesign failed for ~a (identity ~a)" bundle identity))
-        (unless (zero? (system*/exit-code codesign "--verify" "--strict" (path->string bundle)))
-          (error 'build-app "codesign verify failed for ~a" bundle))
-        (fprintf (current-error-port) "[glaze] signed: ~a (identity ~a)\n" bundle identity))
-      (lambda ()
-        (when entitlements-created?
-          (delete-file effective-entitlements-path)))))
+   void
+   (lambda ()
+     (unless (zero? (apply system*/exit-code codesign args))
+       (error 'build-app "codesign failed for ~a (identity ~a)" bundle identity))
+     (unless (zero? (system*/exit-code codesign "--verify" "--strict" (path->string bundle)))
+       (error 'build-app "codesign verify failed for ~a" bundle))
+     (fprintf (current-error-port) "[glaze] signed: ~a (identity ~a)\n" bundle identity))
+   (lambda ()
+     (when entitlements-created?
+       (delete-file effective-entitlements-path)))))
 
 ;; Sign a file (Windows exe/msi, or anything signtool accepts) with the
 ;; certificate identified by `cert-spec` — a SHA-1 thumbprint (40 hex chars)
