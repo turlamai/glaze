@@ -33,8 +33,8 @@
 
 ;; NOTE: Racket's `valid-version?` rejects a trailing ".0" component
 ;; ("0.8.0" is invalid; "0.8" is the same release).
-(define version "0.18")
-(define release-version "0.18.0")
+(define version "0.19")
+(define release-version "0.19.0")
 
 ;; `raco test --package` otherwise executes every backend implementation as a
 ;; standalone test module. The dispatcher and platform CI exercise these

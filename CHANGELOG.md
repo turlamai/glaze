@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-11-12
+
+### Removed
+
+- **BREAKING**: the unsigned lightweight update path is gone. `glaze/update`
+  no longer provides `check-update`, and `run-app` no longer accepts
+  `#:check-update`; the bare-JSON manifest parse (no signature verification,
+  errors swallowed to `#f`) was attack surface without a user — every shipped
+  host rides the Ed25519-signed `fetch-update-manifest` path, which keeps its
+  `verify-signed-manifest` gate, bounded redirects, and digest checks. The
+  shared transport (user agent, bounded input, redirect policy) stays; the
+  semver helpers (`newer-version?` and friends) stay exported for hosts that
+  build their own signed checker. Docs, the API-stability classification,
+  and the showcase route dropped the path with it.
+
 ### Fixed
 
 - The Chinese README now carries the two sections that had silently drifted
