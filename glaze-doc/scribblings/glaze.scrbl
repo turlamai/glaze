@@ -1,11 +1,23 @@
 #lang scribble/manual
 
-@title{Glaze}
+@title[#:tag "glaze"]{Glaze}
 @author{TurLamAI}
+
+@defmodule[glaze]
 
 Glaze builds desktop applications with a Racket backend and a Web frontend
 rendered inside a native OS window. Windows uses WebView2, macOS uses
 WKWebView, and Linux uses WebKitGTK.
+
+@image["docs/glaze-architecture.svg" #:scale 0.9]{
+The Glaze architecture: a Racket engine behind one native WebView window per
+application, with the typed JS bridge, capabilities, and platform sys
+integrations owned by the Racket side.}
+
+@margin-note{The @racket[(require glaze)] facade re-exports the stable
+surface, including the 0.18.0 deprecation shims documented by
+@filepath{docs/api-stability.md}; they are scheduled for removal in 0.19.
+New code should prefer the primary modules named there.}
 
 @bold{Human-first. Agent-native. Local by design.} New projects include an
 agent instruction contract and native-window verification script. The CLI
@@ -1471,17 +1483,169 @@ the NSIS Add/Remove Programs identity.
 
 @section{CLI Commands}
 
+The command list below mirrors @filepath{glaze-cli/cli.rkt}'s dispatch table
+and @tt{raco glaze help}; it must not shrink below the shipped commands.
+
 @verbatim{
  raco glaze init <name>                Create a native desktop project
  raco glaze dev                        Run the project's native main.rkt
-  raco glaze inspect --json            Inspect project paths
-  raco glaze doctor --json             Diagnose WebView readiness
-  raco glaze schema check --json       Check API compatibility
-  raco glaze schema write              Explicitly update API baseline
-  raco glaze verify                    Verify real native window
+ raco glaze inspect --json             Inspect project paths and verification map
+ raco glaze doctor --json              Diagnose package/WebView readiness
+ raco glaze schema check --json        Check API compatibility
+ raco glaze schema write               Explicitly update API baseline
+ raco glaze verify                     Verify real native window
+ raco glaze measure                    Report packaged-app size/startup against budgets
  raco glaze build                      Build a distributable / installer
+ raco glaze updater-keygen             Create an Ed25519 keypair for update signing
+ raco glaze update-sign                Sign an update artifact (Ed25519 over its sha256)
+ raco glaze update-verify              Verify an update artifact signature
+ raco glaze manifest-sign              Sign a validated update manifest
+ raco glaze manifest-verify            Verify a signed update manifest
+ raco glaze install                    Pin the glaze package to a revision and link it
  raco glaze help                       Show help
 }
 
 There is intentionally no browser-mode @exec{dev} or @exec{serve} command.
 Development and production use the same native WebView startup path.
+
+@section[#:tag "glaze-core"]{The stable facade}
+
+@defmodule[glaze/core]
+
+@racketmodname[glaze/core] is the stable tier-1 facade named by
+@filepath{docs/api-stability.md}: it exports the primary application surface
+— @racket[run-app], @racket[app-quit!], @racket[open-app-window], the HTTP
+API builders (@racket[define-api-routes], @racket[GET], @racket[POST],
+@racket[api-response]), window operations, and the platform capability
+modules — with one stability contract. @racketmodname[glaze] re-exports it
+together with the deprecated shims noted above.
+
+@section{Signing and hashing}
+
+@defmodule[glaze/signing]
+
+Update artifacts, manifests, and release evidence are signed with Ed25519
+through OpenSSL. These are the same primitives the @exec{raco glaze
+updater-keygen} / @exec{update-sign} / @exec{update-verify} /
+@exec{manifest-sign} / @exec{manifest-verify} commands drive.
+
+@defproc[(signing-keygen [#:out-dir out-dir path-string?]
+                         [#:key-id key-id string?]
+                         [#:password password (or/c string? #f) #f])
+         void?]{
+Writes an Ed25519 private/public keypair for update signing. With
+@racket[password] the private key is password-encrypted.}
+
+@defproc[(sign-bytes [key any/c] [data bytes?]) bytes?]{
+Signs the exact bytes; the signature is Ed25519 over the SHA-256 digest of
+@racket[data].}
+
+@defproc[(verify-bytes [public-key any/c] [data bytes?] [signature bytes?])
+         boolean?]{
+Verifies a signature over the exact bytes.}
+
+@defproc[(sign-file [key any/c] [path path-string?]) bytes?]{
+Signs a file's exact bytes.}
+
+@defproc[(verify-signature [public-key any/c] [path path-string?]
+                           [signature bytes?])
+         boolean?]{
+Verifies a file signature.}
+
+@defproc[(sha256-file [path path-string?]) string?]{
+Returns the lowercase hex SHA-256 digest of a file.}
+
+@defproc[(sha256-string [data string?]) string?]{
+Returns the lowercase hex SHA-256 digest of a string's UTF-8 bytes.}
+
+@defproc[(public-key-fingerprint [public-key any/c]) string?]{
+Returns a stable fingerprint for a public key.}
+
+@defproc[(openssl-path) path?]{
+The discovered OpenSSL 3 executable used for signing.}
+
+@defproc[(openssl-available?) boolean?]{
+Whether a usable OpenSSL 3 was found.}
+
+@section{Version comparisons}
+
+@defmodule[glaze/semver]
+
+Update channels and update manifests compare versions with these helpers;
+prerelease identifiers sort by SemVer 2.0 rules.
+
+@defproc[(semver? [value any/c]) boolean?]{
+Recognizes a valid SemVer 2.0 version string.}
+
+@defproc[(semver-compare [left string?] [right string?])
+         (or/c '< '= '>)]{
+Compares two versions, including prerelease precedence.}
+
+@deftogether[(
+@defproc[(semver<? [left string?] [right string?]) boolean?]
+@defproc[(semver<=? [left string?] [right string?]) boolean?]
+@defproc[(semver=? [left string?] [right string?]) boolean?]
+@defproc[(semver>=? [left string?] [right string?]) boolean?]
+@defproc[(semver>? [left string?] [right string?]) boolean?]
+)]{
+The comparison operators over @racket[semver-compare].}
+
+@defproc[(valid-update-channel? [value any/c]) boolean?]{
+Recognizes a valid update channel name.}
+
+@defproc[(channel-accepts-version? [channel string?] [value string?])
+         boolean?]{
+Whether @racket[channel] accepts @racket[value]: a stable channel never
+accepts a prerelease, and a prerelease channel accepts only its own
+prerelease family.}
+
+@section{Frontend assets}
+
+@defmodule[glaze/assets]
+
+@defproc[(resolve-public-dir [#:project-dir project-dir path-string?]
+                             [#:public-dir public-dir (or/c path-string? #f) #f])
+         path?]{
+Resolves the directory served as the frontend root: an explicit
+@racket[public-dir] wins, otherwise the project's @filepath{public/}. Used
+by @racket[run-app] and the packaged-application path.}
+
+@section{FFI discovery}
+
+@defmodule[glaze/ffi-discovery]
+
+Every native-library load in Glaze goes through @racket[ffi-lib*] rather
+than raw @racket[ffi-lib]: it searches the platform-specific directories and
+records the failure reason so capabilities that depend on an optional native
+library can degrade with guidance instead of an unexplained crash.
+
+@defproc[(ffi-lib* [name string?]
+                   [versions (listof (or/c string? (listof string?) #f)) '()])
+         ffi-lib?]{
+Loads one native library across the standard and Glaze-specific search
+directories.}
+
+@defproc[(ffi-lib-reason) (or/c string? #f)]{
+The most recent discovery failure reason, for diagnostics.}
+
+@defthing[ffi-search-dirs (listof path?)]{
+The directories @racket[ffi-lib*] searches, in order.}
+
+@section{WebView startup failure feedback}
+
+@defmodule[glaze/webview/startup-feedback]
+
+@defproc[(show-webview-startup-error! [message string?]) void?]{
+Renders a native OS error dialog with platform-specific installation or
+repair guidance when the native WebView cannot start. Glaze is
+native-GUI-only: a failed WebView startup must surface this guidance and
+fail, never fall back to a browser window.}
+
+@index-section[]
+
+@section[#:tag "glaze-further-reading"]{Further reading}
+
+@filepath{docs/api-stability.md} owns the stability tiers and the deprecation
+shim ledger; @filepath{docs/README.md} routes the canonical guides;
+@hyperlink["https://github.com/turlamai/glaze"]{github.com/turlamai/glaze}
+hosts the source and the issue tracker.

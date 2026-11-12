@@ -1,4 +1,36 @@
-# Glaze Examples — 功能索引
+# Glaze Examples
+
+**English** · [中文](#中文)
+
+| Example | One line | Capabilities shown |
+|---|---|---|
+| [`showcase/`](showcase/) | **Every capability in one window (look here first)** | Macro routes in all shapes (type checks / 400 / :path / 500), SSE event stream + backend error flow-back (on-error), system features (clipboard / notification / reveal / window control), agent verification (title/url/capture + screenshot), API token (401 demo), update check, tray, single instance |
+| [`taskboard/`](taskboard/) | **Product-grade example (run this first)** | Typed routes + store persistence + SSE snapshot push, generated client, lazy startup, `verify.rkt` real-window acceptance, domain/store/HTTP three-layer tests, schema baseline |
+| [`hello/`](hello/) | 8-line minimal app | `run-app` one-liner entry, native window, static page |
+| [`counter/`](counter/) | JS↔Racket bridge showcase | `define-api-routes`, SSE broadcast driving UI, generated `api.js` client, composable modules (`provide api/bus`) |
+| [`webview-demo.rkt`](webview-demo.rkt) | Cross-platform WebView lifecycle | Native window, load/navigate/close/on-close/verification APIs printed live, watchdog |
+| [`agent-verify.rkt`](agent-verify.rkt) | Unattended verification | Agent workflow: polled assertions + screenshot + exit code |
+| [`tray-demo.rkt`](tray-demo.rkt) | Cross-platform tray | `make-tray` / menus / tooltip live updates |
+
+Start new work from the [full tutorial](../docs/getting-started.md); the
+examples here demonstrate individual capabilities, while the tutorial covers
+`init`, typed APIs, schema checks, real-window verification, and building.
+
+## Quick start
+
+```bash
+racket examples/showcase/main.rkt     # everything in one window (single-instance lock)
+racket examples/counter/main.rkt      # bridge + events
+racket examples/hello/main.rkt        # minimal app
+```
+
+Glaze examples always run in a native desktop WebView and never fall back to
+the system browser. When a runtime dependency such as WebView2 or WebKitGTK is
+missing, startup fails with the platform-specific installation/repair guidance.
+
+Every example can be packaged with `raco glaze build`.
+
+# 中文
 
 | 示例 | 一句话 | 展示的能力 |
 |---|---|---|
@@ -10,7 +42,7 @@
 | [`agent-verify.rkt`](agent-verify.rkt) | 无人值守验证 | agent 工作流：轮询断言 + 截图 + 退出码 |
 | [`tray-demo.rkt`](tray-demo.rkt) | 跨平台托盘 | make-tray/菜单/tooltip 动态更新 |
 
-新应用从[完整入门教程](../docs/getting-started.md)开始；本页示例仅展示独立功能，统一教程涵盖 `init`、类型化 API、schema 检查、真窗口验证与构建。
+新应用从[完整入门教程](../docs/getting-started.zh-CN.md)开始；本页示例仅展示独立功能，统一教程涵盖 `init`、类型化 API、schema 检查、真窗口验证与构建。
 
 ## 快速开始
 
