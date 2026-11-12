@@ -87,7 +87,6 @@
                               verify-signature
                               sha256-file
                               public-key-fingerprint
-                              check-update
                               write-signed-update-manifest
                               verify-file-sha256
                               semver?

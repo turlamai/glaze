@@ -65,7 +65,6 @@ packaged apps can opt into native GLZ1 transport.
           [#:max-body-size max-body-size exact-nonnegative-integer? 8388608]
           [#:on-close on-close (-> any) (lambda () (void))]
           [#:on-error on-error (or/c #f procedure?) #f]
-          [#:check-update check-update (or/c #f string?) #f]
           [#:current-version current-version string? "0.0.0"]
           [#:app-id app-id (or/c #f string?) #f]
           [#:window-state window-state (or/c #f #t path-string?) #f]
@@ -89,8 +88,9 @@ port is never an open API for other local processes or web pages. Pass an
 explicit string to choose the token, or @racket[#:api-token #f] to opt out
 (dev tooling, trusted kiosk setups). @racket[#:max-body-size] caps the request
 body the server will buffer (413 above the limit). @racket[#:on-error] receives
-API handler failures. @racket[#:check-update] wires an update manifest into the
-application lifecycle.
+API handler failures. Update checks are the backend's job over an
+Ed25519-signed feed (@secref["update-checks"]); @racket[run-app] never polls
+an unsigned manifest.
 
 @racket[#:transport 'native] serves the page and API entirely inside the
 WebView's process boundary (@secref["native-transport"]): the page loads
@@ -1296,13 +1296,9 @@ other processes running as the same OS user.
 
 @defmodule[glaze/update]
 
-@defproc[(check-update [manifest-url string?]
-                        [#:current-version current-version string? "0.0.0"])
-         (or/c #f hash?)]{
-Checks a JSON manifest for a newer version. An optional @litchar{sha256} field
-is passed through for artifact verification. Absolute and relative redirects
-are followed for at most ten hops.
-}
+Every feed @racket[glaze] acts on is Ed25519-verified; there is no unsigned
+manifest path. Version ordering helpers remain exported for hosts that build
+their own signed checker.
 @defproc[(newer-version? [candidate string?] [current string?]) boolean?]{}
 @defproc[(verify-file-sha256 [path (or/c string? path?)]
                              [expected-hex string?]) boolean?]{

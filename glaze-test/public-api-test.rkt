@@ -239,7 +239,6 @@
                                             tray-supported?
                                             tray?))
     (glaze/distribution (build-app channel-accepts-version?
-                                   check-update
                                    deb-arch-name
                                    deb-control
                                    default-entry-template

@@ -103,44 +103,10 @@
 (check-true (newer-version? "2.0" "1.9.9") "shorter version pads with zeros")
 (check-false (newer-version? "1.2" "1.2.1") "older is not newer")
 
-(define dir (make-temporary-file "upd-~a" 'directory))
-(call-with-output-file
- (build-path dir "manifest.json")
- (lambda (o) (write-bytes #"{\"version\":\"9.9.9\",\"url\":\"https://x/9.9.9\",\"notes\":\"big\"}" o))
- #:exists 'replace)
-(define redirect-count (box 0))
-(define (redirect location)
-  (set-box! redirect-count (add1 (unbox redirect-count)))
-  (response/full 302
-                 #"Found"
-                 (current-seconds)
-                 #"text/plain"
-                 (list (header #"Location" (string->bytes/utf-8 location)))
-                 '(#"redirect")))
-(define-values (p3 stop3)
-  (start-server #:port 18997
-                #:public-dir dir
-                #:api (list (GET "api/latest" (lambda (_) (redirect "../manifest.json")))
-                            (GET "api/latest-absolute"
-                                 (lambda (_) (redirect "http://127.0.0.1:18997/manifest.json")))
-                            (GET "api/loop" (lambda (_) (redirect "/api/loop"))))))
-(define info (check-update "http://127.0.0.1:18997/manifest.json" #:current-version "1.0.0"))
-(check-equal? (hash-ref info 'version) "9.9.9" "manifest parsed")
-(check-equal? (hash-ref info 'url) "https://x/9.9.9")
-(define redirected-info (check-update "http://127.0.0.1:18997/api/latest" #:current-version "1.0.0"))
-(check-equal? (hash-ref redirected-info 'version) "9.9.9" "relative 302 manifest parsed")
-(define absolute-redirected-info
-  (check-update "http://127.0.0.1:18997/api/latest-absolute" #:current-version "1.0.0"))
-(check-equal? (hash-ref absolute-redirected-info 'version) "9.9.9" "absolute 302 manifest parsed")
-(check-equal? (unbox redirect-count) 2 "each successful redirect was followed exactly once")
-(check-false (check-update "http://127.0.0.1:18997/api/loop")
-             "redirect loops fail closed after the bounded chase")
-(check-equal? (unbox redirect-count) 13 "the redirect chase stops after ten hops")
-(check-false (check-update "http://127.0.0.1:18997/manifest.json" #:current-version "9.9.9")
-             "same version -> #f")
-(check-false (check-update "http://127.0.0.1:18997/none.json") "missing manifest -> #f")
-(stop3)
-(delete-directory/files dir)
+;; The unsigned lightweight check-update path is gone: a feed glaze acts on
+;; is always the Ed25519-signed manifest (fetch-update-manifest, covered by
+;; signing-test). Redirect and bounded-chase behavior rides on the shared
+;; transport and is exercised through the signed path.
 
 ;; ---- run-app plumbing: token parameter + events pass-through ----
 (check-true (procedure? run-app))

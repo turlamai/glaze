@@ -32,7 +32,6 @@
          "capability.rkt"
          "events.rkt"
          "native-transport.rkt"
-         (rename-in "update.rkt" [check-update do-check-update])
          "webview/main.rkt"
          "sys/main.rkt")
 
@@ -281,7 +280,6 @@
                  #:quit-on-last-window? [quit-on-last-window? #t]
                  #:on-close [user-on-close (lambda () (void))]
                  #:on-error [on-error #f]
-                 #:check-update [check-update #f]
                  #:current-version [current-version "0.0.0"]
                  #:app-id [app-id #f]
                  #:window-state [window-state-option #f]
@@ -417,21 +415,10 @@
         ;; forever: report and finish the close.
         (with-handlers ([exn:fail? (lambda (e) (reporter e "app:on-close"))])
           (user-on-close))))
-    ;; Update check runs in the background under the app custodian: the
-    ;; fetch has a multi-second network timeout and a GUI app must not stall
-    ;; first paint on it, and the custodian reaps it at quit. The
-    ;; 'update-available broadcast keeps its original contract.
-    (when check-update
-      (parameterize ([current-custodian (glaze-app-custodian app)])
-        (thread (lambda ()
-                  (define info (do-check-update check-update #:current-version current-version))
-                  (when info
-                    (printf "[glaze] update available: ~a (current ~a) — ~a~n"
-                            (hash-ref info 'version #f)
-                            current-version
-                            (hash-ref info 'url #f))
-                    (when event-bus
-                      (bus-broadcast! event-bus 'update-available info)))))))
+    ;; Update checks are the backend's job over an Ed25519-signed feed
+    ;; (glaze/update's fetch-update-manifest path); run-app itself never
+    ;; polls an unsigned manifest. The 'update-available bus event remains
+    ;; the contract for hosts that run their own signed checker.
     ;; If native GUI startup fails, never leave the local HTTP server
     ;; behind. open-window's exception contains the platform-specific
     ;; install/repair instructions; preserve it unchanged.

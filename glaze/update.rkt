@@ -17,8 +17,7 @@
          "semver.rkt"
          "signing.rkt")
 
-(provide check-update
-         newer-version?
+(provide newer-version?
          verify-file-sha256
          semver?
          semver-compare
@@ -77,7 +76,10 @@
 (struct install-plan (candidate downloaded-path backup-path install restart rollback) #:transparent)
 
 ;; --------------------------------------------------------------------------
-;; Backward-compatible lightweight manifest check
+;; Shared transport: user agent, redirect policy, bounded input. The signed
+;; manifest fetch and the artifact download both ride on this; there is no
+;; unsigned manifest path — a feed that glaze will act on is always
+;; Ed25519-verified first.
 
 (define updater-user-agent '("User-Agent: Glaze-Updater/1"))
 (define updater-max-redirects 10)
@@ -134,30 +136,6 @@
       [else
        (close-input-port input)
        (error who "HTTP request failed with status ~a for ~a" code current-url)])))
-
-(define (fetch-legacy-manifest url)
-  (with-handlers ([exn:fail? (lambda (_) #f)])
-    (define input (open-update-input url 'check-update))
-    (begin0 (port->bytes input)
-      (close-input-port input))))
-
-(define (check-update manifest-url #:current-version [current "0.0.0"])
-  (define body (fetch-legacy-manifest manifest-url))
-  (and body
-       (let ([data (with-handlers ([exn:fail? (lambda (_) #f)])
-                     (bytes->jsexpr body))])
-         (and (hash? data)
-              (let ([version (hash-ref data 'version #f)])
-                (and (string? version)
-                     (newer-version? version current)
-                     (hasheq 'version
-                             version
-                             'url
-                             (hash-ref data 'url #f)
-                             'notes
-                             (hash-ref data 'notes #f)
-                             'sha256
-                             (hash-ref data 'sha256 #f))))))))
 
 (define (verify-file-sha256 path expected-hex)
   (and (string? expected-hex)

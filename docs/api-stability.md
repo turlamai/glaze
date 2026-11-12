@@ -249,7 +249,6 @@ charter.
 |---|---|---|
 | `build-app` | stable | |
 | `channel-accepts-version?` | stable | |
-| `check-update` | stable | |
 | `deb-arch-name` | expert | |
 | `deb-control` | expert | |
 | `default-entry-template` | expert | entry-generation customization |

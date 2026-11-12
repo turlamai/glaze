@@ -101,23 +101,10 @@
              'title (and wv (webview-title wv))
              'url (and wv (webview-url wv))
              'shot-bytes (and shot (file-size shot))))]
-  ;; update check against a local manifest (v99 > current)
-  [(POST "api/check-update")
-   (check-update-now)
-   (let ([info (check-update "http://127.0.0.1:18952/manifest.json"
-                             #:current-version "0.3.0")])
-     (hasheq 'found (and info #t) 'info info))]
-  ;; token-guarded secret (guarded by #:api-token below)
   [(POST "api/secret")
    (secret)
    (hasheq 'secret "the cake is a lie")])
 
-;; a deliberately hostile manifest for the update tab
-(call-with-output-file (build-path public "manifest.json")
-  (lambda (o)
-    (write-bytes (string->bytes/utf-8
-                  "{\"version\":\"99.0.0\",\"url\":\"https://example.com/99\",\"notes\":\"showcase manifest\"}") o))
-  #:exists 'replace)
 
 (module+ main
   (unless (single-instance? "glaze-showcase")
