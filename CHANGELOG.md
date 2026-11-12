@@ -39,6 +39,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the Desktop Architectures job). CI now also asserts the rendered manual
   produces a real `glaze/index.html`.
 
+- macOS hardened-runtime signatures now always carry
+  `com.apple.security.cs.allow-jit`. The embedded Racket engine compiles to
+  native code at runtime through MAP_JIT, which hardened runtime only allows
+  with that entitlement; without it the first dynamic compilation kills the
+  packaged app with SIGTRAP (verified on macOS arm64). Development builds
+  never hit this because glaze skips hardened runtime for ad-hoc identities.
+  The key is merged into user-supplied `#:entitlements` rather than
+  replacing them, and ad-hoc builds keep their plain signatures.
+
 - The bare `raco glaze build` form documented in the README quick start no
   longer crashes: deriving the application name from the project directory
   used `file-name-from-path` on `path-only` output, which can carry a
