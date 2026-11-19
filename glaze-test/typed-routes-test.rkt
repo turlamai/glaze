@@ -166,6 +166,16 @@
               "internal error"
               "fetch channel also validates handler results")
 
+;; fetch channel argument validation carries the bridge code, so HTTP
+;; clients can branch on e.code exactly like GLZ1 invoke clients
+(define bad-args-resp
+  (post "/api/items" "{\"item\":{\"id\":\"no\",\"name\":\"x\",\"tags\":[]},\"kind\":\"basic\"}"))
+(check-equal? (and (hash? bad-args-resp) (hash-ref bad-args-resp 'code #f))
+              "invalid-args"
+              "fetch channel 400 carries the bridge error code")
+(check-true (and (hash? bad-args-resp) (string? (hash-ref bad-args-resp 'error #f)))
+            "the historical error string field is preserved")
+
 ;; api.d.ts served over HTTP
 (define-values (dts-status dts-body) (get "/glaze/api.d.ts"))
 (define dts (bytes->string/utf-8 dts-body))

@@ -444,7 +444,15 @@
                  "    opts.body = JSON.stringify(body);\n"
                  "  }\n"
                  "  const r = await fetch('/' + path, opts);\n"
-                 "  if (!r.ok) { const t = await r.text(); throw new Error(t); }\n"
+                 "  if (!r.ok) {\n"
+                 "    const t = await r.text();\n"
+                 "    let e;\n"
+                 "    try { const j = JSON.parse(t);\n"
+                 "          e = new Error((j.error && j.error.message) || j.error || t);\n"
+                 "          e.code = j.code || (j.error && j.error.code); }\n"
+                 "    catch (_) { e = new Error(t); }\n"
+                 "    throw e;\n"
+                 "  }\n"
                  "  const text = await r.text();\n"
                  "  return text ? JSON.parse(text) : null;\n"
                  "};\n"
@@ -574,7 +582,8 @@
 (define (api-match-response matched req [authority #f])
   (define route (first matched))
   (define captured (second matched))
-  (with-handlers ([exn:fail:glaze:bad-param? (lambda (e) (error-response 400 (exn-message e)))]
+  (with-handlers ([exn:fail:glaze:bad-param? (lambda (e)
+                                               (error-response 400 (exn-message e) "invalid-args"))]
                   ;; Internal failures never echo exception text to the page —
                   ;; messages leak implementation detail (paths, SQL, stack
                   ;; frames). The full exn goes to the error reporter; the
