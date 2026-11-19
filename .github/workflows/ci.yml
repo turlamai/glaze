@@ -313,6 +313,58 @@ jobs:
           fi
           test -s "$RUNNER_TEMP/appimage.log"
 
+      - name: Zero-env cold launch of an installed deb (glaze#131)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # glaze#131: the packaged launcher pins (find-system-path 'pref-dir)
+          # inside the read-only install payload, so the first settings/state
+          # write died with EROFS on a plain `apt install` + launch. Release
+          # smokes masked it with product data-dir env overrides. This gate
+          # installs a deb whose app persists window state at startup, then
+          # launches the INSTALLED binary with the masking XDG variables
+          # stripped: it must survive the window, and the state file must land
+          # under $HOME/.config — never inside /usr/lib/coldsmoke.
+          raco glaze init coldsmoke
+          cd coldsmoke
+          cat > main.rkt <<'RKT'
+          #lang racket/base
+          (require racket/runtime-path
+                   glaze
+                   glaze/window-state)
+          (define-runtime-path public "public")
+          (define api '())
+          (provide api)
+          (module+ main
+            (run-app #:public-dir public
+                     #:api api
+                     #:title "coldsmoke"
+                     #:app-id "dev.glaze.coldsmoke"
+                     #:window-state #t
+                     #:on-ready (lambda (wv url)
+                                  (webview-save-state!
+                                   wv (default-window-state-path "dev.glaze.coldsmoke")))))
+          RKT
+          raco glaze build --name coldsmoke --version 0.0.1 \
+            --publisher "Turing Lambda" --identifier dev.glaze.coldsmoke \
+            --out dist --installer
+          sudo dpkg -i dist/coldsmoke.deb
+          test -x /usr/bin/coldsmoke
+          set +e
+          timeout 15 xvfb-run -a \
+            env -u XDG_CONFIG_HOME -u XDG_DATA_HOME -u XDG_CACHE_HOME \
+            /usr/bin/coldsmoke > "$RUNNER_TEMP/coldsmoke.log" 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 124 ]; then
+            cat "$RUNNER_TEMP/coldsmoke.log"
+            echo "installed coldsmoke exited before the timeout (status $status)" >&2
+            exit 1
+          fi
+          test -f "$HOME/.config/glaze/dev.glaze.coldsmoke/window-state.json"
+          sudo dpkg -r coldsmoke
+
       - name: Validate Windows installer upgrade identity
         if: runner.os == 'Windows'
         shell: pwsh

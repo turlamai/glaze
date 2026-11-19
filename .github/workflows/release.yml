@@ -169,7 +169,7 @@ jobs:
               "glaze/devtools.rkt", "glaze/experimental.rkt",
               "glaze/private/id-allocator.rkt", "glaze/private/dialog-backend.rkt",
               "glaze/private/hotkey-backend.rkt", "glaze/private/win32-strings.rkt",
-              "glaze/private/public-assets.rkt",
+              "glaze/private/public-assets.rkt", "glaze/private/window-state-root.rkt",
               "glaze-cli/cli.rkt", "info.rkt",
           ]
           missing = [m for m in required if not any(n.endswith(m) for n in names)]

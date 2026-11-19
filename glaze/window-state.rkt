@@ -4,7 +4,8 @@
          racket/file
          racket/math
          racket/path
-         racket/string)
+         racket/string
+         "private/window-state-root.rkt")
 
 (provide (struct-out window-state)
          (struct-out screen-area)
@@ -20,8 +21,18 @@
   (define cleaned (regexp-replace* #px"[^0-9A-Za-z._-]+" (format "~a" value) "-"))
   (if (non-empty-string? cleaned) cleaned "app"))
 
+;; Linux packaged launchers pin pref-dir inside the read-only install
+;; payload (glaze#131); window-state-root prefers the XDG config root there
+;; so the first write lands in a user-writable directory. See
+;; glaze/private/window-state-root.rkt.
 (define (default-window-state-path app-id)
-  (build-path (find-system-path 'pref-dir) "glaze" (safe-component app-id) "window-state.json"))
+  (build-path (window-state-root (system-type 'os)
+                                 (getenv "XDG_CONFIG_HOME")
+                                 (find-system-path 'home-dir)
+                                 (find-system-path 'pref-dir))
+              "glaze"
+              (safe-component app-id)
+              "window-state.json"))
 
 (define (finite-real? value)
   (and (real? value) (not (infinite? value)) (not (nan? value))))
