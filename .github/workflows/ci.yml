@@ -44,19 +44,6 @@ jobs:
           test -s "$RUNNER_TEMP/compliance/glaze-sbom.cdx.json"
           test -s "$RUNNER_TEMP/compliance/glaze-notices.txt"
 
-      - name: Acceptance evidence
-        if: matrix.racket-version == '9.3'
-        shell: bash
-        run: raco glaze acceptance --json --out "$RUNNER_TEMP/acceptance.json"
-
-      - name: Upload acceptance evidence
-        if: matrix.racket-version == '9.3'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: acceptance-${{ runner.os }}
-          path: ${{ runner.temp }}/acceptance.json
-          if-no-files-found: error
-
       - name: Build Scribble documentation
         if: runner.os == 'Linux'
         shell: bash
@@ -85,8 +72,10 @@ jobs:
   matrix:
     # Fold the per-platform acceptance evidence into the G4 cross-platform
     # conformance matrix (docs/1.0-plan.md). Fails closed if any leg failed
-    # or a platform's evidence is missing — rivet `matrix` parity.
-    needs: [test]
+    # or a platform's evidence is missing — rivet `matrix` parity. The
+    # evidence comes from webview-e2e, where the native WebView runtime is
+    # present on every OS (the headless test job has no Linux WebView deps).
+    needs: [webview-e2e]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -182,6 +171,24 @@ jobs:
             raco glaze doctor --json
             raco glaze verify
           fi
+
+      - name: Acceptance evidence
+        env:
+          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a raco glaze acceptance --json --out "$RUNNER_TEMP/acceptance.json"
+          else
+            raco glaze acceptance --json --out "$RUNNER_TEMP/acceptance.json"
+          fi
+
+      - name: Upload acceptance evidence
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: acceptance-${{ runner.os }}
+          path: ${{ runner.temp }}/acceptance.json
+          if-no-files-found: error
 
   example:
     # The maintained Taskboard example is a consumer of the public API; keep
