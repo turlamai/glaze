@@ -29,6 +29,7 @@
          parse-pkg-show
          doctor-problems
          install-command
+         doctor-jsexpr
          doctor-command)
 
 (define glaze-repo-url "https://github.com/turlamai/glaze")
@@ -229,13 +230,6 @@
   (define-values (_ out) (capture-output raco "pkg" "show" "-l" name))
   (parse-pkg-show name out))
 
-(define (doctor-report entries)
-  (for ([(name parsed) (in-hash entries)])
-    (match parsed
-      [(list 'link target) (printf "  ~a: link -> ~a\n" name target)]
-      [(list 'other raw) (printf "  ~a: installed (non-link): ~a\n" name raw)]
-      [(list 'not-installed) (printf "  ~a: not installed\n" name)])))
-
 (define (doctor-entry->jsexpr parsed)
   (match parsed
     [(list 'link target)
@@ -269,15 +263,9 @@
              #:when (not (string=? name "glaze")))
     name))
 
-(define (doctor-command rest)
-  (define fix? (member "--fix" rest))
-  (define json? (member "--json" rest))
-  (when (and fix? json?)
-    (error 'doctor "--json is read-only and cannot be combined with --fix"))
-  (for ([arg (in-list rest)])
-    (unless (member arg '("--fix" "--json"))
-      (error 'doctor "unexpected argument: ~a" arg)))
-  (define raco (need-exe "raco"))
+;; The machine-readable doctor report, shared by `doctor --json` and
+;; `support-bundle` so both always describe the same package table.
+(define (doctor-jsexpr)
   (define discovered (discover-glaze-packages))
   (define names (remove-duplicates (append glaze-pkg-names discovered)))
   ;; String keys need equal?-based hashing: string literals from different
@@ -310,34 +298,53 @@
                 '()
                 (list (format "native WebView unavailable: ~a"
                               (hash-ref webview 'diagnostic "unknown backend error"))))))
+  (hash 'contract-version
+        1
+        'product
+        "Glaze"
+        'usable
+        (null? all-problems)
+        'collection
+        (and resolved (path->string resolved))
+        'packages
+        (for/hash ([(name parsed) (in-hash entries)])
+          (values (string->symbol name) (doctor-entry->jsexpr parsed)))
+        'webview
+        webview
+        'project-schema
+        (project-schema-status)
+        'problems
+        all-problems))
+
+(define (doctor-command rest)
+  (define fix? (member "--fix" rest))
+  (define json? (member "--json" rest))
+  (when (and fix? json?)
+    (error 'doctor "--json is read-only and cannot be combined with --fix"))
+  (for ([arg (in-list rest)])
+    (unless (member arg '("--fix" "--json"))
+      (error 'doctor "unexpected argument: ~a" arg)))
+  (define raco (need-exe "raco"))
+  (define report (doctor-jsexpr))
+  (define all-problems (hash-ref report 'problems))
+  (define packages (hash-ref report 'packages))
   (when json?
-    (write-json (hash 'contract-version
-                      1
-                      'product
-                      "Glaze"
-                      'usable
-                      (null? all-problems)
-                      'collection
-                      (and resolved (path->string resolved))
-                      'packages
-                      (for/hash ([(name parsed) (in-hash entries)])
-                        (values (string->symbol name) (doctor-entry->jsexpr parsed)))
-                      'webview
-                      webview
-                      'project-schema
-                      (project-schema-status)
-                      'problems
-                      all-problems))
+    (write-json report)
     (newline)
     (exit (if (null? all-problems) 0 1)))
   (printf "glaze package table:\n")
-  (doctor-report entries)
-  (printf "glaze collection resolves to: ~a\n" (or resolved "NOT FOUND"))
+  (for ([(name row) (in-hash packages)])
+    (case (hash-ref row 'state)
+      [("link") (printf "  ~a: link -> ~a\n" name (hash-ref row 'target))]
+      [("installed") (printf "  ~a: installed (non-link): ~a\n" name (hash-ref row 'description))]
+      [("not-installed") (printf "  ~a: not installed\n" name)]))
+  (printf "glaze collection resolves to: ~a\n" (or (hash-ref report 'collection) "NOT FOUND"))
+  (define webview (hash-ref report 'webview))
   (printf "native WebView: ~a\n"
           (if (hash-ref webview 'supported)
               "available"
               (format "unavailable — ~a" (hash-ref webview 'diagnostic))))
-  (printf "project schema: ~a\n" (hash-ref (project-schema-status) 'status))
+  (printf "project schema: ~a\n" (hash-ref (hash-ref report 'project-schema) 'status))
   (cond
     [(null? all-problems) (printf "OK: no glaze package problems found\n")]
     [else
@@ -345,15 +352,17 @@
      (for ([p (in-list all-problems)])
        (printf "  - ~a\n" p))
      (when fix?
+       (define glaze-row (hash-ref packages 'glaze (hash 'state "not-installed")))
        (define broken-link?
-         (match (hash-ref entries "glaze" (list 'not-installed))
-           [(list 'link t) (not (or (directory-exists? t) (file-exists? t)))]
-           [_ #f]))
+         (and (equal? (hash-ref glaze-row 'state) "link") (not (hash-ref glaze-row 'target-exists))))
        (define to-remove
-         (append non-canonical
+         (append (non-canonical-glaze-packages)
                  (for/list ([n (in-list legacy-pkg-names)]
-                            #:when (not (equal? (hash-ref entries n (list 'not-installed))
-                                                (list 'not-installed))))
+                            #:when (not (equal? (hash-ref (hash-ref packages
+                                                                    (string->symbol n)
+                                                                    (hash 'state "not-installed"))
+                                                          'state)
+                                                "not-installed")))
                    n)
                  (if broken-link?
                      (list "glaze")

@@ -118,6 +118,17 @@ jobs:
           ' CHANGELOG.md > release-assets/release-notes.md
           test -s release-assets/release-notes.md
 
+      - name: Generate SBOM, notices, and license audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The audit fails closed (exit 1) on any rejected/unknown license,
+          # so a release cannot ship an unreviewed dependency. The SBOM and
+          # notices land in release-assets/ and flow into the release upload.
+          raco glaze compliance --out release-assets
+          sha256sum release-assets/glaze-sbom.cdx.json > release-assets/glaze-sbom.cdx.json.sha256
+          sha256sum release-assets/glaze-notices.txt > release-assets/glaze-notices.txt.sha256
+
       - name: Smoke-test exact source package
         shell: bash
         run: |
@@ -169,8 +180,11 @@ jobs:
               "glaze/devtools.rkt", "glaze/experimental.rkt",
               "glaze/private/id-allocator.rkt", "glaze/private/dialog-backend.rkt",
               "glaze/private/hotkey-backend.rkt", "glaze/private/win32-strings.rkt",
-              "glaze/private/public-assets.rkt",
-              "glaze-cli/cli.rkt", "info.rkt",
+              "glaze/private/public-assets.rkt", "glaze/private/window-state-root.rkt",
+              "glaze/private/compliance.rkt", "glaze/private/acceptance.rkt",
+              "glaze-cli/cli.rkt", "glaze-cli/private/compliance.rkt",
+              "glaze-cli/private/support-bundle.rkt", "glaze-cli/private/acceptance.rkt",
+              "glaze-cli/private/matrix.rkt", "info.rkt",
           ]
           missing = [m for m in required if not any(n.endswith(m) for n in names)]
           if missing:

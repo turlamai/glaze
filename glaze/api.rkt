@@ -200,13 +200,18 @@
       (hasheq)
       parsed))
 
-(define (error-response status msg)
+;; The optional code field carries the bridge error code (e.g.
+;; "invalid-args") so HTTP-route clients can branch on the same codes as
+;; GLZ1 invoke clients; the historical `error` string field is unchanged.
+(define (error-response status msg [code #f])
   (response/full status
                  #"Error"
                  (current-seconds)
                  #"application/json; charset=utf-8"
                  '()
-                 (list (string->bytes/utf-8 (jsexpr->string (hasheq 'error msg))))))
+                 (list (string->bytes/utf-8 (jsexpr->string (if code
+                                                                (hasheq 'error msg 'code code)
+                                                                (hasheq 'error msg)))))))
 
 ;; ---- streaming responses ----
 

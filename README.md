@@ -128,6 +128,10 @@ A native desktop window opens using the default HTTP adapter, or native GLZ1 whe
 raco glaze init <name>       # Create a native Glaze desktop project
 raco glaze inspect --json    # Read the project/edit/verification contract
 raco glaze doctor --json     # Diagnose package and native WebView readiness
+raco glaze compliance --json # Generate SBOM, notices, and run the license audit
+raco glaze support-bundle    # Collect a redacted diagnostic ZIP for issue reports
+raco glaze acceptance --json # Emit bounded headless acceptance evidence
+raco glaze matrix <report>... # Fold per-platform acceptance reports into a matrix
 raco glaze schema write      # Explicitly refresh the application API baseline
 raco glaze schema check --json # Reject breaking application API changes
 raco glaze dev               # Run this project's native desktop app
@@ -229,7 +233,8 @@ Product licensing is intentionally outside Glaze's framework boundary. Applicati
 
 ### Update integrity
 
-`check-update` is the small notification helper. The installed updater verifies
+Update checking is application-owned: the unsigned `check-update` helper was
+removed in 0.19.0. The installed updater verifies
 a signed manifest and artifact, selects by channel/platform/architecture,
 enforces rollout and minimum version, and runs an install plan with rollback:
 
@@ -656,7 +661,7 @@ The event stream uses the same local origin as the embedded WebView frontend.
 - API handler parameter errors become 400 JSON; handler exceptions become 500 JSON and reach `run-app`'s `#:on-error` hook.
 - `#:api-token` (default `#t`) protects API routes and SSE; `#:api-token #f` is the explicit opt-out and cannot be combined with `#:capability`. The native app window uses a one-time bootstrap URL to obtain an HttpOnly cookie; programmatic clients use `X-Glaze-Token`.
 - Optional `#:capability` enables default-deny runtime authority. Declared route permissions may be unscoped, path-scoped, or command/argument-scoped; denied handlers are never invoked.
-- Update checks remain opt-in through `run-app #:check-update ...`.
+- Update checks are application-owned through the signed `fetch-update-manifest` / `select-update` / `download-update` flow; the unsigned `check-update` path was removed in 0.19.0.
 - Report suspected vulnerabilities privately through [SECURITY.md](SECURITY.md); it records the trust model, the security-sensitive owners and what is out of scope.
 
 ## System Integrations (`glaze/sys`)

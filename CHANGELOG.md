@@ -7,6 +7,113 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `raco glaze compliance [--json] [--out DIR]` generates a CycloneDX 1.5
+  SBOM (`glaze-sbom.cdx.json`) and third-party notices
+  (`glaze-notices.txt`) for the installed glaze dependency closure and runs
+  a license audit. The audit fails closed (exit 1) on any rejected
+  (strong-copyleft / source-available) or unknown license. Declared licenses
+  are always audited; the Racket main distribution — installation-scope
+  packages and built-in core collections such as `racket`/`pkg-lib` that
+  carry no license field — inherits the distribution's Apache-2.0 OR MIT
+  baseline, while a user-scope catalog dependency with no declared license
+  still fails closed. Platform-conditional dependencies for foreign
+  platforms are excluded from the closure. The SBOM is deterministic (no
+  timestamp) so release diffs stay clean. Borrowed from rivet's
+  `compliance` command.
+- `raco glaze support-bundle [--out FILE]` collects a redacted diagnostic
+  ZIP (environment facts, the doctor report, the project inspect report
+  when run inside a glaze project, and bounded window-state/log files from
+  the glaze config tree) for issue reports. Every string is redacted
+  against the real account profile roots (`USERPROFILE`/`HOME`, not just
+  Racket's redirectable home-dir) in native, backslash-escaped, and
+  forward-slash spellings, so a shared bundle does not leak the username or
+  absolute paths. Borrowed from rivet's `support-bundle` command.
+- The package CI gains a license-compliance gate, and the source release
+  job ships the SBOM + notices (with sha256 sidecars) as release assets;
+  the required source-package inventory now covers the compliance and
+  support-bundle modules. `doctor`'s machine-readable report is factored
+  into `doctor-jsexpr` so `doctor --json` and `support-bundle` always
+  describe the same package table.
+- `raco glaze acceptance [--json] [--out FILE]` runs the headless acceptance
+  gates that are meaningful on any platform (doctor usability and the
+  compliance license audit) and emits one bounded, self-describing evidence
+  report. `raco glaze matrix <report>... [--json] [--out FILE]` folds the
+  per-platform reports into the G4 cross-platform conformance matrix with a
+  fail-closed rollup: a failed leg, a malformed report, an unreadable file,
+  conflicting duplicate legs, or no evidence at all all exit 1. The
+  coldsmoke packaged acceptance report now carries the same envelope, so it
+  folds as an additional gate. Borrowed from rivet's `acceptance` / `matrix`
+  commands.
+- The package CI emits per-platform acceptance evidence and a new `matrix`
+  job folds it into a `glaze-acceptance-matrix` artifact, failing closed
+  when any platform's evidence is missing or any leg failed; the required
+  source-package inventory now covers the acceptance and matrix modules.
+
+### Removed
+
+- **BREAKING**: the 22 G3-S2 deprecated private-tier shims are gone from the
+  legacy `glaze` facade (glaze#133). The one-release-cycle window introduced
+  in 0.18.0 was scheduled to close in 0.19.0 but slipped; it closes now.
+  Applications importing these names through `glaze` must switch to the
+  canonical owners in the 0.18.0 migration table below (the
+  `glaze/private` owners, or `glaze/dialogs` / `glaze/global-shortcut` /
+  `glaze/tray/main` / `glaze/webview/main` for the platform-bound default
+  instances and raw backend accessors). The reviewed layers are unchanged;
+  `docs/api-stability.md` now carries the register as a permanent removal
+  record, and the classification guard fails if any removed name flows
+  through the facade again.
+
+### Fixed
+
+- Linux packaged installs no longer pin persisted window state inside the
+  read-only payload (glaze#131). `default-window-state-path` used
+  `(find-system-path 'pref-dir)`, which the `raco exe` launcher resolves
+  into `<install>/bin/etc/` under `/usr/lib/<app>` (deb) or the AppImage
+  mount, so the first state write died with EROFS on a plain install +
+  launch. On Linux the state root now prefers `$XDG_CONFIG_HOME` and falls
+  back to `$HOME/.config` — the same convention as `glaze/path`'s
+  `config-dir` — so packaged and source runs agree on a user-writable
+  location; Windows and macOS keep the historical `pref-dir`. The pure
+  selector lives in `glaze/private/window-state-root` and is regression-
+  tested on every CI platform. Note: Linux apps that enabled
+  `#:window-state #t` under 0.19.0 or earlier read their saved geometry
+  from the new location once (the old payload path was never writable on
+  system installs, so nothing migrates).
+- The package CI gains a zero-env cold-launch gate: it installs a deb whose
+  app persists window state at startup, launches the installed
+  `/usr/bin/<app>` with the masking XDG variables stripped, requires
+  survival, and asserts the state file lands under `$HOME/.config` — the
+  regression class that CI-provided env overrides previously hid
+  (glaze#131).
+- Both READMEs no longer document the unsigned `check-update` helper and
+  `run-app #:check-update`, which 0.19.0 removed; the Update integrity and
+  Security sections now describe the application-owned signed
+  `fetch-update-manifest` flow.
+- Generated-client errors now carry the bridge error code on both
+  transports. The HTTP adapter's `glaze.call` threw a bare `Error` with the
+  response text, while the native adapter and `glaze.invoke` attached
+  `e.code` — app code branching on `e.code` silently misbehaved on HTTP.
+  HTTP-route 400 responses for typed argument violations now include an
+  additive `code` field (`"invalid-args"`) alongside the historical `error`
+  string, and the generated client attaches `e.code` from either shape.
+
+### Added
+
+- A generated-client surface guard (`glaze-test/client-surface-test.rkt`):
+  the `api.js` entry set and the `api.d.ts` declaration set served by both
+  transports must equal the live route surface (typed routes declared,
+  untyped routes JS-only), and the two transports must agree — the
+  freshness discipline behind rivet's `generate --check`, adapted to
+  glaze's runtime-generated clients.
+- A packaged typed invoke / SSE acceptance gate: `scripts/coldsmoke` drives
+  a typed invoke, a typed invalid-args rejection, and an SSE round trip
+  through the real bridge of the installed app; the page confirms each
+  fact, the app writes a JSON acceptance report and quits, and the package
+  CI asserts the report — a miniature executable acceptance manifest in
+  the spirit of rivet's `rivet-acceptance.rktd`.
+
 ## [0.19.0] - 2026-11-12
 
 ### Removed

@@ -49,7 +49,7 @@ documented, supported surface that the 1.0 curation may still narrow with a
 migration note; **private** names are NOT blessed as permanent API and no
 longer appear in the reviewed layers — G3-S2 internalized them behind
 `glaze/private` owners (or their raw backend owner modules) and registered
-them in the deprecated-shim table below. No reviewed-layer export is
+them in the removed-shim register below. No reviewed-layer export is
 currently experimental; `glaze/experimental` is outside this table by
 charter.
 
@@ -360,18 +360,19 @@ charter.
 | `start-server` | stable | |
 | `stop-server` | stable | |
 
-### Deprecated private-tier shims (G3-S2, introduced 0.18.0 — removal scheduled 0.19.0)
+### Removed private-tier shims (G3-S2, introduced 0.18.0 — removed after 0.19.0)
 
 The 22 private-tier names G3-S1 classified left the reviewed layers in
 G3-S2: their canonical homes are the `glaze/private` owners below (or, for
 the raw backend accessors and platform-bound default instances, the owner
 module that holds the underlying struct or native bindings). The legacy
-`glaze` facade keeps re-exporting each name for exactly one release cycle
-so 0.x consumers keep loading; import it only through the facade during
-that window and migrate before 0.19.0. The classification guard asserts
-each name has actually left its former layer and is still reachable
-through the facade; dropping a facade export before 0.19.0 fails that
-guard.
+`glaze` facade re-exported each name for exactly one release cycle
+(0.18.0). That window closed: the shims were removed after 0.19.0
+(glaze#133; the removal ships in 0.20.0). Import these names only from
+their canonical owners — they are expert/internal surface, not part of
+the stable contract. The classification guard asserts each name has
+actually left its former layer AND stays out of the legacy facade, so a
+shim cannot silently grow back.
 
 | Export | Former layer | Canonical owner |
 |---|---|---|

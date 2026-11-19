@@ -146,6 +146,10 @@ raco glaze dev
 raco glaze init <name>   # 创建原生 Glaze 桌面项目
 raco glaze inspect --json # 读取项目、编辑点与验证契约
 raco glaze doctor --json  # 检查包与原生 WebView 就绪状态
+raco glaze compliance --json # 生成 SBOM、第三方声明并审计许可证
+raco glaze support-bundle  # 收集脱敏诊断 ZIP 用于问题反馈
+raco glaze acceptance --json # 产出有界的 headless 验收证据
+raco glaze matrix <report>... # 将各平台验收报告聚合为矩阵
 raco glaze schema write   # 有意变更 API 时写入基线
 raco glaze schema check --json # 检查 API 兼容性
 raco glaze dev           # 运行当前项目的原生桌面应用
@@ -231,7 +235,7 @@ raco glaze build --name myapp --sign 40HEXCHARS --installer
 
 ### 更新完整性
 
-`check-update` 是轻量通知助手。已安装应用的更新器会校验签名清单与制品，按通道/平台/架构选择，执行分阶段发布与最低版本限制，并运行带回滚的安装计划：
+更新检查由应用自行负责：无签名的 `check-update` 助手已在 0.19.0 移除。已安装应用的更新器会校验签名清单与制品，按通道/平台/架构选择，执行分阶段发布与最低版本限制，并运行带回滚的安装计划：
 
 ```racket
 (define manifest

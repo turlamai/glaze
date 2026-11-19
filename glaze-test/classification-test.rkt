@@ -1,17 +1,16 @@
 #lang racket/base
 
 ;; G3 classification guard. docs/api-stability.md carries exactly one tier
-;; for every export of the four reviewed layers, plus the deprecated
-;; private-shim register left behind by G3-S2. This test parses both and
-;; asserts:
+;; for every export of the four reviewed layers, plus the removed-shim
+;; register left behind by G3-S2. This test parses both and asserts:
 ;;   - the classified table equals the live export surface, so an added,
 ;;     removed, duplicated, or unclassified name fails here instead of
 ;;     silently widening (or rotting) the 1.0 contract;
 ;;   - every registered shim has actually left its former reviewed layer,
-;;     is still reachable through the legacy `glaze` facade (the one
-;;     release cycle of compatibility re-exports), and names a canonical
-;;     owner. public-api-test.rkt independently pins the raw export sets;
-;;     the guards agree only when the docs match reality.
+;;     stays OUT of the legacy `glaze` facade (the one-release-cycle
+;;     compatibility window closed after 0.19.0, glaze#133), and names a
+;;     canonical owner. public-api-test.rkt independently pins the raw
+;;     export sets; the guards agree only when the docs match reality.
 
 (require racket/file
          racket/format
@@ -67,7 +66,7 @@
               (cons name (rest cells))))))
 
 ;; `### \`glaze/window\` — 45 exports` headings scope rows to their module;
-;; the shim register heading is plain text and scopes its own rows.
+;; the removed-shim register heading is plain text and scopes its own rows.
 (define (heading-name line)
   (if (string-prefix? line "### `")
       (string-trim (second (string-split line "`")) "`")
@@ -88,7 +87,7 @@
 (define classification (parse-classification))
 
 (define reviewed-modules '(glaze/window glaze/services glaze/distribution glaze/devtools))
-(define shim-heading-prefix "Deprecated private-tier shims")
+(define shim-heading-prefix "Removed private-tier shims")
 
 (define shim-heading
   (findf (lambda (k) (string-prefix? k shim-heading-prefix)) (hash-keys classification)))
@@ -140,7 +139,7 @@
     (check-false (equal? (second row) "experimental")
                  (format "experimental tier used for ~a in ~a" (car row) module-path))))
 
-;; ---- the deprecated private-shim register (G3-S2) ----
+;; ---- the removed private-shim register (G3-S2, glaze#133) ----
 
 ;; | `name` | former layer | canonical owner |
 (define shims
@@ -148,12 +147,12 @@
       (hash-ref classification shim-heading '())
       '()))
 
-(test-case "deprecated private-tier shims"
-  (check-true (and shim-heading #t) "the shim register is present")
-  (check-true (pair? shims) "the shim register is non-empty")
-  ;; the register is a release contract: it shrinks only when the 0.19.0
-  ;; removal ships, never silently
-  (check-equal? (length shims) 22 "the G3-S2 shim register is fixed until its removal release")
+(test-case "removed private-tier shims"
+  (check-true (and shim-heading #t) "the shim removal register is present")
+  (check-true (pair? shims) "the shim removal register is non-empty")
+  ;; the register is the permanent migration record of the G3-S2 window:
+  ;; its 22 names change only by an explicit API decision, never silently
+  (check-equal? (length shims) 22 "the G3-S2 removal register keeps its 22 names")
   (define shim-names (map car shims))
   (check-equal? (length (remove-duplicates shim-names))
                 (length shim-names)
@@ -175,9 +174,9 @@
       (check-false (set-member? (hash-ref live-exports former) (string->symbol name))
                    (format "shim ~a has actually left ~a" name former-layer)))
     (check-false (equal? owner "") (format "shim ~a names a canonical owner" name)))
-  ;; the one-release-cycle compatibility window: every shim must stay
-  ;; reachable through the legacy facade until its removal release
+  ;; the one-release-cycle compatibility window closed after 0.19.0: no
+  ;; registered name may flow through the legacy facade again (glaze#133)
   (define facade-exports (list->set (public-export-names 'glaze)))
   (for ([name (in-list shim-names)])
-    (check-true (set-member? facade-exports (string->symbol name))
-                (format "shim ~a is still reachable through the glaze facade" name))))
+    (check-false (set-member? facade-exports (string->symbol name))
+                 (format "removed shim ~a stays out of the glaze facade" name))))

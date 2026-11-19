@@ -35,6 +35,15 @@ jobs:
           GLAZE_TEST_NO_TRAY: ${{ runner.os == 'macOS' && '1' || '' }}
         run: raco test glaze-test/
 
+      - name: License compliance gate
+        if: matrix.os == 'ubuntu-24.04' && matrix.racket-version == '9.3'
+        shell: bash
+        run: |
+          # Fails closed (exit 1) on any rejected/unknown third-party license.
+          raco glaze compliance --json --out "$RUNNER_TEMP/compliance"
+          test -s "$RUNNER_TEMP/compliance/glaze-sbom.cdx.json"
+          test -s "$RUNNER_TEMP/compliance/glaze-notices.txt"
+
       - name: Build Scribble documentation
         if: runner.os == 'Linux'
         shell: bash
@@ -59,6 +68,45 @@ jobs:
                   subprocess.run(["raco", "fmt", "-i", str(path)], check=True)
           PY
           git diff --exit-code -- glaze glaze-cli glaze-test
+
+  matrix:
+    # Fold the per-platform acceptance evidence into the G4 cross-platform
+    # conformance matrix (docs/1.0-plan.md). Fails closed if any leg failed
+    # or a platform's evidence is missing — rivet `matrix` parity. The
+    # evidence comes from webview-e2e, where the native WebView runtime is
+    # present on every OS (the headless test job has no Linux WebView deps).
+    needs: [webview-e2e]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup-glaze
+        with:
+          racket-version: '9.3'
+          linux-webview-deps: 'false'
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: acceptance-*
+          path: acceptance-reports
+
+      - name: Fold the cross-platform acceptance matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          for os in Linux Windows macOS; do
+            test -f "acceptance-reports/acceptance-$os/acceptance.json"
+          done
+          raco glaze matrix acceptance-reports/*/acceptance.json \
+            --json --out glaze-acceptance-matrix.json
+          test -s glaze-acceptance-matrix.json
+
+      - name: Upload acceptance matrix
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: glaze-acceptance-matrix
+          path: glaze-acceptance-matrix.json
+          if-no-files-found: error
 
   webview-e2e:
     # Real-window WebView end-to-end on each OS: open -> load (title
@@ -123,6 +171,24 @@ jobs:
             raco glaze doctor --json
             raco glaze verify
           fi
+
+      - name: Acceptance evidence
+        env:
+          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a raco glaze acceptance --json --out "$RUNNER_TEMP/acceptance.json"
+          else
+            raco glaze acceptance --json --out "$RUNNER_TEMP/acceptance.json"
+          fi
+
+      - name: Upload acceptance evidence
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: acceptance-${{ runner.os }}
+          path: ${{ runner.temp }}/acceptance.json
+          if-no-files-found: error
 
   example:
     # The maintained Taskboard example is a consumer of the public API; keep
@@ -312,6 +378,72 @@ jobs:
             exit 1
           fi
           test -s "$RUNNER_TEMP/appimage.log"
+
+      - name: Zero-env cold launch + packaged invoke/SSE acceptance (glaze#131, G4)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # glaze#131: the packaged launcher pins (find-system-path 'pref-dir)
+          # inside the read-only install payload, so the first settings/state
+          # write died with EROFS on a plain `apt install` + launch. Release
+          # smokes masked it with product data-dir env overrides. Phase 1
+          # installs the deb and launches the INSTALLED binary with the
+          # masking XDG variables stripped: it must survive, and the state
+          # file must land under $HOME/.config — never inside /usr/lib.
+          #
+          # G4 packaged gate: phase 2 drives a typed invoke, a typed
+          # invalid-args rejection, and an SSE round trip through the real
+          # bridge of the installed app (scripts/coldsmoke). The page
+          # confirms each fact, the app writes a JSON acceptance report and
+          # quits — a miniature executable acceptance manifest in the spirit
+          # of rivet's rivet-acceptance.rktd.
+          cp -r scripts/coldsmoke "$RUNNER_TEMP/coldsmoke"
+          cd "$RUNNER_TEMP/coldsmoke"
+          raco glaze schema check --json
+          raco glaze build --name coldsmoke --version 0.0.1 \
+            --publisher "Turing Lambda" --identifier dev.glaze.coldsmoke \
+            --out dist --installer
+          sudo dpkg -i dist/coldsmoke.deb
+          test -x /usr/bin/coldsmoke
+          # Phase 1 — zero-env cold launch.
+          set +e
+          timeout 15 xvfb-run -a \
+            env -u XDG_CONFIG_HOME -u XDG_DATA_HOME -u XDG_CACHE_HOME \
+            /usr/bin/coldsmoke > "$RUNNER_TEMP/coldsmoke.log" 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 124 ]; then
+            cat "$RUNNER_TEMP/coldsmoke.log"
+            echo "installed coldsmoke exited before the timeout (status $status)" >&2
+            exit 1
+          fi
+          test -f "$HOME/.config/glaze/dev.glaze.coldsmoke/window-state.json"
+          # Phase 2 — packaged typed invoke + SSE acceptance report.
+          rm -f "$RUNNER_TEMP/coldsmoke-report.json"
+          set +e
+          timeout 60 xvfb-run -a \
+            env GLAZE_ACCEPTANCE_REPORT="$RUNNER_TEMP/coldsmoke-report.json" \
+            /usr/bin/coldsmoke > "$RUNNER_TEMP/coldsmoke-accept.log" 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            cat "$RUNNER_TEMP/coldsmoke-accept.log"
+            echo "acceptance run did not exit cleanly (status $status)" >&2
+            exit 1
+          fi
+          python - <<'PY'
+          import json, os
+          path = os.path.join(os.environ["RUNNER_TEMP"], "coldsmoke-report.json")
+          report = json.load(open(path, encoding="utf-8"))
+          assert report["ok"] is True, report
+          assert report["checks"] == {
+              "typed-ok": "hello",
+              "invalid-rejected": "invalid-args",
+              "sse": "pong",
+          }, report
+          PY
+          sudo dpkg -r coldsmoke
 
       - name: Validate Windows installer upgrade identity
         if: runner.os == 'Windows'
