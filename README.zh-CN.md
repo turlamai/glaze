@@ -231,7 +231,7 @@ raco glaze build --name myapp --sign 40HEXCHARS --installer
 
 ### 更新完整性
 
-`check-update` 是轻量通知助手。已安装应用的更新器会校验签名清单与制品，按通道/平台/架构选择，执行分阶段发布与最低版本限制，并运行带回滚的安装计划：
+更新检查由应用自行负责：无签名的 `check-update` 助手已在 0.19.0 移除。已安装应用的更新器会校验签名清单与制品，按通道/平台/架构选择，执行分阶段发布与最低版本限制，并运行带回滚的安装计划：
 
 ```racket
 (define manifest

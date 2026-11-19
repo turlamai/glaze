@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+
+- **BREAKING**: the 22 G3-S2 deprecated private-tier shims are gone from the
+  legacy `glaze` facade (glaze#133). The one-release-cycle window introduced
+  in 0.18.0 was scheduled to close in 0.19.0 but slipped; it closes now.
+  Applications importing these names through `glaze` must switch to the
+  canonical owners in the 0.18.0 migration table below (the
+  `glaze/private` owners, or `glaze/dialogs` / `glaze/global-shortcut` /
+  `glaze/tray/main` / `glaze/webview/main` for the platform-bound default
+  instances and raw backend accessors). The reviewed layers are unchanged;
+  `docs/api-stability.md` now carries the register as a permanent removal
+  record, and the classification guard fails if any removed name flows
+  through the facade again.
+
+### Fixed
+
+- Linux packaged installs no longer pin persisted window state inside the
+  read-only payload (glaze#131). `default-window-state-path` used
+  `(find-system-path 'pref-dir)`, which the `raco exe` launcher resolves
+  into `<install>/bin/etc/` under `/usr/lib/<app>` (deb) or the AppImage
+  mount, so the first state write died with EROFS on a plain install +
+  launch. On Linux the state root now prefers `$XDG_CONFIG_HOME` and falls
+  back to `$HOME/.config` — the same convention as `glaze/path`'s
+  `config-dir` — so packaged and source runs agree on a user-writable
+  location; Windows and macOS keep the historical `pref-dir`. The pure
+  selector lives in `glaze/private/window-state-root` and is regression-
+  tested on every CI platform. Note: Linux apps that enabled
+  `#:window-state #t` under 0.19.0 or earlier read their saved geometry
+  from the new location once (the old payload path was never writable on
+  system installs, so nothing migrates).
+- The package CI gains a zero-env cold-launch gate: it installs a deb whose
+  app persists window state at startup, launches the installed
+  `/usr/bin/<app>` with the masking XDG variables stripped, requires
+  survival, and asserts the state file lands under `$HOME/.config` — the
+  regression class that CI-provided env overrides previously hid
+  (glaze#131).
+- Both READMEs no longer document the unsigned `check-update` helper and
+  `run-app #:check-update`, which 0.19.0 removed; the Update integrity and
+  Security sections now describe the application-owned signed
+  `fetch-update-manifest` flow.
+
 ## [0.19.0] - 2026-11-12
 
 ### Removed
