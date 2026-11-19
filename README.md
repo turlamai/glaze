@@ -1,5 +1,7 @@
 # Glaze
 
+**Support:** [Issues & feedback](https://github.com/turlamai/glaze/issues) · [Development policy](https://github.com/turlamai/turlamai.github.io/blob/master/PORTFOLIO.md)
+
 Build desktop apps with a [Racket](https://racket-lang.org/) backend and a web frontend. Write your app logic in Racket, build your UI with HTML/CSS/JS, and ship a desktop application.
 
 **Human-first. Agent-native. Local by design.**
