@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>coldsmoke</title>
+<script src="/glaze/api.js"></script>
+</head>
+<body>
+coldsmoke acceptance
+<script>
+// Drive the real bridge through the GENERATED typed client. Every fact is
+// confirmed from the page side, so the report proves the round trip, not
+// just the server handler.
+(async function () {
+  function confirm(kind, payload) {
+    return glaze.api.acceptConfirm({ kind: kind, payload: String(payload) });
+  }
+  try {
+    var r = await glaze.api.acceptEcho({ msg: "hello" });
+    await confirm("typed-ok", r.echo);
+  } catch (e) {
+    await confirm("typed-failed", e.code || "error");
+  }
+  try {
+    await glaze.api.acceptEcho({ msg: 42 });
+    await confirm("invalid-accepted", "no-error");
+  } catch (e) {
+    await confirm("invalid-rejected", e.code || "error");
+  }
+  glaze.on("accept-ping", function (data) { confirm("sse", data.payload); });
+  await glaze.api.acceptStart({});
+})();
+</script>
+</body>
+</html>

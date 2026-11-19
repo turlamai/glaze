@@ -47,6 +47,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `run-app #:check-update`, which 0.19.0 removed; the Update integrity and
   Security sections now describe the application-owned signed
   `fetch-update-manifest` flow.
+- Generated-client errors now carry the bridge error code on both
+  transports. The HTTP adapter's `glaze.call` threw a bare `Error` with the
+  response text, while the native adapter and `glaze.invoke` attached
+  `e.code` — app code branching on `e.code` silently misbehaved on HTTP.
+  HTTP-route 400 responses for typed argument violations now include an
+  additive `code` field (`"invalid-args"`) alongside the historical `error`
+  string, and the generated client attaches `e.code` from either shape.
+
+### Added
+
+- A generated-client surface guard (`glaze-test/client-surface-test.rkt`):
+  the `api.js` entry set and the `api.d.ts` declaration set served by both
+  transports must equal the live route surface (typed routes declared,
+  untyped routes JS-only), and the two transports must agree — the
+  freshness discipline behind rivet's `generate --check`, adapted to
+  glaze's runtime-generated clients.
+- A packaged typed invoke / SSE acceptance gate: `scripts/coldsmoke` drives
+  a typed invoke, a typed invalid-args rejection, and an SSE round trip
+  through the real bridge of the installed app; the page confirms each
+  fact, the app writes a JSON acceptance report and quits, and the package
+  CI asserts the report — a miniature executable acceptance manifest in
+  the spirit of rivet's `rivet-acceptance.rktd`.
 
 ## [0.19.0] - 2026-11-12
 

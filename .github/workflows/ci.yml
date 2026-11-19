@@ -313,7 +313,7 @@ jobs:
           fi
           test -s "$RUNNER_TEMP/appimage.log"
 
-      - name: Zero-env cold launch of an installed deb (glaze#131)
+      - name: Zero-env cold launch + packaged invoke/SSE acceptance (glaze#131, G4)
         if: runner.os == 'Linux'
         shell: bash
         run: |
@@ -321,36 +321,26 @@ jobs:
           # glaze#131: the packaged launcher pins (find-system-path 'pref-dir)
           # inside the read-only install payload, so the first settings/state
           # write died with EROFS on a plain `apt install` + launch. Release
-          # smokes masked it with product data-dir env overrides. This gate
-          # installs a deb whose app persists window state at startup, then
-          # launches the INSTALLED binary with the masking XDG variables
-          # stripped: it must survive the window, and the state file must land
-          # under $HOME/.config — never inside /usr/lib/coldsmoke.
-          raco glaze init coldsmoke
-          cd coldsmoke
-          cat > main.rkt <<'RKT'
-          #lang racket/base
-          (require racket/runtime-path
-                   glaze
-                   glaze/window-state)
-          (define-runtime-path public "public")
-          (define api '())
-          (provide api)
-          (module+ main
-            (run-app #:public-dir public
-                     #:api api
-                     #:title "coldsmoke"
-                     #:app-id "dev.glaze.coldsmoke"
-                     #:window-state #t
-                     #:on-ready (lambda (wv url)
-                                  (webview-save-state!
-                                   wv (default-window-state-path "dev.glaze.coldsmoke")))))
-          RKT
+          # smokes masked it with product data-dir env overrides. Phase 1
+          # installs the deb and launches the INSTALLED binary with the
+          # masking XDG variables stripped: it must survive, and the state
+          # file must land under $HOME/.config — never inside /usr/lib.
+          #
+          # G4 packaged gate: phase 2 drives a typed invoke, a typed
+          # invalid-args rejection, and an SSE round trip through the real
+          # bridge of the installed app (scripts/coldsmoke). The page
+          # confirms each fact, the app writes a JSON acceptance report and
+          # quits — a miniature executable acceptance manifest in the spirit
+          # of rivet's rivet-acceptance.rktd.
+          cp -r scripts/coldsmoke "$RUNNER_TEMP/coldsmoke"
+          cd "$RUNNER_TEMP/coldsmoke"
+          raco glaze schema check --json
           raco glaze build --name coldsmoke --version 0.0.1 \
             --publisher "Turing Lambda" --identifier dev.glaze.coldsmoke \
             --out dist --installer
           sudo dpkg -i dist/coldsmoke.deb
           test -x /usr/bin/coldsmoke
+          # Phase 1 — zero-env cold launch.
           set +e
           timeout 15 xvfb-run -a \
             env -u XDG_CONFIG_HOME -u XDG_DATA_HOME -u XDG_CACHE_HOME \
@@ -363,6 +353,30 @@ jobs:
             exit 1
           fi
           test -f "$HOME/.config/glaze/dev.glaze.coldsmoke/window-state.json"
+          # Phase 2 — packaged typed invoke + SSE acceptance report.
+          rm -f "$RUNNER_TEMP/coldsmoke-report.json"
+          set +e
+          timeout 60 xvfb-run -a \
+            env GLAZE_ACCEPTANCE_REPORT="$RUNNER_TEMP/coldsmoke-report.json" \
+            /usr/bin/coldsmoke > "$RUNNER_TEMP/coldsmoke-accept.log" 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            cat "$RUNNER_TEMP/coldsmoke-accept.log"
+            echo "acceptance run did not exit cleanly (status $status)" >&2
+            exit 1
+          fi
+          python - <<'PY'
+          import json, os
+          path = os.path.join(os.environ["RUNNER_TEMP"], "coldsmoke-report.json")
+          report = json.load(open(path, encoding="utf-8"))
+          assert report["ok"] is True, report
+          assert report["checks"] == {
+              "typed-ok": "hello",
+              "invalid-rejected": "invalid-args",
+              "sse": "pong",
+          }, report
+          PY
           sudo dpkg -r coldsmoke
 
       - name: Validate Windows installer upgrade identity
