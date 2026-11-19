@@ -133,6 +133,7 @@ raco glaze support-bundle    # Collect a redacted diagnostic ZIP for issue repor
 raco glaze acceptance --json # Emit bounded headless acceptance evidence
 raco glaze matrix <report>... # Fold per-platform acceptance reports into a matrix
 raco glaze check-release-version # Preflight release version alignment before tagging
+raco glaze verify-release-assets <manifest> <dir> <pubkey> --base-url URL # Offline gate for signed release assets
 raco glaze schema write      # Explicitly refresh the application API baseline
 raco glaze schema check --json # Reject breaking application API changes
 raco glaze dev               # Run this project's native desktop app
