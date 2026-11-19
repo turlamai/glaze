@@ -44,6 +44,19 @@ jobs:
           test -s "$RUNNER_TEMP/compliance/glaze-sbom.cdx.json"
           test -s "$RUNNER_TEMP/compliance/glaze-notices.txt"
 
+      - name: Acceptance evidence
+        if: matrix.racket-version == '9.3'
+        shell: bash
+        run: raco glaze acceptance --json --out "$RUNNER_TEMP/acceptance.json"
+
+      - name: Upload acceptance evidence
+        if: matrix.racket-version == '9.3'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: acceptance-${{ runner.os }}
+          path: ${{ runner.temp }}/acceptance.json
+          if-no-files-found: error
+
       - name: Build Scribble documentation
         if: runner.os == 'Linux'
         shell: bash
@@ -68,6 +81,43 @@ jobs:
                   subprocess.run(["raco", "fmt", "-i", str(path)], check=True)
           PY
           git diff --exit-code -- glaze glaze-cli glaze-test
+
+  matrix:
+    # Fold the per-platform acceptance evidence into the G4 cross-platform
+    # conformance matrix (docs/1.0-plan.md). Fails closed if any leg failed
+    # or a platform's evidence is missing — rivet `matrix` parity.
+    needs: [test]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup-glaze
+        with:
+          racket-version: '9.3'
+          linux-webview-deps: 'false'
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: acceptance-*
+          path: acceptance-reports
+
+      - name: Fold the cross-platform acceptance matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          for os in Linux Windows macOS; do
+            test -f "acceptance-reports/acceptance-$os/acceptance.json"
+          done
+          raco glaze matrix acceptance-reports/*/acceptance.json \
+            --json --out glaze-acceptance-matrix.json
+          test -s glaze-acceptance-matrix.json
+
+      - name: Upload acceptance matrix
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: glaze-acceptance-matrix
+          path: glaze-acceptance-matrix.json
+          if-no-files-found: error
 
   webview-e2e:
     # Real-window WebView end-to-end on each OS: open -> load (title

@@ -36,6 +36,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   support-bundle modules. `doctor`'s machine-readable report is factored
   into `doctor-jsexpr` so `doctor --json` and `support-bundle` always
   describe the same package table.
+- `raco glaze acceptance [--json] [--out FILE]` runs the headless acceptance
+  gates that are meaningful on any platform (doctor usability and the
+  compliance license audit) and emits one bounded, self-describing evidence
+  report. `raco glaze matrix <report>... [--json] [--out FILE]` folds the
+  per-platform reports into the G4 cross-platform conformance matrix with a
+  fail-closed rollup: a failed leg, a malformed report, an unreadable file,
+  conflicting duplicate legs, or no evidence at all all exit 1. The
+  coldsmoke packaged acceptance report now carries the same envelope, so it
+  folds as an additional gate. Borrowed from rivet's `acceptance` / `matrix`
+  commands.
+- The package CI emits per-platform acceptance evidence and a new `matrix`
+  job folds it into a `glaze-acceptance-matrix` artifact, failing closed
+  when any platform's evidence is missing or any leg failed; the required
+  source-package inventory now covers the acceptance and matrix modules.
 
 ### Removed
 

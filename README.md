@@ -130,6 +130,8 @@ raco glaze inspect --json    # Read the project/edit/verification contract
 raco glaze doctor --json     # Diagnose package and native WebView readiness
 raco glaze compliance --json # Generate SBOM, notices, and run the license audit
 raco glaze support-bundle    # Collect a redacted diagnostic ZIP for issue reports
+raco glaze acceptance --json # Emit bounded headless acceptance evidence
+raco glaze matrix <report>... # Fold per-platform acceptance reports into a matrix
 raco glaze schema write      # Explicitly refresh the application API baseline
 raco glaze schema check --json # Reject breaking application API changes
 raco glaze dev               # Run this project's native desktop app

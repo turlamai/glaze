@@ -58,7 +58,15 @@
 
 (define (write-report! ok?)
   (define report
-    (hasheq 'ok
+    (hasheq 'contract-version
+            1
+            'product
+            "Glaze"
+            'gate
+            "coldsmoke"
+            'platform
+            (symbol->string (system-type 'os))
+            'ok
             ok?
             'checks
             (for/hasheq ([kind (in-list expected-kinds)])

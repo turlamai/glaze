@@ -1489,6 +1489,8 @@ and @tt{raco glaze help}; it must not shrink below the shipped commands.
  raco glaze doctor --json              Diagnose package/WebView readiness
  raco glaze compliance --json          SBOM, third-party notices, and license audit
  raco glaze support-bundle             Collect a redacted diagnostic ZIP
+ raco glaze acceptance --json          Bounded headless acceptance evidence
+ raco glaze matrix <report>...         Fold per-platform acceptance reports
  raco glaze schema check --json        Check API compatibility
  raco glaze schema write               Explicitly update API baseline
  raco glaze verify                     Verify real native window

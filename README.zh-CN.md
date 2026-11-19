@@ -148,6 +148,8 @@ raco glaze inspect --json # 读取项目、编辑点与验证契约
 raco glaze doctor --json  # 检查包与原生 WebView 就绪状态
 raco glaze compliance --json # 生成 SBOM、第三方声明并审计许可证
 raco glaze support-bundle  # 收集脱敏诊断 ZIP 用于问题反馈
+raco glaze acceptance --json # 产出有界的 headless 验收证据
+raco glaze matrix <report>... # 将各平台验收报告聚合为矩阵
 raco glaze schema write   # 有意变更 API 时写入基线
 raco glaze schema check --json # 检查 API 兼容性
 raco glaze dev           # 运行当前项目的原生桌面应用

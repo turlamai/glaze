@@ -69,6 +69,24 @@ Apache-2.0 OR MIT baseline; a chosen catalog dependency with no declared
 license fails closed. The same gate runs in package CI and ships the SBOM +
 notices as release assets.
 
+## Cross-platform acceptance evidence
+
+```bash
+raco glaze acceptance --json --out acceptance.json   # one platform's evidence
+raco glaze matrix acceptance-linux.json acceptance-windows.json acceptance-macos.json
+```
+
+`acceptance` runs the headless gates that are meaningful on any OS (doctor
+usability and the compliance license audit) and writes one bounded,
+self-describing report (`contract-version`, `product`, `gate`, `platform`,
+`ok`, `checks`). `matrix` folds the per-platform reports into the G4
+cross-platform conformance matrix and exits nonzero unless every leg passed
+and every report was well-formed — a failed leg, a malformed or unreadable
+report, conflicting duplicate legs, or no evidence at all all fail closed.
+The packaged coldsmoke acceptance report carries the same envelope, so it
+folds as an additional gate. Package CI emits one report per platform and a
+`matrix` job folds them into the `glaze-acceptance-matrix` artifact.
+
 ## Where the rules live
 
 Startup failure behavior and the never-fall-back rule are owned by
