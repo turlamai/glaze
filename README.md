@@ -128,6 +128,8 @@ A native desktop window opens using the default HTTP adapter, or native GLZ1 whe
 raco glaze init <name>       # Create a native Glaze desktop project
 raco glaze inspect --json    # Read the project/edit/verification contract
 raco glaze doctor --json     # Diagnose package and native WebView readiness
+raco glaze compliance --json # Generate SBOM, notices, and run the license audit
+raco glaze support-bundle    # Collect a redacted diagnostic ZIP for issue reports
 raco glaze schema write      # Explicitly refresh the application API baseline
 raco glaze schema check --json # Reject breaking application API changes
 raco glaze dev               # Run this project's native desktop app

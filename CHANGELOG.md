@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `raco glaze compliance [--json] [--out DIR]` generates a CycloneDX 1.5
+  SBOM (`glaze-sbom.cdx.json`) and third-party notices
+  (`glaze-notices.txt`) for the installed glaze dependency closure and runs
+  a license audit. The audit fails closed (exit 1) on any rejected
+  (strong-copyleft / source-available) or unknown license. Declared licenses
+  are always audited; the Racket main distribution — installation-scope
+  packages and built-in core collections such as `racket`/`pkg-lib` that
+  carry no license field — inherits the distribution's Apache-2.0 OR MIT
+  baseline, while a user-scope catalog dependency with no declared license
+  still fails closed. Platform-conditional dependencies for foreign
+  platforms are excluded from the closure. The SBOM is deterministic (no
+  timestamp) so release diffs stay clean. Borrowed from rivet's
+  `compliance` command.
+- `raco glaze support-bundle [--out FILE]` collects a redacted diagnostic
+  ZIP (environment facts, the doctor report, the project inspect report
+  when run inside a glaze project, and bounded window-state/log files from
+  the glaze config tree) for issue reports. Every string is redacted
+  against the real account profile roots (`USERPROFILE`/`HOME`, not just
+  Racket's redirectable home-dir) in native, backslash-escaped, and
+  forward-slash spellings, so a shared bundle does not leak the username or
+  absolute paths. Borrowed from rivet's `support-bundle` command.
+- The package CI gains a license-compliance gate, and the source release
+  job ships the SBOM + notices (with sha256 sidecars) as release assets;
+  the required source-package inventory now covers the compliance and
+  support-bundle modules. `doctor`'s machine-readable report is factored
+  into `doctor-jsexpr` so `doctor --json` and `support-bundle` always
+  describe the same package table.
+
 ### Removed
 
 - **BREAKING**: the 22 G3-S2 deprecated private-tier shims are gone from the

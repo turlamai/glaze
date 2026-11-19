@@ -35,6 +35,15 @@ jobs:
           GLAZE_TEST_NO_TRAY: ${{ runner.os == 'macOS' && '1' || '' }}
         run: raco test glaze-test/
 
+      - name: License compliance gate
+        if: matrix.os == 'ubuntu-24.04' && matrix.racket-version == '9.3'
+        shell: bash
+        run: |
+          # Fails closed (exit 1) on any rejected/unknown third-party license.
+          raco glaze compliance --json --out "$RUNNER_TEMP/compliance"
+          test -s "$RUNNER_TEMP/compliance/glaze-sbom.cdx.json"
+          test -s "$RUNNER_TEMP/compliance/glaze-notices.txt"
+
       - name: Build Scribble documentation
         if: runner.os == 'Linux'
         shell: bash

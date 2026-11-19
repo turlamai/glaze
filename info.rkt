@@ -23,7 +23,11 @@
     ;; do not need the OpenSSL 3 CLI; signing/keygen still use it.
     ["ed25519" #:version "0.1"]
     ;; Tests ship inside this package, so rackunit is a runtime dep.
-    "rackunit-lib"))
+    "rackunit-lib"
+    ;; `raco glaze compliance` reads the installed package table (pkg/lib)
+    ;; and package info.rkt fields (setup/getinfo). pkg-lib ships with the
+    ;; main distribution; naming it keeps the dependency explicit.
+    "pkg-lib"))
 (define build-deps
   '("scribble-lib"
     "racket-doc"))

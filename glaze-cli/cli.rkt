@@ -5,10 +5,12 @@
          glaze-cli/pkg
          glaze-cli/inspect
          glaze-cli/private/build-command
+         glaze-cli/private/compliance
          glaze-cli/private/init
          glaze-cli/private/measure
          glaze-cli/private/run
          glaze-cli/private/schema
+         glaze-cli/private/support-bundle
          glaze-cli/private/update-command)
 
 (define (print-help)
@@ -25,6 +27,8 @@
   (displayln "  manifest-verify Verify a signed update manifest")
   (displayln "  install       Pin the glaze package to a revision and link it")
   (displayln "  doctor        Diagnose package/WebView readiness (--json for agents)")
+  (displayln "  compliance    SBOM, third-party notices, and license audit (--json)")
+  (displayln "  support-bundle  Redacted diagnostic ZIP for issue reports (--out FILE)")
   (displayln "  inspect       Show project edit/verification map (--json for agents)")
   (displayln "  schema        Write/check the committed application schema contract")
   (displayln "  verify        Run the project native UI verification script")
@@ -86,6 +90,14 @@
      ["manifest-verify" (manifest-verify-command rest)]
      ["install" (install-command rest)]
      ["doctor" (doctor-command rest)]
+     ["compliance" (exit (compliance-command rest))]
+     ["support-bundle"
+      (exit (support-bundle-command rest
+                                    #:doctor (lambda () (doctor-jsexpr))
+                                    #:inspect (lambda ()
+                                                (and (file-exists? (build-path (current-directory)
+                                                                               "glaze.rktd"))
+                                                     (project-report)))))]
      ["help" (print-help)]
      [_
       (printf "Unknown command: ~a\n" cmd)

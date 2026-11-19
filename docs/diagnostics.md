@@ -39,6 +39,36 @@ with `--json`.
 | Build warns and emits zip/tar.gz instead of an installer | toolchain availability | WiX (Windows), macOS dmg tooling, or dpkg/rpm/AppImage tooling is missing. This is a distribution-format downgrade; install the toolchain before releasing. |
 | Update verification fails | manifest, key id, SHA-256 and signature | Treat it as a failed update, never as “unverified but acceptable”. Check the pinned public key, `#:key-id`, channel and artifact digest. |
 
+## Collecting a support bundle
+
+```bash
+raco glaze support-bundle --out glaze-support-bundle.zip
+```
+
+This writes one ZIP with `environment.json` (Racket/Glaze versions, OS,
+config root), `doctor.json` (the same report as `doctor --json`),
+`inspect.json` when run inside a glaze project, and bounded
+`window-state.json` / `*.log` files from the glaze config tree. Every string
+is redacted against the real account profile (`USERPROFILE` on Windows,
+`HOME` on Unix) in native, backslash-escaped, and forward-slash spellings,
+so the archive is safe to attach to a public issue without leaking the
+username or absolute paths. Attach it instead of pasting raw reports.
+
+## License compliance
+
+```bash
+raco glaze compliance --json --out dist   # SBOM + notices + license audit
+```
+
+Generates a CycloneDX 1.5 SBOM (`glaze-sbom.cdx.json`) and third-party
+notices (`glaze-notices.txt`) for the installed dependency closure and
+audits every license. It exits nonzero on any rejected (strong-copyleft /
+source-available) or unknown license, so CI and the source release block on
+an unreviewed dependency. The Racket main distribution inherits its
+Apache-2.0 OR MIT baseline; a chosen catalog dependency with no declared
+license fails closed. The same gate runs in package CI and ships the SBOM +
+notices as release assets.
+
 ## Where the rules live
 
 Startup failure behavior and the never-fall-back rule are owned by
@@ -49,7 +79,9 @@ procedures are documented in the Scribble manual. Structured logging and the
 
 ## Reporting a defect
 
-Include the `doctor --json` and `inspect --json` output (redact paths if
-needed), the Racket and Glaze versions, OS/architecture, whether the window or
-the packaged artifact failed, and the first error. Report suspected
-vulnerabilities privately through [SECURITY.md](../SECURITY.md).
+Attach a `raco glaze support-bundle` ZIP (it already redacts home paths and
+bundles the `doctor`/`inspect` reports, versions, and OS), plus whether the
+window or the packaged artifact failed and the first error. If you paste
+reports manually instead, include `doctor --json` and `inspect --json`, the
+Racket and Glaze versions, and OS/architecture, and redact paths yourself.
+Report suspected vulnerabilities privately through [SECURITY.md](../SECURITY.md).

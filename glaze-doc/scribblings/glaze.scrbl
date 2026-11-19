@@ -1487,6 +1487,8 @@ and @tt{raco glaze help}; it must not shrink below the shipped commands.
  raco glaze dev                        Run the project's native main.rkt
  raco glaze inspect --json             Inspect project paths and verification map
  raco glaze doctor --json              Diagnose package/WebView readiness
+ raco glaze compliance --json          SBOM, third-party notices, and license audit
+ raco glaze support-bundle             Collect a redacted diagnostic ZIP
  raco glaze schema check --json        Check API compatibility
  raco glaze schema write               Explicitly update API baseline
  raco glaze verify                     Verify real native window
