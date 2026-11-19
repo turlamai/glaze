@@ -1491,6 +1491,7 @@ and @tt{raco glaze help}; it must not shrink below the shipped commands.
  raco glaze support-bundle             Collect a redacted diagnostic ZIP
  raco glaze acceptance --json          Bounded headless acceptance evidence
  raco glaze matrix <report>...         Fold per-platform acceptance reports
+ raco glaze check-release-version      Preflight release version alignment
  raco glaze schema check --json        Check API compatibility
  raco glaze schema write               Explicitly update API baseline
  raco glaze verify                     Verify real native window
