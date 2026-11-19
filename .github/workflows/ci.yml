@@ -44,6 +44,11 @@ jobs:
           test -s "$RUNNER_TEMP/compliance/glaze-sbom.cdx.json"
           test -s "$RUNNER_TEMP/compliance/glaze-notices.txt"
 
+      - name: Release version preflight
+        if: matrix.os == 'ubuntu-24.04' && matrix.racket-version == '9.3'
+        shell: bash
+        run: raco glaze check-release-version --json
+
       - name: Build Scribble documentation
         if: runner.os == 'Linux'
         shell: bash

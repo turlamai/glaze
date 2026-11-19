@@ -50,6 +50,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   job folds it into a `glaze-acceptance-matrix` artifact, failing closed
   when any platform's evidence is missing or any leg failed; the required
   source-package inventory now covers the acceptance and matrix modules.
+- `raco glaze check-release-version [<tag>] [--info FILE] [--carrier FILE]...
+  [--allow-rc] [--json]` preflights the release version contract from
+  docs/RELEASING.md before a tag is cut: the info.rkt `version` (Racket form,
+  e.g. `0.19`) and `release-version` (three-component SemVer, e.g. `0.19.0`)
+  must be equivalent forms, CHANGELOG.md must carry the release, an optional
+  tag must match `v<release-version>` (release candidates need `--allow-rc`),
+  and every declared `--carrier` file must mention the release. It fails
+  closed (exit 1) on any divergence so an inconsistent release cannot be
+  tagged. Borrowed from rivet's `check-release-version` command.
+- The package CI runs `check-release-version` as a pre-merge preflight, and
+  the source release job re-checks it against the pushed tag, so version
+  drift is caught on a pull request rather than only after a tag exists.
 
 ### Removed
 
