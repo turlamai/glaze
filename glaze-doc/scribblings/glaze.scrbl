@@ -1492,6 +1492,7 @@ and @tt{raco glaze help}; it must not shrink below the shipped commands.
  raco glaze acceptance --json          Bounded headless acceptance evidence
  raco glaze matrix <report>...         Fold per-platform acceptance reports
  raco glaze check-release-version      Preflight release version alignment
+ raco glaze verify-release-assets      Offline gate for signed release assets
  raco glaze schema check --json        Check API compatibility
  raco glaze schema write               Explicitly update API baseline
  raco glaze verify                     Verify real native window

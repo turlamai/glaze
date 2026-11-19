@@ -10,6 +10,7 @@
          glaze-cli/private/init
          glaze-cli/private/matrix
          glaze-cli/private/measure
+         glaze-cli/private/release-assets
          glaze-cli/private/release-version
          glaze-cli/private/run
          glaze-cli/private/schema
@@ -39,6 +40,8 @@
   (displayln "  verify        Run the project native UI verification script")
   (displayln "  measure       Report packaged-app size/startup against budgets")
   (displayln "  check-release-version  Preflight release version alignment (<tag> --allow-rc --json)")
+  (displayln
+   "  verify-release-assets  Offline gate for signed release assets (<manifest> <dir> <pubkey> --base-url URL --json)")
   (displayln "  help          Show this help")
   (displayln "")
   (displayln "Glaze requires a working native WebView. If it is missing or broken, startup")
@@ -107,6 +110,7 @@
      ["acceptance" (exit (acceptance-command rest #:doctor (lambda () (doctor-jsexpr))))]
      ["matrix" (exit (matrix-command rest))]
      ["check-release-version" (exit (release-version-command rest))]
+     ["verify-release-assets" (exit (verify-release-assets-command rest))]
      ["help" (print-help)]
      [_
       (printf "Unknown command: ~a\n" cmd)

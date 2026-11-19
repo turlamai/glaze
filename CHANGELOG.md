@@ -62,6 +62,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - The package CI runs `check-release-version` as a pre-merge preflight, and
   the source release job re-checks it against the pushed tag, so version
   drift is caught on a pull request rather than only after a tag exists.
+- `raco glaze verify-release-assets <manifest> <release-dir> <public-key>
+  --base-url URL [--key-id ID] [--application-id ID] [--require TARGET]...
+  [--json]` is an offline gate for the exact files about to be published
+  under a signed update manifest. It authenticates the Ed25519 manifest,
+  requires an immutable HTTPS base URL (GitHub feeds must pin a release tag,
+  not `latest`), checks that a GitHub tag matches the signed version, and
+  verifies every signed asset's filename safety, installer/extension match,
+  presence as a regular file, size, and SHA-256, rejecting duplicate files
+  and missing `--require platform:arch:installer` targets. It fails closed
+  (exit 1) on any divergence so an inconsistent release cannot be published.
+  Borrowed from rivet's `verify-release-assets` command; it complements
+  `check-release-version` (version metadata before tagging versus real assets
+  before publishing).
+- The release-asset gate is covered by fixture tests plus an OpenSSL-gated
+  end-to-end test in the package test suite; the required source-package
+  inventory now covers the release-assets modules.
 
 ### Removed
 

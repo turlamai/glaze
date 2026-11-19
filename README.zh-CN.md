@@ -151,6 +151,7 @@ raco glaze support-bundle  # 收集脱敏诊断 ZIP 用于问题反馈
 raco glaze acceptance --json # 产出有界的 headless 验收证据
 raco glaze matrix <report>... # 将各平台验收报告聚合为矩阵
 raco glaze check-release-version # 打 tag 前预检发布版本一致性
+raco glaze verify-release-assets <manifest> <dir> <pubkey> --base-url URL # 发布前离线校验签名更新资产
 raco glaze schema write   # 有意变更 API 时写入基线
 raco glaze schema check --json # 检查 API 兼容性
 raco glaze dev           # 运行当前项目的原生桌面应用
