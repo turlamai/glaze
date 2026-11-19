@@ -15,9 +15,9 @@ application, with the typed JS bridge, capabilities, and platform sys
 integrations owned by the Racket side.}
 
 @margin-note{The @racket[(require glaze)] facade re-exports the stable
-surface, including the 0.18.0 deprecation shims documented by
-@filepath{docs/api-stability.md}; they are scheduled for removal in 0.19.
-New code should prefer the primary modules named there.}
+surface. The 0.18.0 deprecation shims were removed after 0.19.0; the
+removed-shim register in @filepath{docs/api-stability.md} names each
+canonical owner. New code should prefer the primary modules named there.}
 
 @bold{Human-first. Agent-native. Local by design.} New projects include an
 agent instruction contract and native-window verification script. The CLI
@@ -1514,7 +1514,8 @@ Development and production use the same native WebView startup path.
 API builders (@racket[define-api-routes], @racket[GET], @racket[POST],
 @racket[api-response]), window operations, and the platform capability
 modules — with one stability contract. @racketmodname[glaze] re-exports it
-together with the deprecated shims noted above.
+as the legacy compatibility facade (the 0.18.0 deprecation shims were
+removed after 0.19.0).
 
 @section{Signing and hashing}
 

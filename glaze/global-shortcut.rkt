@@ -21,8 +21,8 @@
          accelerator?
          ;; platform-bound backend instance — owner-module export (the
          ;; struct/constructor live in glaze/private/hotkey-backend); the
-         ;; reviewed layer and the 1.0 snapshot no longer carry it, the
-         ;; legacy facade keeps it as a deprecated G3-S2 shim
+         ;; reviewed layer and the 1.0 snapshot no longer carry it, and the
+         ;; legacy facade's G3-S2 shim was removed after 0.19.0 (glaze#133)
          default-hotkey-backend
          accelerator-permission
          make-global-shortcut-routes)
