@@ -56,8 +56,9 @@
         ""))
   (define icon-metadata
     (if icon-ico
-        (format "    <Icon Id='GlazeAppIcon.ico' SourceFile='~a' />\n    <Property Id='ARPPRODUCTICON' Value='GlazeAppIcon.ico' />\n"
-                (xml-escape (path->string icon-ico)))
+        (format
+         "    <Icon Id='GlazeAppIcon.ico' SourceFile='~a' />\n    <Property Id='ARPPRODUCTICON' Value='GlazeAppIcon.ico' />\n"
+         (xml-escape (path->string icon-ico)))
         ""))
   (format
    #<<WXEOF
