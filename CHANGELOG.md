@@ -118,6 +118,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Linux autoplay acceptance hatch now actually allows audible synthetic
+  playback (glaze#147): `WebKitWebsitePolicies:autoplay` defaults to
+  `ALLOW_WITHOUT_SOUND` and overrides the settings gesture flag (WebKit
+  bug 167132), so `media-playback-requires-user-gesture = false` alone
+  still rejected unmuted `play()` with `NotAllowedError`. The hatch now
+  also applies per-view website policies with `WEBKIT_AUTOPLAY_ALLOW`
+  (value 0 per the WebKitGTK reference) and logs the gesture-gate
+  readback while active. Muted playback was unaffected; the WebKitGTK
+  MediaSession->MPRIS bridge appears to surface only audible playback,
+  so this is also expected to unblock OS-level Now Playing evidence on
+  Linux.
 - Windows webview teardown no longer raises a spurious `CreateController
   failed: 0x80004004` (glaze#146): `close` and the WM_CLOSE path now call
   `ICoreWebView2Controller::Close` (vtable slot 24, verified against

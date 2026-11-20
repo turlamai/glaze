@@ -34,6 +34,7 @@
          racket/path
          racket/string
          "../ffi-discovery.rkt"
+         "../log.rkt"
          "../native-transport.rkt"
          "../tray/tray-protocol.rkt"
          "../private/id-allocator.rkt")
@@ -105,6 +106,23 @@
   (maybe-bind webkit-lib
               "webkit_settings_set_media_playback_requires_user_gesture"
               (_fun _pointer _bool -> _void)))
+(define webkit_settings_get_media_playback_requires_user_gesture
+  (maybe-bind webkit-lib
+              "webkit_settings_get_media_playback_requires_user_gesture"
+              (_fun _pointer -> _bool)))
+;; WebKitWebsitePolicies:autoplay defaults to ALLOW_WITHOUT_SOUND and
+;; overrides the settings gesture flag (WebKit bug 167132), so the hatch
+;; must relax the per-view website policies too (glaze#147). The varargs
+;; constructor is called with its fixed-prefix argument types (string,
+;; int, NULL terminator) — same register passing on SysV/AAPCS64.
+(define webkit_website_policies_new_with_policies
+  (maybe-bind webkit-lib
+              "webkit_website_policies_new_with_policies"
+              (_fun _string _int _pointer -> _pointer)))
+(define webkit_web_view_set_website_policies
+  (maybe-bind webkit-lib "webkit_web_view_set_website_policies" (_fun _pointer _pointer -> _void)))
+(define webkit_website_policies_unref
+  (maybe-bind webkit-lib "webkit_website_policies_unref" (_fun _pointer -> _void)))
 (define g_main_context_iteration
   (maybe-bind glib-lib "g_main_context_iteration" (_fun _pointer _bool -> _bool)))
 (define g_signal_connect_data
@@ -432,11 +450,24 @@
   ;; Acceptance-only escape hatch (glaze#143): synthetic-click media
   ;; playback for real-window acceptance harnesses. Default off; shipped
   ;; apps must never set GLAZE_ALLOW_PROGRAMMATIC_PLAYBACK=1.
-  (when (and (equal? (getenv "GLAZE_ALLOW_PROGRAMMATIC_PLAYBACK") "1")
-             webkit_web_view_get_settings
-             webkit_settings_set_media_playback_requires_user_gesture)
-    (webkit_settings_set_media_playback_requires_user_gesture (webkit_web_view_get_settings webview)
-                                                              #f))
+  (when (equal? (getenv "GLAZE_ALLOW_PROGRAMMATIC_PLAYBACK") "1")
+    (when (and webkit_web_view_get_settings webkit_settings_set_media_playback_requires_user_gesture)
+      (webkit_settings_set_media_playback_requires_user_gesture (webkit_web_view_get_settings webview)
+                                                                #f))
+    ;; The website-policies autoplay default (ALLOW_WITHOUT_SOUND) overrides
+    ;; the settings flag, so audible synthetic playback needs ALLOW (0) here
+    ;; or play() still rejects NotAllowedError (glaze#147).
+    (when (and webkit_website_policies_new_with_policies webkit_web_view_set_website_policies)
+      (define policies (webkit_website_policies_new_with_policies "autoplay" 0 #f))
+      (when policies
+        (webkit_web_view_set_website_policies webview policies)
+        (when webkit_website_policies_unref
+          (webkit_website_policies_unref policies))))
+    (when (and webkit_web_view_get_settings webkit_settings_get_media_playback_requires_user_gesture)
+      (log-info (current-logger)
+                (format "glaze linux autoplay hatch: gesture-gate readback=~a"
+                        (webkit_settings_get_media_playback_requires_user_gesture
+                         (webkit_web_view_get_settings webview))))))
   (gtk_container_add window webview)
   (webkit_web_view_load_uri webview
                             (if native-transport
