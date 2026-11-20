@@ -64,6 +64,17 @@
   (check-false (string-contains? wxs "WixUILicenseRtf")
                "wizard bitmaps and license stay unauthored when unconfigured"))
 
+(test-case "Windows MSI reuses the application's icon in Installed Apps"
+  (define plain (windows-wxs "Demo" (string->path "C:/dist") "1.2.3" "Acme" "com.acme.demo"))
+  (define branded
+    (windows-wxs "Demo" (string->path "C:/dist") "1.2.3" "Acme" "com.acme.demo"
+                 #:icon-ico (string->path "C:/assets/app.ico")))
+  (check-false (string-contains? plain "ARPPRODUCTICON"))
+  (check-true (string-contains? branded
+                                "Icon Id='GlazeAppIcon.ico' SourceFile='C:/assets/app.ico'"))
+  (check-true (string-contains? branded
+                                "Property Id='ARPPRODUCTICON' Value='GlazeAppIcon.ico'")))
+
 (test-case "configured wizard assets ride in through WixVariables"
   (define wxs
     (windows-wxs "Demo"
