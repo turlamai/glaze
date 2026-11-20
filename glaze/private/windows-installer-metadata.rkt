@@ -230,6 +230,7 @@ InstallDir "$PROGRAMFILES64\~a"
 InstallDirRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\~a" "InstallLocation"
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_UNPAGE_INSTFILES
+!insertmacro MUI_LANGUAGE "English"
 Section "Install"
   SetRegView 64
   SetOutPath "$INSTDIR"
