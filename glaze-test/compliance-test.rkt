@@ -61,6 +61,41 @@
   (check-equal? (license-verdict "blessing") 'ok)
   (check-equal? (license-verdict '(Apache-2.0 OR MIT AND blessing)) 'ok)
 
+  ;; ---- case-insensitive SPDX matching -----------------------------------
+  ;; Distribution metadata writes SPDX ids in non-canonical case (the macOS
+  ;; Racket natipkg uses "BSD-3-clause"); matching folds case without widening
+  ;; the gate.
+  (check-equal? (license-verdict "bsd-3-clause") 'ok)
+  (check-equal? (license-verdict "BSD-3-CLAUSE") 'ok)
+  (check-equal? (license-verdict 'bsd-2-clause) 'ok)
+  (check-equal? (license-verdict "apache-2.0") 'ok)
+  (check-equal? (license-verdict "ApAcHe-2.0") 'ok)
+  (check-equal? (license-verdict 'mit) 'ok)
+  (check-equal? (license-verdict "lgpl-2.1-or-later") 'ok)
+  ;; rejected identifiers stay rejected in any case
+  (check-equal? (license-verdict "gpl-3.0-only") 'rejected)
+  (check-equal? (license-verdict "GPL-3.0-ONLY") 'rejected)
+  (check-equal? (license-verdict 'agpl-3.0-or-later) 'rejected)
+  (check-equal? (license-verdict '(MIT AND gpl-3.0-only)) 'rejected)
+  ;; genuinely unknown identifiers still fail closed
+  (check-equal? (license-verdict "bsd-3-clause-extra") 'unknown)
+  (check-equal? (license-verdict "MIT-ISH") 'unknown)
+  ;; the exact macOS Racket distribution compound expression that previously
+  ;; failed closed because of the lowercase "BSD-3-clause" atom
+  (check-equal? (license-verdict '((Apache-2.0 OR MIT) AND (BSD-3-clause AND Apache-2.0))) 'ok)
+  (check-equal? (license-verdict '((Apache-2.0 OR MIT) AND (bsd-3-clause AND apache-2.0))) 'ok)
+  (define macos-style-report
+    (audit-report (list (hasheq 'name
+                                "racket-x86_64-macosx-4"
+                                'version
+                                "9.3"
+                                'license
+                                '((Apache-2.0 OR MIT) AND (BSD-3-clause AND Apache-2.0))
+                                'scope
+                                'installation))))
+  (check-true (hash-ref macos-style-report 'ok))
+  (check-equal? (hash-ref macos-style-report 'problems) '())
+
   ;; ---- sbom-document ----------------------------------------------------
   (define components
     (list (hasheq 'name "root" 'version "1.0" 'license 'MIT)

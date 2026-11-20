@@ -127,10 +127,15 @@
                    "SSPL-1.0"
                    "BUSL-1.1"))
 
+;; SPDX license identifiers are matched case-insensitively: the canonical
+;; list uses "BSD-3-Clause" but distribution metadata in the wild writes
+;; "BSD-3-clause" (e.g. the macOS Racket natipkg), and "apache-2.0" / "MIT"
+;; variants are equally valid. Case folding never widens the gate — a
+;; rejected or genuinely unknown identifier stays rejected / unknown.
 (define (atom-verdict id)
   (cond
-    [(member id permissive-licenses) 'ok]
-    [(member id rejected-licenses) 'rejected]
+    [(member id permissive-licenses string-ci=?) 'ok]
+    [(member id rejected-licenses string-ci=?) 'rejected]
     [else 'unknown]))
 
 (define (expression-parts lic)

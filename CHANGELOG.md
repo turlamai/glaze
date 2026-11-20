@@ -105,6 +105,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The compliance license audit now matches SPDX identifiers case-insensitively.
+  Distribution metadata in the wild writes non-canonical case — the macOS Racket
+  natipkg `racket-x86_64-macosx-4` declares `(Apache-2.0 OR MIT) AND
+  (BSD-3-clause AND Apache-2.0)` with a lowercase `BSD-3-clause` — which the
+  previous case-sensitive whitelist lookup classified as `unknown`, failing the
+  audit closed on macOS (and the `acceptance` gate that embeds it). Case folding
+  recognizes `BSD-3-clause`, `apache-2.0`, `mit` and similar variants without
+  widening the gate: rejected and genuinely unknown identifiers stay rejected /
+  unknown in any case. Linux and Windows were unaffected (their distribution
+  license is `Apache-2.0 OR MIT`).
 - Linux packaged installs no longer pin persisted window state inside the
   read-only payload (glaze#131). `default-window-state-path` used
   `(find-system-path 'pref-dir)`, which the `raco exe` launcher resolves
