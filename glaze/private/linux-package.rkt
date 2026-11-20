@@ -17,6 +17,7 @@
                   deb-control
                   desktop-entry
                   icon-png-bytes
+                  png-dimensions
                   rpm-spec
                   sanitize-package-name))
 
@@ -40,13 +41,13 @@
    app-name
    app-name))
 
-(define (make-linux-installer out-dir app-name version publisher identifier)
+(define (make-linux-installer out-dir app-name version publisher identifier [icon-path #f])
   (define dist (path->complete-path out-dir))
   (define artifacts
     (filter values
-            (list (linux-appimage! dist app-name)
-                  (linux-deb! dist app-name version publisher identifier)
-                  (linux-rpm! dist app-name version publisher identifier))))
+            (list (linux-appimage! dist app-name icon-path)
+                  (linux-deb! dist app-name version publisher identifier icon-path)
+                  (linux-rpm! dist app-name version publisher identifier icon-path))))
   (cond
     [(pair? artifacts)
      (for ([artifact (in-list artifacts)])
@@ -65,7 +66,28 @@
 ;; /usr/lib/<app>, a shell wrapper at /usr/bin/<app> keeps raco
 ;; distribute's relative bin/ + lib/ layout intact, and a desktop entry
 ;; plus hicolor icon integrate with the desktop environment.
-(define (linux-staging-tree dist app-name)
+;; The hicolor bucket an icon lands in: a product PNG keeps its own pixel
+;; size; without one (or with unreadable dimensions) the generated
+;; placeholder stays in 64x64. Shared by the staging tree and the AppDir
+;; root icon copy so both always agree.
+(define (linux-icon-bucket app-name icon-path)
+  (let-values ([(w h) (png-dimensions (if (and icon-path (file-exists? icon-path))
+                                          (file->bytes icon-path)
+                                          (icon-png-bytes)))])
+    (if (and w h)
+        (format "~ax~a" w h)
+        "64x64")))
+
+(define (linux-icon-rel-path app-name icon-path)
+  (build-path "usr"
+              "share"
+              "icons"
+              "hicolor"
+              (linux-icon-bucket app-name icon-path)
+              "apps"
+              (string-append (sanitize-package-name app-name) ".png")))
+
+(define (linux-staging-tree dist app-name [icon-path #f])
   (define root (make-temporary-file "glaze-pkg-~a" 'directory))
   (define lib-dir (build-path root "usr" "lib" app-name))
   (make-directory* lib-dir)
@@ -95,17 +117,21 @@
           (build-path apps-dir (string-append app-name ".desktop"))
           (lambda (out) (display (desktop-entry app-name (sanitize-package-name app-name)) out))
           #:exists 'replace)
-         (define icon-dir (build-path root "usr" "share" "icons" "hicolor" "64x64" "apps"))
-         (make-directory* icon-dir)
-         (call-with-output-file (build-path icon-dir
-                                            (string-append (sanitize-package-name app-name) ".png"))
-                                (lambda (out) (write-bytes (icon-png-bytes) out))
+         (define icon-rel (linux-icon-rel-path app-name icon-path))
+         (define icon-abs (build-path root icon-rel))
+         (make-directory* (path-only icon-abs))
+         (call-with-output-file icon-abs
+                                (lambda (out)
+                                  (write-bytes (if (and icon-path (file-exists? icon-path))
+                                                   (file->bytes icon-path)
+                                                   (icon-png-bytes))
+                                               out))
                                 #:exists 'replace)
          root)))
 
 ;; ---- format builders (each degrades to #f) ----
 
-(define (linux-deb! dist app-name version publisher identifier)
+(define (linux-deb! dist app-name version publisher identifier [icon-path #f])
   (with-handlers ([exn:fail? (lambda (e)
                                (fprintf (current-error-port)
                                         "[glaze] deb packaging unavailable: ~a\n"
@@ -114,7 +140,7 @@
     (define dpkg-deb (find-executable-path "dpkg-deb" #f))
     (and dpkg-deb
          (let ()
-           (define root (linux-staging-tree dist app-name))
+           (define root (linux-staging-tree dist app-name icon-path))
            (and root
                 (dynamic-wind
                  (lambda () (void))
@@ -131,51 +157,55 @@
                         deb-path))
                  (lambda () (delete-tree-quietly! root))))))))
 
-(define (linux-rpm! dist app-name version publisher identifier)
+(define (linux-rpm! dist app-name version publisher identifier [icon-path #f])
   (with-handlers ([exn:fail? (lambda (e)
                                (fprintf (current-error-port)
                                         "[glaze] rpm packaging unavailable: ~a\n"
                                         (exn-message e))
                                #f)])
     (define rpmbuild (find-executable-path "rpmbuild" #f))
-    (and rpmbuild
-         (let ()
-           (define root (linux-staging-tree dist app-name))
-           (and root
-                (dynamic-wind
-                 (lambda () (void))
-                 (lambda ()
-                   (define top (make-temporary-file "glaze-rpm-~a" 'directory))
-                   (for ([sub (in-list '("BUILD" "RPMS" "SOURCES" "SPECS" "SRPMS"))])
-                     (make-directory* (build-path top sub)))
-                   (define spec-path (build-path top "SPECS" (string-append app-name ".spec")))
-                   (call-with-output-file spec-path
-                                          (lambda (out)
-                                            (display (rpm-spec app-name version publisher root) out))
-                                          #:exists 'replace)
-                   (define ok?
-                     (run rpmbuild
-                          "-bb"
-                          (path->string spec-path)
-                          "--define"
-                          (string-append "_topdir " (path->string top))))
-                   (define rpm-path (build-path dist (string-append app-name ".rpm")))
-                   (when ok?
-                     (define candidate
-                       (let loop ([dir (build-path top "RPMS")])
-                         (append-map (lambda (entry)
-                                       (define full (build-path dir entry))
-                                       (cond
-                                         [(directory-exists? full) (loop full)]
-                                         [(string-suffix? (path->string entry) ".rpm") (list full)]
-                                         [else '()]))
-                                     (directory-list dir))))
-                     (when (pair? candidate)
-                       (copy-file (first candidate) rpm-path #t)))
-                   (and (file-exists? rpm-path) rpm-path))
-                 (lambda () (delete-tree-quietly! root))))))))
+    (and
+     rpmbuild
+     (let ()
+       (define root (linux-staging-tree dist app-name icon-path))
+       (and root
+            (dynamic-wind
+             (lambda () (void))
+             (lambda ()
+               (define top (make-temporary-file "glaze-rpm-~a" 'directory))
+               (for ([sub (in-list '("BUILD" "RPMS" "SOURCES" "SPECS" "SRPMS"))])
+                 (make-directory* (build-path top sub)))
+               (define spec-path (build-path top "SPECS" (string-append app-name ".spec")))
+               (call-with-output-file
+                spec-path
+                (lambda (out)
+                  (display
+                   (rpm-spec app-name version publisher root (linux-icon-bucket app-name icon-path))
+                   out))
+                #:exists 'replace)
+               (define ok?
+                 (run rpmbuild
+                      "-bb"
+                      (path->string spec-path)
+                      "--define"
+                      (string-append "_topdir " (path->string top))))
+               (define rpm-path (build-path dist (string-append app-name ".rpm")))
+               (when ok?
+                 (define candidate
+                   (let loop ([dir (build-path top "RPMS")])
+                     (append-map (lambda (entry)
+                                   (define full (build-path dir entry))
+                                   (cond
+                                     [(directory-exists? full) (loop full)]
+                                     [(string-suffix? (path->string entry) ".rpm") (list full)]
+                                     [else '()]))
+                                 (directory-list dir))))
+                 (when (pair? candidate)
+                   (copy-file (first candidate) rpm-path #t)))
+               (and (file-exists? rpm-path) rpm-path))
+             (lambda () (delete-tree-quietly! root))))))))
 
-(define (linux-appimage! dist app-name)
+(define (linux-appimage! dist app-name [icon-path #f])
   (with-handlers ([exn:fail? (lambda (e)
                                (fprintf (current-error-port)
                                         "[glaze] AppImage packaging unavailable: ~a\n"
@@ -185,7 +215,7 @@
     (and
      tool
      (let ()
-       (define root (linux-staging-tree dist app-name))
+       (define root (linux-staging-tree dist app-name icon-path))
        (and root
             (dynamic-wind
              (lambda () (void))
@@ -202,14 +232,7 @@
                 (build-path appdir (string-append app-name ".desktop"))
                 (lambda (out) (display (desktop-entry app-name (sanitize-package-name app-name)) out))
                 #:exists 'replace)
-               (copy-file (build-path root
-                                      "usr"
-                                      "share"
-                                      "icons"
-                                      "hicolor"
-                                      "64x64"
-                                      "apps"
-                                      (string-append (sanitize-package-name app-name) ".png"))
+               (copy-file (build-path root (linux-icon-rel-path app-name icon-path))
                           (build-path appdir (string-append (sanitize-package-name app-name) ".png"))
                           #t)
                (call-with-output-file (build-path appdir "AppRun")

@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Linux packages honor a product icon (glaze#151): `raco glaze build
+  --icon <path.png>` (and `build-app #:icon`) now flows the PNG into the
+  deb/rpm hicolor entry and the AppImage/AppDir root icon, staged verbatim
+  in the hicolor bucket matching its IHDR dimensions; the rpm `%files`
+  entry follows that bucket. Without a PNG the generated placeholder
+  stays in 64x64 exactly as before. Windows `.ico` / macOS `.icns`
+  handling is unchanged.
+
 - `GLAZE_ALLOW_PROGRAMMATIC_PLAYBACK=1` acceptance-only escape hatch
   (glaze#143): relaxes the WebView autoplay gesture gate for the current
   process so real-window acceptance harnesses can start media from

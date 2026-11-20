@@ -14,7 +14,8 @@
          desktop-entry
          deb-control
          rpm-spec
-         icon-png-bytes)
+         icon-png-bytes
+         png-dimensions)
 
 ;; ---- shared Linux package metadata ----
 
@@ -90,7 +91,7 @@
    (if (non-empty-string? publisher) publisher "Unknown maintainer")
    app-name))
 
-(define (rpm-spec app-name version publisher staging-root)
+(define (rpm-spec app-name version publisher staging-root [icon-bucket "64x64"])
   (format #<<SPECEOF
 Name: ~a
 Version: ~a
@@ -109,7 +110,7 @@ cp -a ~a/usr %{buildroot}/
 /usr/bin/~a
 /usr/lib/~a
 /usr/share/applications/~a.desktop
-/usr/share/icons/hicolor/64x64/apps/~a.png
+/usr/share/icons/hicolor/~a/apps/~a.png
 SPECEOF
           (sanitize-package-name app-name)
           (sanitize-package-version version)
@@ -121,6 +122,7 @@ SPECEOF
           app-name
           app-name
           app-name
+          icon-bucket
           (sanitize-package-name app-name)))
 
 ;; ---- generated placeholder icon ----
@@ -183,6 +185,17 @@ SPECEOF
   (bytes-append (integer->integer-bytes (bytes-length data) 4 #f #t)
                 body
                 (integer->integer-bytes (crc32-bytes body) 4 #f #t)))
+
+;; Read width/height from a PNG's IHDR chunk. Returns two values, or #f #f
+;; when the bytes are not a PNG — callers fall back to the placeholder icon
+;; bucket instead of guessing a size.
+(define (png-dimensions bs)
+  (if (and (>= (bytes-length bs) 24)
+           (equal? (subbytes bs 0 8) #"\211PNG\r\n\032\n")
+           (equal? (subbytes bs 12 16) #"IHDR"))
+      (values (integer-bytes->integer (subbytes bs 16 20) #f #t)
+              (integer-bytes->integer (subbytes bs 20 24) #f #t))
+      (values #f #f)))
 
 (define (icon-png-bytes [size 64] [r #xC1] [g #x5F] [b #x3C])
   ;; PNG RGB scanlines are per-pixel interleaved: a filter byte, then R G B
