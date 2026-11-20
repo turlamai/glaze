@@ -345,7 +345,7 @@
                              #:license-rtf installer-license
                              #:banner-bmp installer-banner
                              #:dialog-bmp installer-dialog
-                              #:icon-ico icon)]
+                             #:icon-ico icon)]
     [(macosx) (make-macos-installer out-dir app-name (or version "0.0.0") dmg-background)]
     [else (make-linux-installer out-dir app-name version publisher identifier)]))
 
