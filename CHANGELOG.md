@@ -50,6 +50,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   job folds it into a `glaze-acceptance-matrix` artifact, failing closed
   when any platform's evidence is missing or any leg failed; the required
   source-package inventory now covers the acceptance and matrix modules.
+- `raco glaze clean [project-dir] [--out DIR] [--compiled] [--dry-run] [--json]`
+  removes build artifacts safely: by default the generated `dist/` output
+  directory (the same path `inspect` reports), `--out DIR` for a custom build
+  output, and `--compiled` to also clear the project-root `compiled/` bytecode
+  cache. A pure core plans removals fail-closed — a target must be a non-empty
+  relative path strictly inside the project root, never the root itself or an
+  escape — and the shell deletes only when every target is safe, removing files
+  and links as links so a generated directory that is a junction cannot redirect
+  cleanup into source. `--dry-run` reports the plan without deleting. Borrowed
+  from rivet's `clean` command.
 - `raco glaze check-release-version [<tag>] [--info FILE] [--carrier FILE]...
   [--allow-rc] [--json]` preflights the release version contract from
   docs/RELEASING.md before a tag is cut: the info.rkt `version` (Racket form,

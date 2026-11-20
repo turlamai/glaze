@@ -1498,6 +1498,7 @@ and @tt{raco glaze help}; it must not shrink below the shipped commands.
  raco glaze verify                     Verify real native window
  raco glaze measure                    Report packaged-app size/startup against budgets
  raco glaze build                      Build a distributable / installer
+ raco glaze clean                      Remove build artifacts (dist; --out DIR --compiled --dry-run --json)
  raco glaze updater-keygen             Create an Ed25519 keypair for update signing
  raco glaze update-sign                Sign an update artifact (Ed25519 over its sha256)
  raco glaze update-verify              Verify an update artifact signature

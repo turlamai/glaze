@@ -192,10 +192,11 @@ jobs:
               "glaze/private/public-assets.rkt", "glaze/private/window-state-root.rkt",
               "glaze/private/compliance.rkt", "glaze/private/acceptance.rkt",
               "glaze/private/release-version.rkt", "glaze/private/release-assets.rkt",
+              "glaze/private/clean.rkt",
               "glaze-cli/cli.rkt", "glaze-cli/private/compliance.rkt",
               "glaze-cli/private/support-bundle.rkt", "glaze-cli/private/acceptance.rkt",
               "glaze-cli/private/matrix.rkt", "glaze-cli/private/release-version.rkt",
-              "glaze-cli/private/release-assets.rkt",
+              "glaze-cli/private/release-assets.rkt", "glaze-cli/private/clean.rkt",
               "info.rkt",
           ]
           missing = [m for m in required if not any(n.endswith(m) for n in names)]
