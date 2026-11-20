@@ -52,7 +52,7 @@
   (check-true (string-contains? wxs "DllEntry='WixShellExec'")
               "the launch action must come from the Util extension")
   (check-true (string-contains? wxs "WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT (REMOVE = &quot;ALL&quot;)")
-              "the checkbox must launch only on a fresh install")
+              "offer launch on fresh install/repair, never on full uninstall")
   (check-true (string-contains? wxs "StartMenuApplicationShortcut")
               "a start-menu shortcut must be authored")
   (check-false (string-contains? wxs "DesktopShortcutComponent")
