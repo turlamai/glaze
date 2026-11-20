@@ -246,7 +246,7 @@
 
 (define vtable
   (make-GDBusInterfaceVTable method-call-cb get-property-cb set-property-cb
-                             (vector #f #f #f #f #f #f #f #f)))
+                             (make-array _pointer 8)))
 
 ;; ---- publication ---------------------------------------------------------
 
