@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `GLAZE_ALLOW_PROGRAMMATIC_PLAYBACK=1` acceptance-only escape hatch
+  (glaze#143): relaxes the WebView autoplay gesture gate for the current
+  process so real-window acceptance harnesses can start media from
+  synthetic clicks. Windows passes `--autoplay-policy=no-user-gesture-required`
+  through a hand-built `ICoreWebView2EnvironmentOptions` COM object (the
+  bundled loader does not export `CreateCoreWebView2EnvironmentOptions`;
+  vtable order verified against WebView2.h 1.0.2903.40, and the environment
+  rejects a null/empty `TargetCompatibleBrowserVersion` with E_INVALIDARG,
+  so the object reports the installed evergreen runtime version); macOS sets
+  `mediaTypesRequiringUserActionForPlayback = 0` on the WKWebView
+  configuration; WebKitGTK sets `media-playback-requires-user-gesture =
+  false`. Default off on all three backends; shipped apps must never set it.
+
 - `raco glaze compliance [--json] [--out DIR]` generates a CycloneDX 1.5
   SBOM (`glaze-sbom.cdx.json`) and third-party notices
   (`glaze-notices.txt`) for the installed glaze dependency closure and runs

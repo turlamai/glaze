@@ -60,6 +60,14 @@ x64 构建也可以在 ARM64 主机上以模拟方式运行。托管 Intel macOS
 无人值守 job 设置 `GLAZE_NO_STARTUP_DIALOG=1`，让 WebView 启动失败直接报错，
 而不是卡在系统对话框上。该变量只抑制对话框，不抑制失败。
 
+仅在验收 job 中设置 `GLAZE_ALLOW_PROGRAMMATIC_PLAYBACK=1`：当页面必须靠合成点击
+启动媒体播放时（WebView2/WKWebView/WebKitGTK 默认拒绝无真实用户手势的 `play()`，
+静音也拒绝），该变量在三个后端上放宽本进程的 autoplay 手势门槛：
+Windows 经 environment options 传 `--autoplay-policy=no-user-gesture-required`，
+macOS 设 `mediaTypesRequiringUserActionForPlayback = 0`，WebKitGTK 设
+`media-playback-requires-user-gesture = false`。默认关闭；发布的应用绝不应设置
+它——它会在全进程范围削弱面向用户的手势保护。见 glaze#143。
+
 ## 示例 job
 
 以下只是起点，不是发布流水线：签名、公证和安装器发布需要仓库 secrets，并应放在

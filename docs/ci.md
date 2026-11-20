@@ -68,6 +68,16 @@ Set `GLAZE_NO_STARTUP_DIALOG=1` in unattended jobs so a failed WebView startup
 reports an error instead of waiting on an OS dialog. The dialog is for
 interactive desktops; suppressing it does not suppress the failure.
 
+Set `GLAZE_ALLOW_PROGRAMMATIC_PLAYBACK=1` ONLY in acceptance jobs whose page
+must start media from synthetic clicks (WebView2/WKWebView/WebKitGTK otherwise
+reject `play()` without a real user gesture, even muted). It relaxes the
+autoplay gesture gate for that process on all three backends:
+`--autoplay-policy=no-user-gesture-required` (Windows environment options),
+`mediaTypesRequiringUserActionForPlayback = 0` (macOS configuration),
+`media-playback-requires-user-gesture = false` (WebKitGTK settings). Default
+off; shipped applications must never set it — it weakens a user-facing
+gesture protection process-wide. See glaze#143.
+
 ## Example job
 
 This is a starting point, not a release pipeline: signing, notarization and

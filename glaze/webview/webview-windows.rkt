@@ -89,7 +89,9 @@
         (ffi-lib "WebView2Loader"))))
 
 (define S_OK 0)
-(define E_NOINTERFACE #x80004002)
+;; HRESULT is signed: the unsigned literal does not fit the _int32
+;; callback return type (QI for an unsupported IID would crash).
+(define E_NOINTERFACE (- #x80004002 #x100000000))
 (define IID-IUnknown (bytes 0 0 0 0 0 0 0 0 #xC0 0 0 0 0 0 0 #x46))
 ;; ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler
 (define IID-EnvHandler
@@ -97,6 +99,10 @@
 ;; ICoreWebView2CreateCoreWebView2ControllerCompletedHandler
 (define IID-CtrlHandler
   (bytes #xE0 #xA7 #xC1 #x63 #x68 #xCB #x3B #x44 #x8B #xA8 #x4D #x08 #xCF #x11 #xF0 #xAE))
+;; ICoreWebView2EnvironmentOptions (WebView2.h 1.0.2903.40:
+;; IID = 2fde08a8-1e9a-4766-8c05-95a9ceb9d1c5)
+(define IID-EnvOptions
+  (bytes #xA8 #x08 #xDE #x2F #x9A #x1E #x66 #x47 #x8C #x05 #x95 #xA9 #xCE #xB9 #xD1 #xC5))
 ;; ICoreWebView2WebMessageReceivedEventHandler
 (define IID-WebMessageHandler
   (bytes #x19 #x3F #x21 #x57 #xE6 #x00 #xFA #x49 #x8E #x07 #x89 #x8E #xA0 #x1E #xCB #xD2))
@@ -210,6 +216,92 @@
   (hash-set! handler-table obj (list fn-qi fn-add fn-rel fn-inv))
   obj)
 
+;; ---- Environment options object (hand-built COM, glaze#143) ----
+;; The bundled WebView2Loader.dll does not export
+;; CreateCoreWebView2EnvironmentOptions, so the options interface is
+;; implemented here with the same hand-built-vtable technique as the
+;; handlers above. Vtable order verified against WebView2.h 1.0.2903.40:
+;;   IUnknown 0..2, get/put_AdditionalBrowserArguments 3/4,
+;;   get/put_Language 5/6, get/put_TargetCompatibleBrowserVersion 7/8,
+;;   get/put_AllowSingleSignOnUsingOSPrimaryAccount 9/10.
+;; Propget strings are COM-owned: the caller frees them with
+;; CoTaskMemFree, so they must come from CoTaskMemAlloc (ole32, bound above).
+(define CoTaskMemAlloc
+  (get-ffi-obj "CoTaskMemAlloc" ole32 (_fun _size -> _pointer)))
+(define (com-wstr s)
+  ;; CoTaskMemAlloc'd null-terminated UTF-16 copy of s.
+  (define-values (out _in _status) (bytes-convert conv (string->bytes/utf-8 s)))
+  (define n (bytes-length out))
+  (define p (CoTaskMemAlloc (+ n 2)))
+  (memcpy p out n)
+  (ptr-set! p _uint16 (quotient n 2) 0)
+  p)
+(define (make-environment-options browser-args)
+  (define args-box (box browser-args))
+  (define (qi self in-iid out)
+    (define incoming (ptr->bytes in-iid 16))
+    (cond
+      [(or (bytes=? incoming IID-EnvOptions) (bytes=? incoming IID-IUnknown))
+       (ptr-set! out _pointer 0 self)
+       S_OK]
+      [else
+       (ptr-set! out _pointer 0 #f)
+       E_NOINTERFACE]))
+  (define (addref self) 2)
+  (define (release self) 1)
+  (define (get-args self out)
+    (ptr-set! out _pointer 0 (com-wstr (unbox args-box)))
+    S_OK)
+  (define (put-args self value)
+    (set-box! args-box (wstr->string value))
+    S_OK)
+  (define (get-null self out)
+    ;; Language: null means "use the browser default".
+    (ptr-set! out _pointer 0 #f)
+    S_OK)
+  (define (get-ver self out)
+    ;; TargetCompatibleBrowserVersion must name an installed runtime:
+    ;; null/empty fails environment validation with E_INVALIDARG and an
+    ;; uninstalled version with E_FILENOTFOUND (empirical, WebView2
+    ;; runtime 157). Report the available evergreen runtime version.
+    (define-values (hr vp)
+      (if GetAvailableCoreWebView2BrowserVersionString
+          (GetAvailableCoreWebView2BrowserVersionString #f)
+          (values -1 #f)))
+    (unless (and (zero? hr) vp)
+      (error 'make-environment-options "no available WebView2 runtime version"))
+    (ptr-set! out _pointer 0 (com-wstr (wstr->string vp)))
+    S_OK)
+  (define (put-ignore self value) S_OK)
+  (define (get-false self out)
+    (ptr-set! out _int32 0 0)
+    S_OK)
+  (define (put-ignore-bool self value) S_OK)
+  (define fn-qi (function-ptr qi (_fun _pointer _pointer _pointer -> _int32)))
+  (define fn-add (function-ptr addref (_fun _pointer -> _uint32)))
+  (define fn-rel (function-ptr release (_fun _pointer -> _uint32)))
+  (define fn-ga (function-ptr get-args (_fun _pointer _pointer -> _int32)))
+  (define fn-pa (function-ptr put-args (_fun _pointer _pointer -> _int32)))
+  (define fn-gn (function-ptr get-null (_fun _pointer _pointer -> _int32)))
+  (define fn-gv (function-ptr get-ver (_fun _pointer _pointer -> _int32)))
+  (define fn-pi (function-ptr put-ignore (_fun _pointer _pointer -> _int32)))
+  (define fn-gf (function-ptr get-false (_fun _pointer _pointer -> _int32)))
+  (define fn-pb (function-ptr put-ignore-bool (_fun _pointer _int32 -> _int32)))
+  (define vt (malloc (* 11 (ctype-sizeof _pointer)) _pointer 'raw))
+  (for ([i 11] [fn (list fn-qi fn-add fn-rel fn-ga fn-pa fn-gn fn-pi fn-gv fn-pi fn-gf fn-pb)])
+    (ptr-set! vt _pointer i fn))
+  (define obj (malloc (ctype-sizeof _pointer) _pointer 'raw))
+  (ptr-set! obj _pointer 0 vt)
+  ;; Keep the function pointers alive for the process lifetime: the
+  ;; environment may read the options after the creation call returns.
+  (hash-set! handler-table obj (list fn-qi fn-add fn-rel fn-ga fn-pa fn-gn fn-pi fn-gv fn-gf fn-pb))
+  obj)
+;; Acceptance-only escape hatch (glaze#143): synthetic-click media playback
+;; for real-window acceptance harnesses. Default off; shipped apps must
+;; never set it (it weakens the autoplay gesture gate process-wide).
+(define (allow-programmatic-playback?)
+  (equal? (getenv "GLAZE_ALLOW_PROGRAMMATIC_PLAYBACK") "1"))
+
 ;; Memory IStream for CreateWebResourceResponse (shcore, Windows 8+).
 (define shcore
   (with-handlers ([exn:fail? (lambda (e) #f)])
@@ -224,6 +316,12 @@
        (get-ffi-obj "CreateCoreWebView2EnvironmentWithOptions"
                     loader
                     (_fun _pointer _pointer _pointer _pointer -> _int32)
+                    (lambda () #f))))
+(define GetAvailableCoreWebView2BrowserVersionString
+  (and loader
+       (get-ffi-obj "GetAvailableCoreWebView2BrowserVersionString"
+                    loader
+                    (_fun _pointer (p : (_ptr o _pointer)) -> (r : _int32) -> (values r p))
                     (lambda () #f))))
 (define RegisterClassExW
   (get-ffi-obj "RegisterClassExW" user32 (_fun _pointer -> _ushort) (lambda () #f)))
@@ -736,7 +834,10 @@
       (ShowWindow hwnd SW_SHOW)
 
       (define data-folder (wstr (path->string (new-webview2-data-folder))))
-      (define hr (CreateCoreWebView2EnvironmentWithOptions #f data-folder #f env-handler))
+      (define env-options
+        (and (allow-programmatic-playback?) CoTaskMemAlloc
+             (make-environment-options "--autoplay-policy=no-user-gesture-required")))
+      (define hr (CreateCoreWebView2EnvironmentWithOptions #f data-folder env-options env-handler))
       (unless (= (bitwise-and hr #xffffffff) 0)
         (error 'open-webview
                "CreateCoreWebView2Environment failed: 0x~x"
