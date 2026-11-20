@@ -25,9 +25,30 @@ Scribble manual (`raco docs glaze`) and summarized in the
 | --- | --- | --- |
 | `.zip` / `.tar.gz` | Portable fallback | Produced when an installer toolchain is absent; replace-atomic install plan fits this shape |
 | `.msi` | Windows install/upgrade | WiX; stable `UpgradeCode`, rotating `ProductCode` |
+
 | `.dmg` | macOS drag-install | Apple Silicon by default in Glaze's own matrix; do not claim Intel without building it |
 | `.deb` / `.rpm` / `.AppImage` | Linux | One FHS payload feeds all three; the package manager owns install/upgrade for deb/rpm |
 | Signed update manifest | Update discovery | Separate from OS signing; see below |
+
+Windows installer UX policy (WiX MSI; NSIS fallback):
+
+- **Short path by default:** the WiX minimal UI handles license acceptance,
+  progress and finish, without a directory-choice or redundant confirmation
+  screen. Machine-wide installation goes to Program Files and may request UAC.
+- **No desktop clutter:** create one Start Menu shortcut, not a desktop icon.
+  Windows Search and Settings > Installed apps remain the primary launch and
+  uninstall surfaces. The NSIS fallback follows the same policy.
+- **Correct ownership:** machine-wide MSI shortcut component key paths use
+  HKLM, never an elevated installer's HKCU.
+- **First-run control:** the WiX Finish page offers a Launch App choice,
+  including after repair; full uninstall never launches the removed app.
+  Silent installation remains noninteractive.
+- **Identity and trust:** preserve stable identifier, publisher, UpgradeCode
+  and release-signing policy. The shorter wizard does not replace Authenticode,
+  timestamping or fresh-machine validation. Product-specific banner/dialog
+  assets remain optional, preserving individual product identity.
+
+
 
 Glaze's own release publishes a source ZIP plus showcase installers. An
 application should publish its own artifacts and never point users at the

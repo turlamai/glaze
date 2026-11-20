@@ -28,25 +28,59 @@
   (check-false (regexp-match? #rx"admin\r?\nSetRegView" nsi)
                "SetRegView must not sit at script top level"))
 
-(test-case "the MSI authors the commercial wizard and desktop integration"
+(test-case "NSIS fallback has one progress screen and no desktop clutter"
+  (define nsi (windows-nsis "Demo" (string->path "C:/dist") "1.2.3" "Acme" "com.acme.demo"))
+  (check-true (string-contains? nsi "!include \"MUI2.nsh\""))
+  (check-true (string-contains? nsi "MUI_PAGE_INSTFILES"))
+  (check-true (string-contains? nsi "MUI_LANGUAGE \"English\""))
+  (check-false (string-contains? nsi "Page directory"))
+  (check-true (string-contains? nsi "$SMPROGRAMS"))
+  (check-equal? (length (regexp-match* #rx"SetShellVarContext all" nsi))
+                2
+                "both setup and uninstaller must use the all-users Start Menu")
+  (check-false (string-contains? nsi "$DESKTOP")))
+
+(test-case "the MSI uses a shorter wizard and nonintrusive Start Menu integration"
   (define identifier "com.acme.demo")
   (define wxs (windows-wxs "Demo" (string->path "C:/dist") "1.2.3" "Acme" identifier))
-  (check-true (string-contains? wxs "ui:WixUI Id='WixUI_InstallDir'")
-              "the wizard must come from the UI extension namespace")
+  (check-true (string-contains? wxs "ui:WixUI Id='WixUI_Minimal'")
+              "the shorter wizard must come from the UI extension namespace")
+  (check-false (string-contains? wxs "WixUI_InstallDir")
+               "the default must not ask for a redundant installation directory")
   (check-true (string-contains? wxs "xmlns:ui='http://wixtoolset.org/schemas/v4/wxs/ui'"))
-  (check-true (string-contains? wxs "WIXUI_INSTALLDIR' Value='INSTALLDIR'"))
+  (check-false (string-contains? wxs "WIXUI_INSTALLDIR")
+               "the minimal wizard must not reference an install-directory dialog")
   (check-true (string-contains? wxs "WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT' Value='Launch Demo'")
               "the finish page must offer launching the app")
   (check-true (string-contains? wxs "WixShellExecTarget' Value='[INSTALLDIR]Demo.exe'"))
   (check-true (string-contains? wxs "DllEntry='WixShellExec'")
               "the launch action must come from the Util extension")
-  (check-true (string-contains? wxs "WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed")
-              "the checkbox must launch only on a fresh install")
+  (check-true
+   (string-contains? wxs "WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT (REMOVE = &quot;ALL&quot;)")
+   "offer launch on fresh install/repair, never on full uninstall")
   (check-true (string-contains? wxs "StartMenuApplicationShortcut")
               "a start-menu shortcut must be authored")
-  (check-true (string-contains? wxs "DesktopShortcutComponent") "a desktop shortcut must be authored")
+  (check-false (string-contains? wxs "DesktopShortcutComponent")
+               "desktop icons must not be created without consent")
+  (check-false (string-contains? wxs "DesktopFolder"))
+  (check-true (string-contains? wxs "Root='HKLM'")
+              "machine-scoped MSI components must not write to elevated HKCU")
+  (check-false (string-contains? wxs "Root='HKCU'"))
   (check-false (string-contains? wxs "WixUILicenseRtf")
                "wizard bitmaps and license stay unauthored when unconfigured"))
+
+(test-case "Windows MSI reuses the application's icon in Installed Apps"
+  (define plain (windows-wxs "Demo" (string->path "C:/dist") "1.2.3" "Acme" "com.acme.demo"))
+  (define branded
+    (windows-wxs "Demo"
+                 (string->path "C:/dist")
+                 "1.2.3"
+                 "Acme"
+                 "com.acme.demo"
+                 #:icon-ico (string->path "C:/assets/app.ico")))
+  (check-false (string-contains? plain "ARPPRODUCTICON"))
+  (check-true (string-contains? branded "Icon Id='GlazeAppIcon.ico' SourceFile='C:/assets/app.ico'"))
+  (check-true (string-contains? branded "Property Id='ARPPRODUCTICON' Value='GlazeAppIcon.ico'")))
 
 (test-case "configured wizard assets ride in through WixVariables"
   (define wxs

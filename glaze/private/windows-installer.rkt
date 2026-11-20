@@ -28,7 +28,8 @@
                                 #:project-dir [project-dir #f]
                                 #:license-rtf [license-rtf #f]
                                 #:banner-bmp [banner-bmp #f]
-                                #:dialog-bmp [dialog-bmp #f])
+                                #:dialog-bmp [dialog-bmp #f]
+                                #:icon-ico [icon-ico #f])
   (define dist (path->complete-path out-dir))
   (cond
     [(find-tool "wix.exe" "wix")
@@ -68,7 +69,8 @@
                                                                     identifier
                                                                     #:license-rtf license-path
                                                                     #:banner-bmp banner-bmp
-                                                                    #:dialog-bmp dialog-bmp)
+                                                                    #:dialog-bmp dialog-bmp
+                                                                    #:icon-ico icon-ico)
                                                        out))
                                             #:exists 'replace))
                    (lambda ()
