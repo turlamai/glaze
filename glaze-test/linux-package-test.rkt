@@ -256,7 +256,31 @@
       (file->bytes
        (build-path stage-root "usr" "share" "icons" "hicolor" "64x64" "apps" "stageapp.png"))
       (icon-png-bytes)
-      "the staged icon is the generated placeholder PNG"))
+      "the staged icon is the generated placeholder PNG")
+     ;; A product PNG keeps its own pixel size and lands in the matching
+     ;; hicolor bucket (glaze#151); the rpm %files entry follows the bucket.
+     (define product-icon (make-temporary-file "glaze-icon-~a.png"))
+     (call-with-output-file product-icon
+                            (lambda (out) (write-bytes (icon-png-bytes 32) out))
+                            #:exists 'replace)
+     (define icon-root (linux-staging-tree stage-dist "StageApp" product-icon))
+     (check-not-false icon-root "staging with a product icon still requires a launcher")
+     (when icon-root
+       (check-equal?
+        (file->bytes
+         (build-path icon-root "usr" "share" "icons" "hicolor" "32x32" "apps" "stageapp.png"))
+        (icon-png-bytes 32)
+        "the product icon bytes are staged verbatim in their own bucket")
+       (check-false
+        (file-exists?
+         (build-path icon-root "usr" "share" "icons" "hicolor" "64x64" "apps" "stageapp.png"))
+        "no placeholder is left beside the product icon")
+       (delete-directory/files icon-root))
+     (delete-file product-icon)
+     (check-true
+      (string-contains? (rpm-spec "Icon App" "1.0.0" "Pub" (string->path "/tmp/stage") "32x32")
+                        "/usr/share/icons/hicolor/32x32/apps/icon-app.png")
+      "the rpm %files icon entry follows the product icon bucket"))
    (lambda ()
      (delete-directory/files stage-root)
      (delete-directory/files stage-dist))))

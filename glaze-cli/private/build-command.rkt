@@ -17,7 +17,7 @@
 ;;   --version <v>        app version (Info.plist / MSI ProductVersion)
 ;;   --publisher <name>   human-readable native installer publisher
 ;;   --identifier <id>    stable package identifier used for upgrades/uninstall
-;;   --icon <path>        .ico (Windows) / .icns (macOS)
+;;   --icon <path>        .ico (Windows) / .icns (macOS) / .png (Linux packages)
 ;;   --entry <path>       entry file (default: main.rkt)
 ;;   --out <dir>          output directory (default: dist)
 ;;   --embed-dlls         Windows: embed DLLs into a single .exe

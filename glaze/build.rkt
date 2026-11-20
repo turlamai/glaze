@@ -78,7 +78,7 @@
 ;;   #:publisher — human-readable publisher used by native installers
 ;;   #:identifier — stable application/package identifier used to derive
 ;;                  Windows upgrade and uninstall identities
-;;   #:icon     — optional .ico (Windows) / .icns (macOS)
+;;   #:icon     — optional .ico (Windows) / .icns (macOS) / .png (Linux packages)
 ;;   #:out-dir  — output directory for the distribution (default "dist")
 ;;   #:embed-dlls? — Windows only: embed DLLs into a single .exe (default #f)
 ;;   #:sign     — code-signing identity / certificate spec:
@@ -295,7 +295,8 @@
                         (asset-path dmg-background 'dmg-background)
                         (asset-path installer-license 'installer-license)
                         (asset-path installer-banner 'installer-banner)
-                        (asset-path installer-dialog 'installer-dialog))
+                        (asset-path installer-dialog 'installer-dialog)
+                        icon-path)
         #f))
 
   ;; An explicitly requested installer that silently degrades to nothing is
@@ -331,7 +332,8 @@
                         dmg-background
                         installer-license
                         installer-banner
-                        installer-dialog)
+                        installer-dialog
+                        icon-path)
   (case os
     [(windows)
      (make-windows-installer out-dir
@@ -344,7 +346,14 @@
                              #:banner-bmp installer-banner
                              #:dialog-bmp installer-dialog)]
     [(macosx) (make-macos-installer out-dir app-name (or version "0.0.0") dmg-background)]
-    [else (make-linux-installer out-dir app-name version publisher identifier)]))
+    [else
+     (make-linux-installer
+      out-dir
+      app-name
+      version
+      publisher
+      identifier
+      (and icon-path (equal? (path-get-extension icon-path) #".png") icon-path))]))
 
 ;; Copy the project's public/ into the distribution next to the executable.
 ;; On macOS, assets live in <app>.app/Contents/Resources/public; elsewhere in
