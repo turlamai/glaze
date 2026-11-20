@@ -118,6 +118,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Linux autoplay hatch no longer crashes webview creation with a
+  `log!` contract violation (glaze#149): the hatch readback used
+  `glaze/log`'s `log-info`, which requires a `glaze-logger`, with
+  `(current-logger)` (a plain Racket logger). The readback now uses
+  `racket/base` `log-message`, and the unused `glaze/log` require is
+  gone. Upstream CI's webview e2e and acceptance steps now set
+  `GLAZE_ALLOW_PROGRAMMATIC_PLAYBACK=1` so the hatch path is exercised
+  on every platform instead of only in product acceptance runs.
+
 - Linux autoplay acceptance hatch now actually allows audible synthetic
   playback (glaze#147): `WebKitWebsitePolicies:autoplay` defaults to
   `ALLOW_WITHOUT_SOUND` and overrides the settings gesture flag (WebKit

@@ -34,7 +34,6 @@
          racket/path
          racket/string
          "../ffi-discovery.rkt"
-         "../log.rkt"
          "../native-transport.rkt"
          "../tray/tray-protocol.rkt"
          "../private/id-allocator.rkt")
@@ -464,10 +463,15 @@
         (when webkit_website_policies_unref
           (webkit_website_policies_unref policies))))
     (when (and webkit_web_view_get_settings webkit_settings_get_media_playback_requires_user_gesture)
-      (log-info (current-logger)
-                (format "glaze linux autoplay hatch: gesture-gate readback=~a"
-                        (webkit_settings_get_media_playback_requires_user_gesture
-                         (webkit_web_view_get_settings webview))))))
+      ;; racket/base log-message: glaze/log's log-info takes a glaze-logger,
+      ;; not (current-logger), and shadowing it here broke the hatch path
+      ;; with a contract violation at webview creation (glaze#149).
+      (log-message (current-logger)
+                   'info
+                   #f
+                   (format "glaze linux autoplay hatch: gesture-gate readback=~a"
+                           (webkit_settings_get_media_playback_requires_user_gesture
+                            (webkit_web_view_get_settings webview))))))
   (gtk_container_add window webview)
   (webkit_web_view_load_uri webview
                             (if native-transport
