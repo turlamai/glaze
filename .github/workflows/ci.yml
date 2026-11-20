@@ -139,6 +139,9 @@ jobs:
       - name: Run webview e2e
         env:
           WEBKIT_DISABLE_DMABUF_RENDERER: '1'
+          # Exercise the acceptance-only autoplay hatch on every platform so
+          # its code path (bindings + logging) is covered by upstream CI.
+          GLAZE_ALLOW_PROGRAMMATIC_PLAYBACK: '1'
         shell: bash
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then
@@ -180,6 +183,7 @@ jobs:
       - name: Acceptance evidence
         env:
           WEBKIT_DISABLE_DMABUF_RENDERER: '1'
+          GLAZE_ALLOW_PROGRAMMATIC_PLAYBACK: '1'
         shell: bash
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then
