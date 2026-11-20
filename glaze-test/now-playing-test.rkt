@@ -65,6 +65,8 @@
      (check-false (now-playing-supported?))
      (check-false (now-playing-os-info)))]
   [(macosx)
+   (test-case "macos backend module loads (no silent stub fallback)"
+     (check-not-exn (lambda () (dynamic-require 'glaze/now-playing/now-playing-macos #f))))
    (test-case "macos publishes through MPNowPlayingInfoCenter and reads back"
      (check-true (now-playing-supported?))
      (now-playing-set! (canonical))
@@ -78,6 +80,8 @@
      (now-playing-clear!)
      (check-false (now-playing-os-info)))]
   [(unix)
+   (test-case "linux backend module loads (no silent stub fallback)"
+     (check-not-exn (lambda () (dynamic-require 'glaze/now-playing/now-playing-linux #f))))
    (cond
      [(now-playing-supported?)
       (test-case "linux owns an MPRIS name and reads properties back over the bus"

@@ -34,7 +34,7 @@
 ;; the build test, not a shipped binary.
 (require glaze/build)
 (define backends (platform-backend-modules))
-(check-equal? (length backends) 3 "one backend each for webview, sys, tray")
+(check-equal? (length backends) 4 "one backend each for webview, sys, tray, now-playing")
 (check-true (andmap symbol? backends) "backend module paths are symbols")
 (for ([mod (in-list backends)])
   (check-true (string-prefix? (symbol->string mod) "glaze/")
@@ -70,3 +70,15 @@
   (for ([name (in-list webview-dispatch-names)])
     (check-not-false (dynamic-require 'glaze/webview/webview-linux name (λ () #f))
                      (format "webview-linux provides ~a" name))))
+
+(define now-playing-dispatch-names '(supported? publish! os-info set-handler!))
+(case (system-type 'os)
+  [(unix macosx)
+   (define mod
+     (case (system-type 'os)
+       [(unix) 'glaze/now-playing/now-playing-linux]
+       [(macosx) 'glaze/now-playing/now-playing-macos]))
+   (for ([name (in-list now-playing-dispatch-names)])
+     (check-not-false (dynamic-require mod name (λ () #f))
+                      (format "~a provides ~a" mod name)))]
+  [else (void)])
