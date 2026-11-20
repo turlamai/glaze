@@ -20,7 +20,7 @@
 ;; Compile-time class binding for the ObjC subclass superclass; the
 ;; MediaPlayer classes below stay runtime-guarded so a missing framework
 ;; degrades to supported? = #f instead of a load-time crash.
-(import-class NSObject)
+(import-class NSObject NSMethodSignature)
 
 (define mediaplayer (ffi-lib* "/System/Library/Frameworks/MediaPlayer.framework/MediaPlayer" '(#f)))
 (define foundation (ffi-lib* "/System/Library/Frameworks/Foundation.framework/Foundation" '(#f)))
@@ -69,6 +69,15 @@
 (define-objc-class GlazeNowPlayingTarget
                    NSObject
                    ()
+                   ;; Racket's objc FFI registers pointer arguments with the
+                   ;; "?" type encoding; MPRemoteCommand addTarget:action:
+                   ;; validates the action signature at registration time
+                   ;; and aborts on "?". Publish the real signature
+                   ;; (void, self, _cmd, one id) so validation and
+                   ;; NSInvocation both see a well-formed method.
+                   (- _id
+                      (methodSignatureForSelector: [_SEL aSel])
+                      (tell NSMethodSignature signatureWithObjCTypes: #:type _string "v@:@"))
                    (- _void
                       (glazeCommand: [_id sender])
                       ;; sender is an MPRemoteCommandEvent; the command object is its
