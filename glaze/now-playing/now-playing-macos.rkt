@@ -15,7 +15,8 @@
 (provide supported?
          publish!
          os-info
-         set-handler!)
+         set-handler!
+         diagnostics)
 
 ;; Compile-time class binding for the ObjC subclass superclass; the
 ;; MediaPlayer classes below stay runtime-guarded so a missing framework
@@ -42,6 +43,7 @@
 
 (define state-box (box #f))
 (define handler-box (box #f))
+(define err-box (box #f))
 
 ;; Public constant values from MPMediaItem.h / MPNowPlayingInfo.h.
 (define key-title "title")
@@ -105,54 +107,57 @@
   (set-box! handler-box handler)
   (set-box! state-box info)
   (when (supported?)
-    (ensure-target!)
-    (cond
-      [info
-       (define d (tell (tell dict-class alloc) init))
-       (tellv d
-              setObject:
-              #:type _id
-              (nsstring (hash-ref info 'title ""))
-              forKey:
-              #:type _id
-              (nsstring key-title))
-       (tellv d
-              setObject:
-              #:type _id
-              (nsstring (hash-ref info 'artist ""))
-              forKey:
-              #:type _id
-              (nsstring key-artist))
-       (tellv d
-              setObject:
-              #:type _id
-              (nsstring (hash-ref info 'album ""))
-              forKey:
-              #:type _id
-              (nsstring key-album))
-       (tellv d
-              setObject:
-              #:type _id
-              (nsnumber (hash-ref info 'duration 0.0))
-              forKey:
-              #:type _id
-              (nsstring key-duration))
-       (tellv d
-              setObject:
-              #:type _id
-              (nsnumber (hash-ref info 'position 0.0))
-              forKey:
-              #:type _id
-              (nsstring key-elapsed))
-       (tellv d
-              setObject:
-              #:type _id
-              (nsnumber (if (hash-ref info 'playing #f) 1.0 0.0))
-              forKey:
-              #:type _id
-              (nsstring key-rate))
-       (tellv (center) setNowPlayingInfo: #:type _id d)]
-      [else (tellv (center) setNowPlayingInfo: #:type _id #f)])))
+    ;; Keep the failure reason: the dispatcher degrades silently, and an
+    ;; inert OS surface without evidence costs whole CI cycles (podlens#63).
+    (with-handlers ([exn:fail? (lambda (e) (set-box! err-box (exn-message e)))])
+      (ensure-target!)
+      (cond
+        [info
+         (define d (tell (tell dict-class alloc) init))
+         (tellv d
+                setObject:
+                #:type _id
+                (nsstring (hash-ref info 'title ""))
+                forKey:
+                #:type _id
+                (nsstring key-title))
+         (tellv d
+                setObject:
+                #:type _id
+                (nsstring (hash-ref info 'artist ""))
+                forKey:
+                #:type _id
+                (nsstring key-artist))
+         (tellv d
+                setObject:
+                #:type _id
+                (nsstring (hash-ref info 'album ""))
+                forKey:
+                #:type _id
+                (nsstring key-album))
+         (tellv d
+                setObject:
+                #:type _id
+                (nsnumber (hash-ref info 'duration 0.0))
+                forKey:
+                #:type _id
+                (nsstring key-duration))
+         (tellv d
+                setObject:
+                #:type _id
+                (nsnumber (hash-ref info 'position 0.0))
+                forKey:
+                #:type _id
+                (nsstring key-elapsed))
+         (tellv d
+                setObject:
+                #:type _id
+                (nsnumber (if (hash-ref info 'playing #f) 1.0 0.0))
+                forKey:
+                #:type _id
+                (nsstring key-rate))
+         (tellv (center) setNowPlayingInfo: #:type _id d)]
+        [else (tellv (center) setNowPlayingInfo: #:type _id #f)]))))
 
 (define (set-handler! proc)
   (set-box! handler-box proc)
@@ -185,3 +190,29 @@
                       (or (ns->double (get key-elapsed)) 0.0)
                       'playing
                       (and rate (> rate 0.0) #t)))))))
+
+;; Carrier diagnostics for hosts whose verify logs must explain an inert
+;; Now Playing surface (podlens#63). Backend-local, not public API.
+(define (diagnostics)
+  (hasheq 'mediaplayer
+          (and mediaplayer #t)
+          'foundation
+          (and foundation #t)
+          'classes
+          (hasheq 'center
+                  (and center-class #t)
+                  'command-center
+                  (and command-center-class #t)
+                  'dict
+                  (and dict-class #t)
+                  'number
+                  (and number-class #t)
+                  'string
+                  (and string-class #t))
+          'published
+          (and (unbox state-box) #t)
+          'error
+          (unbox err-box)
+          'center-info
+          (with-handlers ([exn:fail? (lambda (e) (format "read error: ~a" (exn-message e)))])
+            (and (center) (tell (center) nowPlayingInfo) #t))))
