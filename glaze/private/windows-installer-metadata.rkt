@@ -234,6 +234,7 @@ InstallDirRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\~a" "
 !insertmacro MUI_LANGUAGE "English"
 Section "Install"
   SetRegView 64
+  SetShellVarContext all
   SetOutPath "$INSTDIR"
   File /r /x "*.msi" /x "*-setup.exe" /x "*.wxs" /x "*.nsi" "~a\*.*"
   CreateShortcut "$SMPROGRAMS\~a.lnk" "$INSTDIR\~a.exe"
@@ -250,6 +251,7 @@ Section "Install"
 SectionEnd
 Section "Uninstall"
   SetRegView 64
+  SetShellVarContext all
   Delete "$SMPROGRAMS\~a.lnk"
   RMDir /r "$INSTDIR"
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\~a"
