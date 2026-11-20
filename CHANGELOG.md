@@ -105,6 +105,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `measure startup`'s launch-survival window is hardened with rivet's
+  `launch-smoke` contract. Both child streams are now drained into bounded
+  64 KiB captures: previously the pipes were never read, so an artifact that
+  flooded stdout could block on a full pipe, never exit, and falsely pass as
+  "survived". `sync/timeout` replaces the fixed sleep so an early exit is
+  detected immediately, and the failure now carries the exit status plus
+  captured stdout/stderr (truncation announced) and a hint when no interactive
+  GUI session is detected (`gui-session-available?`: Windows SESSIONNAME,
+  macOS console owner, Linux DISPLAY/WAYLAND_DISPLAY). Descendant-held pipes
+  get a short drain grace before the read ends are closed. The Windows
+  process-tree kill, `.app` unwrapping, and temp-dir working directory are
+  unchanged. The pure capture/session core lives in
+  `glaze/private/launch-smoke`.
 - The compliance license audit now matches SPDX identifiers case-insensitively.
   Distribution metadata in the wild writes non-canonical case — the macOS Racket
   natipkg `racket-x86_64-macosx-4` declares `(Apache-2.0 OR MIT) AND
