@@ -66,7 +66,8 @@
   ([method_call _fpointer]
    [get_property _fpointer]
    [set_property _fpointer]
-   [padding (_array _pointer 8)]))
+   [pad0 _pointer] [pad1 _pointer] [pad2 _pointer] [pad3 _pointer]
+   [pad4 _pointer] [pad5 _pointer] [pad6 _pointer] [pad7 _pointer]))
 
 ;; GDBusNodeInfo { gint ref_count; gchar *path; GDBusInterfaceInfo **interfaces; ... }
 (define (node-interfaces node) (ptr-ref node _pointer 2))
@@ -246,7 +247,7 @@
 
 (define vtable
   (make-GDBusInterfaceVTable method-call-cb get-property-cb set-property-cb
-                             (make-array _pointer 8)))
+                             #f #f #f #f #f #f #f #f))
 
 ;; ---- publication ---------------------------------------------------------
 
