@@ -750,6 +750,11 @@
 
   ;; WKWebView as the content view, tracking window resizes.
   (define config (tell (tell WKWebViewConfiguration alloc) init))
+  ;; Acceptance-only escape hatch (glaze#143): synthetic-click media
+  ;; playback for real-window acceptance harnesses. Default off; shipped
+  ;; apps must never set GLAZE_ALLOW_PROGRAMMATIC_PLAYBACK=1.
+  (when (equal? (getenv "GLAZE_ALLOW_PROGRAMMATIC_PLAYBACK") "1")
+    (tellv config setMediaTypesRequiringUserActionForPlayback: #:type _ulong 0))
   ;; Native transport: scheme handler + GLZ1 message handler + bootstrap user
   ;; script must all be on the configuration BEFORE the WKWebView exists.
   (define scheme-handler #f)

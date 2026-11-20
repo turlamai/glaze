@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `GLAZE_ALLOW_PROGRAMMATIC_PLAYBACK=1` acceptance-only escape hatch
+  (glaze#143): relaxes the WebView autoplay gesture gate for the current
+  process so real-window acceptance harnesses can start media from
+  synthetic clicks. Windows passes `--autoplay-policy=no-user-gesture-required`
+  through a hand-built `ICoreWebView2EnvironmentOptions` COM object (the
+  bundled loader does not export `CreateCoreWebView2EnvironmentOptions`;
+  vtable order verified against WebView2.h 1.0.2903.40, and the environment
+  rejects a null/empty `TargetCompatibleBrowserVersion` with E_INVALIDARG,
+  so the object reports the installed evergreen runtime version); macOS sets
+  `mediaTypesRequiringUserActionForPlayback = 0` on the WKWebView
+  configuration; WebKitGTK sets `media-playback-requires-user-gesture =
+  false`. Default off on all three backends; shipped apps must never set it.
+
 - `raco glaze compliance [--json] [--out DIR]` generates a CycloneDX 1.5
   SBOM (`glaze-sbom.cdx.json`) and third-party notices
   (`glaze-notices.txt`) for the installed glaze dependency closure and runs
@@ -104,6 +117,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   through the facade again.
 
 ### Fixed
+
+- Windows webview teardown no longer raises a spurious `CreateController
+  failed: 0x80004004` (glaze#146): `close` and the WM_CLOSE path now call
+  `ICoreWebView2Controller::Close` (vtable slot 24, verified against
+  WebView2.h 1.0.2903.40) before destroying the parent HWND and pump briefly
+  so teardown callbacks land while the window is marked closed; the
+  controller callback treats E_ABORT as benign teardown once the window is
+  closed instead of storing it as a fatal creation error. The race was
+  latent on main and surfaced as a bridge-test flake on hosted windows
+  runners (main-equivalent control run reproduced it without any hatch).
 
 - `measure startup`'s launch-survival window is hardened with rivet's
   `launch-smoke` contract. Both child streams are now drained into bounded

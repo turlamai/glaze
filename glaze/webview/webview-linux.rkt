@@ -98,6 +98,13 @@
   (maybe-bind webkit-lib "webkit_web_view_get_inspector" (_fun _pointer -> _pointer)))
 (define webkit_web_inspector_show
   (maybe-bind webkit-lib "webkit_web_inspector_show" (_fun _pointer -> _void)))
+;; Acceptance-only escape hatch (glaze#143): WebKitGTK media gesture gate.
+(define webkit_web_view_get_settings
+  (maybe-bind webkit-lib "webkit_web_view_get_settings" (_fun _pointer -> _pointer)))
+(define webkit_settings_set_media_playback_requires_user_gesture
+  (maybe-bind webkit-lib
+              "webkit_settings_set_media_playback_requires_user_gesture"
+              (_fun _pointer _bool -> _void)))
 (define g_main_context_iteration
   (maybe-bind glib-lib "g_main_context_iteration" (_fun _pointer _bool -> _bool)))
 (define g_signal_connect_data
@@ -422,6 +429,14 @@
             (webkit_user_script_unref user-script))
           (webkit_web_view_new_with_user_content_manager ucm))
         (webkit_web_view_new)))
+  ;; Acceptance-only escape hatch (glaze#143): synthetic-click media
+  ;; playback for real-window acceptance harnesses. Default off; shipped
+  ;; apps must never set GLAZE_ALLOW_PROGRAMMATIC_PLAYBACK=1.
+  (when (and (equal? (getenv "GLAZE_ALLOW_PROGRAMMATIC_PLAYBACK") "1")
+             webkit_web_view_get_settings
+             webkit_settings_set_media_playback_requires_user_gesture)
+    (webkit_settings_set_media_playback_requires_user_gesture (webkit_web_view_get_settings webview)
+                                                              #f))
   (gtk_container_add window webview)
   (webkit_web_view_load_uri webview
                             (if native-transport
