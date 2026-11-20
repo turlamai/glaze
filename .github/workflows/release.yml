@@ -193,6 +193,7 @@ jobs:
               "glaze/private/compliance.rkt", "glaze/private/acceptance.rkt",
               "glaze/private/release-version.rkt", "glaze/private/release-assets.rkt",
               "glaze/private/clean.rkt",
+              "glaze/private/launch-smoke.rkt",
               "glaze-cli/cli.rkt", "glaze-cli/private/compliance.rkt",
               "glaze-cli/private/support-bundle.rkt", "glaze-cli/private/acceptance.rkt",
               "glaze-cli/private/matrix.rkt", "glaze-cli/private/release-version.rkt",

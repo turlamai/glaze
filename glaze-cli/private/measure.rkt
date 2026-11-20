@@ -16,8 +16,10 @@
          racket/list
          racket/match
          racket/path
+         racket/port
          racket/string
-         racket/system)
+         racket/system
+         glaze/private/launch-smoke)
 
 (provide measure-command
          measure-size
@@ -25,6 +27,7 @@
          display-size-report
          display-startup-report
          launch-survival!
+         gui-session-available?
          parse-budget-file
          dist-artifacts
          (struct-out exn:fail:glaze:budget))
@@ -134,10 +137,71 @@
             (format-bytes (car (cdr violation)))
             (format-bytes (cdr (cdr violation))))))
 
+;; ---- launch smoke (rivet's launch-smoke contract) -----------------------
+
+;; Interactive-session detection, borrowed from rivet: a packaged GUI app
+;; cannot boot in a non-interactive session, and the early-exit diagnostics
+;; say so instead of leaving the user guessing.
+(define (non-empty-environment-variable? name)
+  (define value (getenv name))
+  (and value (not (string=? (string-trim value) ""))))
+
+(define (macos-console-session-available?)
+  (define stat (find-executable-path "stat"))
+  (define user (or (getenv "USER") (getenv "LOGNAME")))
+  (and stat
+       user
+       (with-handlers ([exn:fail? (lambda (_) #f)])
+         (define out (open-output-string))
+         (define ok?
+           (parameterize ([current-output-port out])
+             (system* stat "-f" "%Su" "/dev/console")))
+         (and ok? (string=? (string-trim (get-output-string out)) user)))))
+
+(define (gui-session-available?)
+  (case (system-type 'os)
+    [(windows) (session-name-interactive? (or (getenv "SESSIONNAME") ""))]
+    [(macosx) (macos-console-session-available?)]
+    [(unix)
+     (or (non-empty-environment-variable? "DISPLAY")
+         (non-empty-environment-variable? "WAYLAND_DISPLAY"))]
+    [else #f]))
+
+;; Drain one child stream into a bounded capture. The loop keeps reading
+;; past the bound so a noisy child never blocks on a full pipe; the result
+;; box holds (captured-bytes . truncated?).
+(define (capture-port! port result)
+  (define chunks '())
+  (define captured 0)
+  (define truncated? #f)
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (set-box! result
+                               (cons (string->bytes/utf-8 (string-append "output capture failed: "
+                                                                         (exn-message e)))
+                                     #f)))])
+    (let loop ()
+      (define chunk (read-bytes 4096 port))
+      (unless (eof-object? chunk)
+        (define keep (capture-keep-length captured (bytes-length chunk)))
+        (when (positive? keep)
+          (set! chunks (cons (subbytes chunk 0 keep) chunks))
+          (set! captured (+ captured keep)))
+        (when (< keep (bytes-length chunk))
+          (set! truncated? #t))
+        (loop)))
+    (set-box! result (cons (apply bytes-append (reverse chunks)) truncated?)))
+  (close-input-port port))
+
 ;; Launch-survival window: spawn the packaged artifact, require it to still
 ;; be alive after `seconds`, then terminate it. Reports the elapsed window
 ;; so a packaged app's ability to boot on this machine is measured rather
 ;; than assumed. A bundle (.app on macOS) is unwrapped to its inner binary.
+;; Hardened with rivet's launch-smoke contract: both streams are drained
+;; into bounded captures (a child that floods stdout can no longer block on
+;; a full pipe and pass as "survived"), sync/timeout detects an early exit
+;; immediately, and the failure carries the exit status plus captured
+;; output instead of a bare message.
 (define (launch-survival! artifact seconds)
   (define target
     (if (and (directory-exists? artifact)
@@ -150,36 +214,80 @@
   (unless (file-exists? target)
     (error 'measure "no executable artifact at ~a" target))
   (define started (current-inexact-milliseconds))
-  ;; subprocess returns (process stdout stdin stderr): the process first.
-  (define-values (p _stdout _stdin _stderr)
-    (with-handlers ([exn:fail? (lambda (e)
-                                 (error 'measure "could not launch ~a: ~a" target (exn-message e)))])
-      ;; Do not inherit the caller's working directory: a Windows child keeps
-      ;; it locked until every descendant exits, which makes a temporary
-      ;; staging tree undeletable right after the survival window.
-      (parameterize ([current-directory (find-system-path 'temp-dir)])
-        (subprocess #f #f #f target))))
-  (sleep seconds)
-  ;; subprocess-status is the SYMBOL 'running while alive, the exit code
-  ;; once it terminates — same shape rivet's launch smoke checks.
-  (define alive (eq? (subprocess-status p) 'running))
-  (when alive
-    ;; Kill the whole tree on Windows. A staged launcher (a .bat/.cmd or an
-    ;; installer stub) can leave descendants that keep the staged directory
-    ;; locked; terminating only the direct process makes later cleanup and
-    ;; repeat builds fail with "permission denied".
+  (define process #f)
+  (define stdout-port #f)
+  (define stderr-port #f)
+  (define stdout-thread #f)
+  (define stderr-thread #f)
+  (define stdout-result (box (cons #"" #f)))
+  (define stderr-result (box (cons #"" #f)))
+
+  ;; Kill the whole tree on Windows. A staged launcher (a .bat/.cmd or an
+  ;; installer stub) can leave descendants that keep the staged directory
+  ;; locked; terminating only the direct process makes later cleanup and
+  ;; repeat builds fail with "permission denied".
+  (define (kill-tree!)
     (if (eq? (system-type 'os) 'windows)
-        (let ([pid (subprocess-pid p)])
+        (let ([pid (subprocess-pid process)])
           (unless (zero? (system*/exit-code "taskkill" "/PID" (number->string pid) "/T" "/F"))
-            (subprocess-kill p #t)))
-        (subprocess-kill p #t)))
-  (subprocess-wait p)
-  (unless alive
-    (error 'measure
-           "packaged artifact ~a exited before its ~a second survival window ended"
-           (file-name-from-path target)
-           seconds))
-  (/ (- (current-inexact-milliseconds) started) 1000.0))
+            (subprocess-kill process #t)))
+        (subprocess-kill process #t)))
+
+  (define (finish-process!)
+    (when process
+      (when (eq? (subprocess-status process) 'running)
+        (with-handlers ([exn:fail? void])
+          (kill-tree!)))
+      (subprocess-wait process))
+    ;; A descendant can inherit the child's pipes and keep them open after
+    ;; the direct child exits or is killed. Give normal capture a short
+    ;; grace, then close our read ends to unblock the drain threads.
+    (define workers (filter values (list stdout-thread stderr-thread)))
+    (for ([worker (in-list workers)])
+      (sync/timeout 1 worker))
+    (for ([port (in-list (list stdout-port stderr-port))])
+      (when (and port (input-port? port) (not (port-closed? port)))
+        (with-handlers ([exn:fail? void])
+          (close-input-port port))))
+    (for ([worker (in-list workers)])
+      (sync/timeout 1 worker)))
+
+  (with-handlers ([exn:fail? (lambda (e)
+                               (finish-process!)
+                               (raise e))])
+    ;; Do not inherit the caller's working directory: a Windows child keeps
+    ;; it locked until every descendant exits, which makes a temporary
+    ;; staging tree undeletable right after the survival window.
+    (define-values (p child-stdout child-stdin child-stderr)
+      (with-handlers
+          ([exn:fail? (lambda (e) (error 'measure "could not launch ~a: ~a" target (exn-message e)))])
+        (parameterize ([current-directory (find-system-path 'temp-dir)])
+          (subprocess #f #f #f target))))
+    (set! process p)
+    (set! stdout-port child-stdout)
+    (set! stderr-port child-stderr)
+    (close-output-port child-stdin)
+    (set! stdout-thread (thread (lambda () (capture-port! child-stdout stdout-result))))
+    (set! stderr-thread (thread (lambda () (capture-port! child-stderr stderr-result))))
+
+    (define exited (sync/timeout seconds p))
+    (cond
+      [exited
+       (finish-process!)
+       (error
+        'measure
+        "packaged artifact ~a exited before its ~a second survival window ended (exit status ~a)~a\nstdout: ~a\nstderr: ~a"
+        (file-name-from-path target)
+        seconds
+        (subprocess-status p)
+        (if (gui-session-available?)
+            ""
+            " [no interactive GUI session detected; run under xvfb-run or a desktop session]")
+        (captured-output-text (car (unbox stdout-result)) (cdr (unbox stdout-result)))
+        (captured-output-text (car (unbox stderr-result)) (cdr (unbox stderr-result))))]
+      [else
+       (finish-process!)
+       (/ (- (current-inexact-milliseconds) started) 1000.0)])))
 
 ;; Startup can also launch a distribution that keeps its executable under
 ;; dist/bin/ (the Linux/Windows `raco distribute` layout).

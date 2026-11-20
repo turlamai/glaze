@@ -141,6 +141,43 @@
               (lambda () (launch-survival! quitter 0.5))
               "an artifact that exits early fails its survival window")
 
+   ;; rivet launch-smoke hardening: a child that floods stdout past the pipe
+   ;; buffer and then exits must FAIL the window. Without draining, the child
+   ;; blocks on a full pipe, never exits, and falsely passes as "survived".
+   (define noisy
+     (write-script (if (eq? (system-type 'os) 'windows) "noisy.bat" "noisy")
+                   (if (eq? (system-type 'os) 'windows)
+                       (string-append "@echo off\r\nfor /L %%i in (1,1,300) do @echo "
+                                      (make-string 300 #\A)
+                                      "\r\nexit /b 0\r\n")
+                       "#!/bin/sh\ndd if=/dev/zero bs=1024 count=200 2>/dev/null\nexit 0\n")))
+   (define noisy-message
+     (with-handlers ([exn:fail? exn-message])
+       (launch-survival! noisy 2.0)
+       "no failure"))
+   (check-not-false (string-contains? noisy-message "survival window")
+                    "a noisy child that exits is not a survivor")
+   (check-not-false (string-contains? noisy-message "[output truncated at 65536 bytes]")
+                    "the flood is captured up to the bound and announced")
+
+   ;; Early exit carries diagnostics: exit status and captured stderr.
+   (define diag-quitter
+     (write-script (if (eq? (system-type 'os) 'windows) "diag.bat" "diag")
+                   (if (eq? (system-type 'os) 'windows)
+                       "@echo off\r\necho SMOKE-MARKER 1>&2\r\nexit /b 3\r\n"
+                       "#!/bin/sh\necho SMOKE-MARKER >&2\nexit 3\n")))
+   (define diag-message
+     (with-handlers ([exn:fail? exn-message])
+       (launch-survival! diag-quitter 2.0)
+       "no failure"))
+   (check-not-false (string-contains? diag-message "exit status 3")
+                    "the failure reports the child's exit status")
+   (check-not-false (string-contains? diag-message "SMOKE-MARKER")
+                    "the failure carries captured stderr")
+
+   ;; Session detection is a boolean on every platform (headless CI included).
+   (check-true (boolean? (gui-session-available?)))
+
    ;; `measure startup` must forward --seconds/--artifact as keyword
    ;; arguments; a plain `apply` here once failed with "procedure does not
    ;; accept keyword arguments" before the artifact ever launched.
