@@ -35,6 +35,8 @@
   (check-true (string-contains? nsi "MUI_LANGUAGE \"English\""))
   (check-false (string-contains? nsi "Page directory"))
   (check-true (string-contains? nsi "$SMPROGRAMS"))
+  (check-equal? (length (regexp-match* #rx"SetShellVarContext all" nsi)) 2
+                "both setup and uninstaller must use the all-users Start Menu")
   (check-false (string-contains? nsi "$DESKTOP")))
 
 (test-case "the MSI uses a shorter wizard and nonintrusive Start Menu integration"
