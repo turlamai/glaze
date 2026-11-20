@@ -2,7 +2,8 @@
 
 ;; glaze/services — the capability services an application calls from its
 ;; page and backend: filesystem scopes, key-value store, SQL, shell, HTTP
-;; proxy, logging, dialogs, tray, system commands, shortcuts, and the
+;; proxy, logging, dialogs, tray, OS Now Playing, system commands,
+;; shortcuts, and the
 ;; browser opener. Aggregation layer per the 1.0 module layout; the export
 ;; set is guarded by glaze-test/layers-test.
 ;;
@@ -22,6 +23,7 @@
          "log.rkt"
          (except-in "dialogs.rkt" default-dialog-backend)
          (except-in "tray/main.rkt" tray-backend tray-handle)
+         "now-playing.rkt"
          "sys/main.rkt"
          (except-in "global-shortcut.rkt" default-hotkey-backend)
          "hotkey/main.rkt"
@@ -36,6 +38,7 @@
          (all-from-out "log.rkt")
          (all-from-out "dialogs.rkt")
          (all-from-out "tray/main.rkt")
+         (all-from-out "now-playing.rkt")
          (all-from-out "sys/main.rkt")
          (all-from-out "global-shortcut.rkt")
          (all-from-out "hotkey/main.rkt")

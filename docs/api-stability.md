@@ -5,7 +5,7 @@ Glaze is pre-1.0, but public growth is deliberate rather than accidental. The AP
 | Tier | Modules | Rule before 1.0 | Rule after 1.0 |
 |---|---|---|---|
 | Stable facade | `glaze/core` | Compatible additions only; breaking changes require an announced migration | SemVer compatibility promise |
-| Reviewed layers | `glaze/window`, `glaze/services`, `glaze/distribution`, `glaze/devtools` | May be narrowed once during 1.0 curation, with deprecation and migration notes | SemVer compatibility promise |
+| Reviewed layers | `glaze/window`, `glaze/services`, `glaze/distribution`, `glaze/devtools`, `glaze/now-playing` | May be narrowed once during 1.0 curation, with deprecation and migration notes | SemVer compatibility promise |
 | Legacy facade | `glaze` | No new exports; existing applications remain supported through the 1.0 migration window | Compatibility shim, then removal only in a major release |
 | Unstable | `glaze/experimental` and explicitly documented internals | May change in any release | No stability promise |
 
@@ -103,7 +103,7 @@ charter.
 | `window-state?` | stable | |
 | `write-window-state!` | stable | |
 
-### `glaze/services` — 134 exports
+### `glaze/services` — 140 exports
 
 | Export | Tier | Disposition |
 |---|---|---|
@@ -189,6 +189,12 @@ charter.
 | `menu-title` | stable | |
 | `menu?` | stable | |
 | `notify!` | stable | |
+| `now-playing-clear!` | stable | Re-export of `glaze/now-playing` |
+| `now-playing-info` | stable | Re-export of `glaze/now-playing` |
+| `now-playing-os-info` | stable | Re-export of `glaze/now-playing` |
+| `now-playing-set!` | stable | Re-export of `glaze/now-playing` |
+| `now-playing-set-command-handler!` | stable | Re-export of `glaze/now-playing` |
+| `now-playing-supported?` | stable | Re-export of `glaze/now-playing` |
 | `open-browser` | stable | |
 | `open-path` | stable | |
 | `open-sqlite-database` | stable | |
@@ -242,6 +248,21 @@ charter.
 | `tray-set-tooltip!` | stable | |
 | `tray-supported?` | stable | |
 | `tray?` | stable | |
+
+### `glaze/now-playing` — 6 exports
+
+Host-owned OS Now Playing capability (glaze#153); see
+[now-playing.md](now-playing.md). Optional capability: unsupported
+platforms degrade to an inert stub, never a startup failure.
+
+| Export | Tier | Disposition |
+|---|---|---|
+| `now-playing-clear!` | stable | |
+| `now-playing-info` | stable | |
+| `now-playing-os-info` | stable | Acceptance readback of the OS surface |
+| `now-playing-set!` | stable | |
+| `now-playing-set-command-handler!` | stable | |
+| `now-playing-supported?` | stable | |
 
 ### `glaze/distribution` — 99 exports
 

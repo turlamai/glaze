@@ -64,6 +64,12 @@
                                    dialog-message!
                                    dialog-ask!
                                    tray-supported?
+                                   now-playing-supported?
+                                   now-playing-set!
+                                   now-playing-clear!
+                                   now-playing-info
+                                   now-playing-os-info
+                                   now-playing-set-command-handler!
                                    clipboard-set!
                                    notify!
                                    single-instance?

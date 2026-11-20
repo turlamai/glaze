@@ -66,7 +66,12 @@
           [(windows) 'glaze/tray/tray-windows]
           [(macosx) 'glaze/tray/tray-macos]
           [(unix) 'glaze/tray/tray-linux]
-          [else 'glaze/tray/tray-stub])))
+          [else 'glaze/tray/tray-stub])
+        (case os
+          [(windows) 'glaze/now-playing/now-playing-stub]
+          [(macosx) 'glaze/now-playing/now-playing-macos]
+          [(unix) 'glaze/now-playing/now-playing-linux]
+          [else 'glaze/now-playing/now-playing-stub])))
 
 ;; Build a Glaze project into a distributable.
 ;;
