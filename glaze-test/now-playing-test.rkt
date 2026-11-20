@@ -28,13 +28,20 @@
         (set! private-bus-control control)))))
 
 (define (canonical)
-  (hash 'identifier "site.glaze.test"
-        'title "Glaze Now Playing Test"
-        'artist "Glaze"
-        'album "Capability"
-        'duration 12.5
-        'position 3.0
-        'playing #t))
+  (hash 'identifier
+        "site.glaze.test"
+        'title
+        "Glaze Now Playing Test"
+        'artist
+        "Glaze"
+        'album
+        "Capability"
+        'duration
+        12.5
+        'position
+        3.0
+        'playing
+        #t))
 
 (test-case "supported? is a boolean on every platform"
   (check-pred boolean? (now-playing-supported?)))
@@ -68,6 +75,22 @@
    (test-case "macos backend module loads (no silent stub fallback)"
      (check-not-exn (lambda () (dynamic-require 'glaze/now-playing/now-playing-macos #f))))
    (test-case "macos publishes through MPNowPlayingInfoCenter and reads back"
+     ;; Diagnostic evidence when the capability reports unsupported: which
+     ;; library or class lookup failed, straight from the platform APIs.
+     (unless (now-playing-supported?)
+       (define ffi-lib* (dynamic-require 'glaze/ffi-discovery 'ffi-lib*))
+       (define ffi-lib-reason (dynamic-require 'glaze/ffi-discovery 'ffi-lib-reason))
+       (define objc-get-class (dynamic-require 'ffi/unsafe/objc 'objc-get-class))
+       (define mp (ffi-lib* "/System/Library/Frameworks/MediaPlayer.framework/MediaPlayer" '(#f)))
+       (printf "[now-playing-diag] mp-lib=~a reason=~a\n" mp (ffi-lib-reason))
+       (for ([n (in-list '("MPNowPlayingInfoCenter" "MPRemoteCommandCenter"
+                                                    "NSMutableDictionary"
+                                                    "NSNumber"
+                                                    "NSString"))])
+         (printf "[now-playing-diag] ~a=~a\n"
+                 n
+                 (with-handlers ([exn:fail? (lambda (e) (exn-message e))])
+                   (objc-get-class n)))))
      (check-true (now-playing-supported?))
      (now-playing-set! (canonical))
      (define os (now-playing-os-info))
@@ -86,8 +109,8 @@
      [(now-playing-supported?)
       (test-case "linux owns an MPRIS name and reads properties back over the bus"
         (define received '())
-        (now-playing-set-command-handler!
-         (lambda (cmd arg) (set! received (cons (cons cmd arg) received))))
+        (now-playing-set-command-handler! (lambda (cmd arg)
+                                            (set! received (cons (cons cmd arg) received))))
         (now-playing-set! (canonical))
         (define os (now-playing-os-info))
         (check-pred hash? os)
@@ -97,8 +120,10 @@
         (check-true (string-prefix? (hash-ref os 'bus-name) "org.mpris.MediaPlayer2."))
         ;; Command round-trip: Pause arrives through GDBus on the main context.
         (define bus-name (hash-ref os 'bus-name))
-        (system (format "dbus-send --session --print-reply --dest=~a /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Pause"
-                        bus-name))
+        (system
+         (format
+          "dbus-send --session --print-reply --dest=~a /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Pause"
+          bus-name))
         (define deadline (+ (current-inexact-milliseconds) 5000))
         (let loop ()
           (when (and (null? received) (< (current-inexact-milliseconds) deadline))

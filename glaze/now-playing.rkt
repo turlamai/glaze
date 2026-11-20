@@ -26,13 +26,12 @@
 
 (require racket/contract)
 
-(provide (contract-out
-          [now-playing-supported? (-> boolean?)]
-          [now-playing-set! (-> hash? any)]
-          [now-playing-clear! (-> any)]
-          [now-playing-info (-> (or/c hash? #f))]
-          [now-playing-os-info (-> (or/c hash? #f))]
-          [now-playing-set-command-handler! (-> (or/c procedure? #f) any)]))
+(provide (contract-out [now-playing-supported? (-> boolean?)]
+                       [now-playing-set! (-> hash? any)]
+                       [now-playing-clear! (-> any)]
+                       [now-playing-info (-> (or/c hash? #f))]
+                       [now-playing-os-info (-> (or/c hash? #f))]
+                       [now-playing-set-command-handler! (-> (or/c procedure? #f) any)]))
 
 (define info-box (box #f))
 (define handler-box (box #f))
@@ -51,7 +50,8 @@
       (with-handlers ([exn:fail? (lambda (_) 'glaze/now-playing/now-playing-stub)])
         (backend-module-path)))
     (for ([name (in-list '(supported? publish! os-info set-handler!))])
-      (hash-set! tbl name
+      (hash-set! tbl
+                 name
                  (with-handlers ([exn:fail? (lambda (_) #f)])
                    (dynamic-require mod name))))
     (set! backend-procs tbl))
@@ -72,18 +72,28 @@
 (define (normalize-info raw)
   (define (num key default)
     (define v (hash-ref raw key default))
-    (if (real? v) (exact->inexact v) default))
+    (if (real? v)
+        (exact->inexact v)
+        default))
   (define (str key default)
     (define v (hash-ref raw key default))
     (if (string? v) v default))
-  (hash 'title (str 'title "")
-        'artist (str 'artist "")
-        'album (str 'album "")
-        'duration (num 'duration 0.0)
-        'position (num 'position 0.0)
-        'playing (and (hash-ref raw 'playing #f) #t)
-        'identifier (str 'identifier "glaze")
-        'artwork-url (str 'artwork-url "")))
+  (hash 'title
+        (str 'title "")
+        'artist
+        (str 'artist "")
+        'album
+        (str 'album "")
+        'duration
+        (num 'duration 0.0)
+        'position
+        (num 'position 0.0)
+        'playing
+        (and (hash-ref raw 'playing #f) #t)
+        'identifier
+        (str 'identifier "glaze")
+        'artwork-url
+        (str 'artwork-url "")))
 
 (define (now-playing-supported?)
   (and (call-backend 'supported?) #t))

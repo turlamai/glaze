@@ -79,6 +79,5 @@
        [(unix) 'glaze/now-playing/now-playing-linux]
        [(macosx) 'glaze/now-playing/now-playing-macos]))
    (for ([name (in-list now-playing-dispatch-names)])
-     (check-not-false (dynamic-require mod name (λ () #f))
-                      (format "~a provides ~a" mod name)))]
+     (check-not-false (dynamic-require mod name (λ () #f)) (format "~a provides ~a" mod name)))]
   [else (void)])

@@ -12,20 +12,22 @@
          ffi/unsafe/objc
          glaze/ffi-discovery)
 
-(provide supported? publish! os-info set-handler!)
+(provide supported?
+         publish!
+         os-info
+         set-handler!)
 
 ;; Compile-time class binding for the ObjC subclass superclass; the
 ;; MediaPlayer classes below stay runtime-guarded so a missing framework
 ;; degrades to supported? = #f instead of a load-time crash.
 (import-class NSObject)
 
-(define mediaplayer
-  (ffi-lib* "/System/Library/Frameworks/MediaPlayer.framework/MediaPlayer" '(#f)))
-(define foundation
-  (ffi-lib* "/System/Library/Frameworks/Foundation.framework/Foundation" '(#f)))
+(define mediaplayer (ffi-lib* "/System/Library/Frameworks/MediaPlayer.framework/MediaPlayer" '(#f)))
+(define foundation (ffi-lib* "/System/Library/Frameworks/Foundation.framework/Foundation" '(#f)))
 
 (define (class name)
-  (and mediaplayer foundation
+  (and mediaplayer
+       foundation
        (with-handlers ([exn:fail? (lambda (_) #f)])
          (objc-get-class name))))
 
@@ -65,16 +67,16 @@
 (define command-table (make-hash)) ; command pointer -> symbol
 
 (define-objc-class GlazeNowPlayingTarget
-  NSObject
-  ()
-  (- _void
-     (glazeCommand: [_id sender])
-     ;; sender is an MPRemoteCommandEvent; the command object is its
-     ;; `command` property, which is what the table is keyed by.
-     (define cmd (hash-ref command-table (tell #:type _id sender command) #f))
-     (define handler (unbox handler-box))
-     (when (and cmd handler)
-       (handler cmd #f))))
+                   NSObject
+                   ()
+                   (- _void
+                      (glazeCommand: [_id sender])
+                      ;; sender is an MPRemoteCommandEvent; the command object is its
+                      ;; `command` property, which is what the table is keyed by.
+                      (define cmd (hash-ref command-table (tell #:type _id sender command) #f))
+                      (define handler (unbox handler-box))
+                      (when (and cmd handler)
+                        (handler cmd #f))))
 
 (define target #f)
 (define (ensure-target!)
@@ -82,14 +84,13 @@
     (set! target (tell (tell GlazeNowPlayingTarget alloc) init))
     (define cc (command-center))
     (for ([pair (in-list (list (cons 'play (tell cc playCommand))
-                             (cons 'pause (tell cc pauseCommand))
-                             (cons 'stop (tell cc stopCommand))
-                             (cons 'toggle (tell cc togglePlayPauseCommand))
-                             (cons 'next (tell cc nextTrackCommand))
-                             (cons 'previous (tell cc previousTrackCommand))))])
+                               (cons 'pause (tell cc pauseCommand))
+                               (cons 'stop (tell cc stopCommand))
+                               (cons 'toggle (tell cc togglePlayPauseCommand))
+                               (cons 'next (tell cc nextTrackCommand))
+                               (cons 'previous (tell cc previousTrackCommand))))])
       (hash-set! command-table (cdr pair) (car pair))
-      (tellv (cdr pair) addTarget: #:type _id target
-             action: #:type _SEL (selector glazeCommand:)))))
+      (tellv (cdr pair) addTarget: #:type _id target action: #:type _SEL (selector glazeCommand:)))))
 
 (define (publish! info handler)
   (set-box! handler-box handler)
@@ -99,25 +100,55 @@
     (cond
       [info
        (define d (tell (tell dict-class alloc) init))
-       (tellv d setObject: #:type _id (nsstring (hash-ref info 'title ""))
-              forKey: #:type _id (nsstring key-title))
-       (tellv d setObject: #:type _id (nsstring (hash-ref info 'artist ""))
-              forKey: #:type _id (nsstring key-artist))
-       (tellv d setObject: #:type _id (nsstring (hash-ref info 'album ""))
-              forKey: #:type _id (nsstring key-album))
-       (tellv d setObject: #:type _id (nsnumber (hash-ref info 'duration 0.0))
-              forKey: #:type _id (nsstring key-duration))
-       (tellv d setObject: #:type _id (nsnumber (hash-ref info 'position 0.0))
-              forKey: #:type _id (nsstring key-elapsed))
-       (tellv d setObject: #:type _id (nsnumber (if (hash-ref info 'playing #f) 1.0 0.0))
-              forKey: #:type _id (nsstring key-rate))
+       (tellv d
+              setObject:
+              #:type _id
+              (nsstring (hash-ref info 'title ""))
+              forKey:
+              #:type _id
+              (nsstring key-title))
+       (tellv d
+              setObject:
+              #:type _id
+              (nsstring (hash-ref info 'artist ""))
+              forKey:
+              #:type _id
+              (nsstring key-artist))
+       (tellv d
+              setObject:
+              #:type _id
+              (nsstring (hash-ref info 'album ""))
+              forKey:
+              #:type _id
+              (nsstring key-album))
+       (tellv d
+              setObject:
+              #:type _id
+              (nsnumber (hash-ref info 'duration 0.0))
+              forKey:
+              #:type _id
+              (nsstring key-duration))
+       (tellv d
+              setObject:
+              #:type _id
+              (nsnumber (hash-ref info 'position 0.0))
+              forKey:
+              #:type _id
+              (nsstring key-elapsed))
+       (tellv d
+              setObject:
+              #:type _id
+              (nsnumber (if (hash-ref info 'playing #f) 1.0 0.0))
+              forKey:
+              #:type _id
+              (nsstring key-rate))
        (tellv (center) setNowPlayingInfo: #:type _id d)]
-      [else
-       (tellv (center) setNowPlayingInfo: #:type _id #f)])))
+      [else (tellv (center) setNowPlayingInfo: #:type _id #f)])))
 
 (define (set-handler! proc)
   (set-box! handler-box proc)
-  (when (and proc (supported?)) (ensure-target!)))
+  (when (and proc (supported?))
+    (ensure-target!)))
 
 (define (ns->string v)
   (and v (tell #:type _string v UTF8String)))
@@ -132,10 +163,16 @@
          (define d (tell (center) nowPlayingInfo))
          (and d
               (let ()
-                (define (get key) (tell d objectForKey: #:type _id (nsstring key)))
+                (define (get key)
+                  (tell d objectForKey: #:type _id (nsstring key)))
                 (define rate (ns->double (get key-rate)))
-                (hash 'title (or (ns->string (get key-title)) "")
-                      'artist (or (ns->string (get key-artist)) "")
-                      'duration (or (ns->double (get key-duration)) 0.0)
-                      'position (or (ns->double (get key-elapsed)) 0.0)
-                      'playing (and rate (> rate 0.0) #t)))))))
+                (hash 'title
+                      (or (ns->string (get key-title)) "")
+                      'artist
+                      (or (ns->string (get key-artist)) "")
+                      'duration
+                      (or (ns->double (get key-duration)) 0.0)
+                      'position
+                      (or (ns->double (get key-elapsed)) 0.0)
+                      'playing
+                      (and rate (> rate 0.0) #t)))))))

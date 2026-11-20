@@ -349,12 +349,11 @@
                                                   start-dev-server
                                                   start-server
                                                   stop-server))
-    (glaze/now-playing (now-playing-clear!
-                        now-playing-info
-                        now-playing-os-info
-                        now-playing-set!
-                        now-playing-set-command-handler!
-                        now-playing-supported?))))
+    (glaze/now-playing (now-playing-clear! now-playing-info
+                                           now-playing-os-info
+                                           now-playing-set!
+                                           now-playing-set-command-handler!
+                                           now-playing-supported?))))
 
 (define (phase-zero-export-names exports)
   (for*/list ([phase-entry (in-list exports)]
