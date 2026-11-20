@@ -118,6 +118,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Windows webview teardown no longer raises a spurious `CreateController
+  failed: 0x80004004` (glaze#146): `close` and the WM_CLOSE path now call
+  `ICoreWebView2Controller::Close` (vtable slot 24, verified against
+  WebView2.h 1.0.2903.40) before destroying the parent HWND and pump briefly
+  so teardown callbacks land while the window is marked closed; the
+  controller callback treats E_ABORT as benign teardown once the window is
+  closed instead of storing it as a fatal creation error. The race was
+  latent on main and surfaced as a bridge-test flake on hosted windows
+  runners (main-equivalent control run reproduced it without any hatch).
+
 - `measure startup`'s launch-survival window is hardened with rivet's
   `launch-smoke` contract. Both child streams are now drained into bounded
   64 KiB captures: previously the pipes were never read, so an artifact that

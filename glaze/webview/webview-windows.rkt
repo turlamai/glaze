@@ -92,6 +92,9 @@
 ;; HRESULT is signed: the unsigned literal does not fit the _int32
 ;; callback return type (QI for an unsupported IID would crash).
 (define E_NOINTERFACE (- #x80004002 #x100000000))
+;; Teardown abort: the runtime delivers this through the controller callback
+;; when in-flight controller work is aborted by parent-window destruction.
+(define E_ABORT (- #x80004004 #x100000000))
 (define IID-IUnknown (bytes 0 0 0 0 0 0 0 0 #xC0 0 0 0 0 0 0 #x46))
 ;; ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler
 (define IID-EnvHandler
@@ -509,6 +512,7 @@
                        [(and wv (not (unbox (win:webview-closed?-box wv))))
                         (set-box! (win:webview-closed?-box wv) #t)
                         ((win:webview-on-close wv))
+                        (teardown-controller! wv)
                         (DestroyWindow-maybe hwnd)]
                        [else (DefWindowProcW hwnd msg w l)])]
                     [(= msg WM_DESTROY) 0]
@@ -521,6 +525,30 @@
   (when DestroyWindow
     (DestroyWindow hwnd))
   0)
+
+;; Controller teardown shared by `close` and the WM_CLOSE path (glaze#146):
+;; Close the controller BEFORE destroying its parent HWND, then pump briefly
+;; so teardown callbacks land while the window is marked closed. Destroying
+;; the window first aborts in-flight controller work and the runtime delivers
+;; E_ABORT through the creation callback mid-teardown (hosted-runner flake).
+;; ICoreWebView2Controller::Close = vtable slot 24 (WebView2.h 1.0.2903.40:
+;; IUnknown 0..2, IsVisible 3/4, Bounds 5/6, ZoomFactor 7/8, ZoomChanged 9/10,
+;; SetBoundsAndZoomFactor 11, MoveFocus 12, MoveFocusRequested 13/14,
+;; GotFocus 15/16, LostFocus 17/18, AcceleratorKeyPressed 19/20,
+;; ParentWindow 21/22, NotifyParentWindowPositionChanged 23, Close 24).
+(define (teardown-controller! wv)
+  (define controller (win:webview-controller-box wv))
+  (when controller
+    (define close-ctrl (cast (vtfn controller 24) _fpointer (_fun _pointer -> _int32)))
+    (close-ctrl controller)
+    (let loop ([deadline (+ (current-inexact-milliseconds) 200)])
+      (define msg (malloc (ctype-sizeof _MSG) 'atomic))
+      (when (PeekMessageW msg #f 0 0 PM_REMOVE)
+        (TranslateMessage msg)
+        (DispatchMessageW msg))
+      (when (< (current-inexact-milliseconds) deadline)
+        (sleep 0.01)
+        (loop deadline)))))
 
 ;; COM out-param call helpers: always surface the HRESULT.
 (define (call-with-out obj idx)
@@ -693,96 +721,103 @@
     (make-com-handler
      IID-CtrlHandler
      (lambda (errcode controller)
-       (if (not (= errcode 0))
-           (begin
-             (log "controller callback error 0x~x" (bitwise-and errcode #xffffffff))
-             (set-box!
-              (win:webview-error-box wv)
-              (error 'open-webview "CreateController failed: 0x~x" (bitwise-and errcode #xffffffff))))
-           (let ()
-             ;; AddRef keeps them valid beyond the callback (same STA thread).
-             (define addref (cast (vtfn controller 1) _fpointer (_fun _pointer -> _uint32)))
-             (addref controller)
-             (set-win:webview-controller-box! wv controller)
-             (define-values (hr cwv) (call-with-out controller 25)) ; get_CoreWebView2
-             (if (not (= hr S_OK))
-                 (begin
-                   (log "get_CoreWebView2 failed 0x~x" (bitwise-and hr #xffffffff))
-                   (set-box! (win:webview-error-box wv)
-                             (error 'open-webview
-                                    "get_CoreWebView2 failed: 0x~x"
-                                    (bitwise-and hr #xffffffff))))
-                 (let ()
-                   (addref cwv)
-                   (set-win:webview-cwv-box! wv cwv)
-                   ;; Size the WebView to the client area (put_Bounds = 6);
-                   ;; without this the controller keeps default bounds.
-                   (define rc (make-RECT 0 0 0 0))
-                   (GetClientRect (unbox (win:webview-hwnd-box wv)) rc)
-                   (define put-bounds
-                     (cast (vtfn controller 6) _fpointer (_fun _pointer _RECT -> _int32)))
-                   (put-bounds controller (make-RECT 0 0 (RECT-right rc) (RECT-bottom rc)))
-                   ;; Native transport: bootstrap + scheme filter + both
-                   ;; event handlers must be in place BEFORE the first
-                   ;; navigation, so the page never touches a TCP port.
-                   (when native-transport
-                     (log "native: registering handlers")
-                     (define wiring (native-wiring native-transport (unbox env-box)))
-                     ;; AddScriptToExecuteOnDocumentCreated(script,
-                     ;; handler) — the completion handler is a third [in]
-                     ;; parameter (nullable); omitting it made WebView2 read
-                     ;; a garbage stack value and call it later: segfault.
-                     (define add-script
-                       (cast (vtfn cwv 27) _fpointer (_fun _pointer _pointer _pointer -> _int32)))
-                     (add-script cwv (wstr native-bootstrap-js) #f)
-                     (define add-filter
-                       (cast (vtfn cwv 57) _fpointer (_fun _pointer _pointer _int -> _int32)))
-                     (add-filter cwv (wstr "http://glaze.localhost/*") 0) ; WEB_RESOURCE_CONTEXT_ALL
-                     (define wrr-handler
-                       (make-com-event-handler IID-WebResourceHandler
-                                               (lambda (_sender args)
-                                                 (win-scheme-serve! wiring args))))
-                     (log "native: script+filter done")
-                     (define add-wrr
-                       (cast (vtfn cwv 55)
-                             _fpointer
-                             (_fun _pointer
-                                   _pointer
-                                   (t : (_ptr o _uintptr))
-                                   ->
-                                   (r : _int32)
-                                   ->
-                                   (values r t))))
-                     (log "native: wrr added")
-                     (add-wrr cwv wrr-handler)
-                     (log "native: wmr registering")
-                     (define wmr-handler
-                       (make-com-event-handler IID-WebMessageHandler
-                                               (lambda (_sender args)
-                                                 (win-handle-message! wiring args))))
-                     (define add-wmr
-                       (cast (vtfn cwv 34)
-                             _fpointer
-                             (_fun _pointer
-                                   _pointer
-                                   (t : (_ptr o _uintptr))
-                                   ->
-                                   (r : _int32)
-                                   ->
-                                   (values r t))))
-                     (add-wmr cwv wmr-handler)
-                     (native-transport-set-deliver!
-                      native-transport
-                      (lambda (js)
-                        (async-channel-put (win:webview-deliver-queue wv)
-                                           (cons (win:webview-cwv-box wv) js)))))
-                   (define nav (cast (vtfn cwv 5) _fpointer (_fun _pointer _pointer -> _int32)))
-                   (define nav-hr (nav cwv url-ptr))
-                   (log "Navigate hr=0x~x" (bitwise-and nav-hr #xffffffff))
-                   (when devtools?
-                     (define od (cast (vtfn cwv 51) _fpointer (_fun _pointer -> _int32)))
-                     (od cwv))
-                   (set-box! (win:webview-ready?-box wv) #t))))))))
+       (cond
+         ;; Teardown race (glaze#146): destroying the parent HWND aborts
+         ;; in-flight controller work and the runtime delivers E_ABORT
+         ;; through this callback. Once the window is marked closed that
+         ;; abort is expected teardown, not a creation failure.
+         [(and (= errcode E_ABORT) (unbox (win:webview-closed?-box wv)))
+          (log "controller E_ABORT during teardown ignored (glaze#146)")]
+         [(not (= errcode 0))
+          (begin
+            (log "controller callback error 0x~x" (bitwise-and errcode #xffffffff))
+            (set-box!
+             (win:webview-error-box wv)
+             (error 'open-webview "CreateController failed: 0x~x" (bitwise-and errcode #xffffffff))))]
+         [else
+          (let ()
+            ;; AddRef keeps them valid beyond the callback (same STA thread).
+            (define addref (cast (vtfn controller 1) _fpointer (_fun _pointer -> _uint32)))
+            (addref controller)
+            (set-win:webview-controller-box! wv controller)
+            (define-values (hr cwv) (call-with-out controller 25)) ; get_CoreWebView2
+            (if (not (= hr S_OK))
+                (begin
+                  (log "get_CoreWebView2 failed 0x~x" (bitwise-and hr #xffffffff))
+                  (set-box!
+                   (win:webview-error-box wv)
+                   (error 'open-webview "get_CoreWebView2 failed: 0x~x" (bitwise-and hr #xffffffff))))
+                (let ()
+                  (addref cwv)
+                  (set-win:webview-cwv-box! wv cwv)
+                  ;; Size the WebView to the client area (put_Bounds = 6);
+                  ;; without this the controller keeps default bounds.
+                  (define rc (make-RECT 0 0 0 0))
+                  (GetClientRect (unbox (win:webview-hwnd-box wv)) rc)
+                  (define put-bounds
+                    (cast (vtfn controller 6) _fpointer (_fun _pointer _RECT -> _int32)))
+                  (put-bounds controller (make-RECT 0 0 (RECT-right rc) (RECT-bottom rc)))
+                  ;; Native transport: bootstrap + scheme filter + both
+                  ;; event handlers must be in place BEFORE the first
+                  ;; navigation, so the page never touches a TCP port.
+                  (when native-transport
+                    (log "native: registering handlers")
+                    (define wiring (native-wiring native-transport (unbox env-box)))
+                    ;; AddScriptToExecuteOnDocumentCreated(script,
+                    ;; handler) — the completion handler is a third [in]
+                    ;; parameter (nullable); omitting it made WebView2 read
+                    ;; a garbage stack value and call it later: segfault.
+                    (define add-script
+                      (cast (vtfn cwv 27) _fpointer (_fun _pointer _pointer _pointer -> _int32)))
+                    (add-script cwv (wstr native-bootstrap-js) #f)
+                    (define add-filter
+                      (cast (vtfn cwv 57) _fpointer (_fun _pointer _pointer _int -> _int32)))
+                    (add-filter cwv (wstr "http://glaze.localhost/*") 0) ; WEB_RESOURCE_CONTEXT_ALL
+                    (define wrr-handler
+                      (make-com-event-handler IID-WebResourceHandler
+                                              (lambda (_sender args)
+                                                (win-scheme-serve! wiring args))))
+                    (log "native: script+filter done")
+                    (define add-wrr
+                      (cast (vtfn cwv 55)
+                            _fpointer
+                            (_fun _pointer
+                                  _pointer
+                                  (t : (_ptr o _uintptr))
+                                  ->
+                                  (r : _int32)
+                                  ->
+                                  (values r t))))
+                    (log "native: wrr added")
+                    (add-wrr cwv wrr-handler)
+                    (log "native: wmr registering")
+                    (define wmr-handler
+                      (make-com-event-handler IID-WebMessageHandler
+                                              (lambda (_sender args)
+                                                (win-handle-message! wiring args))))
+                    (define add-wmr
+                      (cast (vtfn cwv 34)
+                            _fpointer
+                            (_fun _pointer
+                                  _pointer
+                                  (t : (_ptr o _uintptr))
+                                  ->
+                                  (r : _int32)
+                                  ->
+                                  (values r t))))
+                    (add-wmr cwv wmr-handler)
+                    (native-transport-set-deliver! native-transport
+                                                   (lambda (js)
+                                                     (async-channel-put (win:webview-deliver-queue wv)
+                                                                        (cons (win:webview-cwv-box wv)
+                                                                              js)))))
+                  (define nav (cast (vtfn cwv 5) _fpointer (_fun _pointer _pointer -> _int32)))
+                  (define nav-hr (nav cwv url-ptr))
+                  (log "Navigate hr=0x~x" (bitwise-and nav-hr #xffffffff))
+                  (when devtools?
+                    (define od (cast (vtfn cwv 51) _fpointer (_fun _pointer -> _int32)))
+                    (od cwv))
+                  (set-box! (win:webview-ready?-box wv) #t))))]))))
 
   ;; env handler: immediately CreateController. The environment is AddRef'd
   ;; and shared with the controller callback (CreateWebResourceResponse
@@ -887,6 +922,7 @@
   (unless (unbox (win:webview-closed?-box wv))
     (set-box! (win:webview-closed?-box wv) #t)
     ((win:webview-on-close wv))
+    (teardown-controller! wv)
     (define hwnd (unbox (win:webview-hwnd-box wv)))
     (when hwnd
       (DestroyWindow-maybe hwnd)
