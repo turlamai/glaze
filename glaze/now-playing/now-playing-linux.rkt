@@ -1,0 +1,365 @@
+#lang racket/base
+
+;; Linux host-owned MPRIS backend (glaze#153): the host process owns
+;; org.mpris.MediaPlayer2.<identifier> on the session bus via GIO/GDBus,
+;; independent of WebKitGTK's MediaSession bridge (WebKit bug 279362).
+;;
+;; GDBus callbacks (method calls, property reads) are dispatched on the
+;; GLib main context; glaze's Linux pump already iterates it, so command
+;; handlers run on the pump thread. Publication (emit_signal) is
+;; thread-safe from any Racket thread.
+;;
+;; Struct layouts and function signatures follow the official GIO headers
+;; (gdbusconnection.h, gdbusmethodinvocation.h, gvariant.h): GDBusInterfaceVTable
+;; is three function pointers plus 8 gpointer padding; GVariantBuilder is a
+;; union whose largest member is gpointer x[16] (we over-allocate).
+
+(require ffi/unsafe
+         ffi/unsafe/define
+         glaze/ffi-discovery
+         racket/string)
+
+(provide supported? publish! os-info set-handler!)
+
+(define gio (ffi-lib* "libgio-2.0" '("0" "")))
+
+(define-ffi-definer defgio gio)
+
+(define _GVariant _pointer)
+(define _GDBusConnection _pointer)
+
+(defgio g_bus_get_sync (_fun _int _pointer _pointer -> _GDBusConnection))
+(defgio g_dbus_connection_register_object
+  (_fun _GDBusConnection _string _pointer _pointer _pointer _pointer _pointer -> _uint))
+(defgio g_dbus_connection_emit_signal
+  (_fun _GDBusConnection _pointer _string _string _string _GVariant _pointer -> _bool))
+(defgio g_dbus_connection_call_sync
+  (_fun _GDBusConnection _string _string _string _string _GVariant _pointer _int _int _pointer _pointer -> _GVariant))
+(defgio g_bus_own_name_on_connection
+  (_fun _GDBusConnection _string _int _pointer _pointer _pointer _pointer _pointer -> _uint))
+(defgio g_dbus_node_info_new_for_xml (_fun _string _pointer -> _pointer))
+(defgio g_dbus_method_invocation_return_value (_fun _pointer _GVariant -> _void))
+(defgio g_dbus_method_invocation_return_error
+  (_fun _pointer _int _int _string -> _void))
+(defgio g_variant_new_string (_fun _string -> _GVariant))
+(defgio g_variant_new_boolean (_fun _bool -> _GVariant))
+(defgio g_variant_new_int64 (_fun _int64 -> _GVariant))
+(defgio g_variant_new_double (_fun _double -> _GVariant))
+(defgio g_variant_new_strv (_fun _pointer _int -> _GVariant))
+(defgio g_variant_new_x (_fun _string _int64 -> _GVariant) #:c-id g_variant_new)
+(defgio g_variant_new_props
+  (_fun _string _string _GVariant _GVariant -> _GVariant) #:c-id g_variant_new)
+(defgio g_variant_ref_sink (_fun _GVariant -> _GVariant))
+(defgio g_variant_get_string (_fun _GVariant _pointer -> _string))
+(defgio g_variant_get_boolean (_fun _GVariant -> _bool))
+(defgio g_variant_get_int64 (_fun _GVariant -> _int64))
+(defgio g_variant_get_double (_fun _GVariant -> _double))
+(defgio g_variant_builder_init (_fun _pointer _string -> _void))
+(defgio g_variant_builder_add_sv (_fun _pointer _string _string _GVariant -> _void)
+  #:c-id g_variant_builder_add)
+(defgio g_variant_builder_end (_fun _pointer -> _GVariant))
+(defgio g_variant_get_child_value (_fun _GVariant _int -> _GVariant))
+(defgio g_variant_lookup_value (_fun _GVariant _string _pointer -> _GVariant))
+
+;; GDBusInterfaceVTable: method_call, get_property, set_property, padding[8].
+(define-cstruct _GDBusInterfaceVTable
+  ([method_call _fpointer]
+   [get_property _fpointer]
+   [set_property _fpointer]
+   [padding (_array _pointer 8)]))
+
+;; GDBusNodeInfo { gint ref_count; gchar *path; GDBusInterfaceInfo **interfaces; ... }
+(define (node-interfaces node) (ptr-ref node _pointer 2))
+(define (interface-at interfaces i) (ptr-ref interfaces _pointer i))
+
+(define mpris-xml
+  (string-append
+   "<node>"
+   "<interface name='org.mpris.MediaPlayer2'>"
+   "<method name='Raise'/><method name='Quit'/>"
+   "<property name='CanQuit' type='b' access='read'/>"
+   "<property name='CanRaise' type='b' access='read'/>"
+   "<property name='HasTrackList' type='b' access='read'/>"
+   "<property name='Identity' type='s' access='read'/>"
+   "<property name='DesktopEntry' type='s' access='read'/>"
+   "<property name='SupportedUriSchemes' type='as' access='read'/>"
+   "<property name='SupportedMimeTypes' type='as' access='read'/>"
+   "</interface>"
+   "<interface name='org.mpris.MediaPlayer2.Player'>"
+   "<method name='Next'/><method name='Previous'/><method name='Pause'/>"
+   "<method name='PlayPause'/><method name='Stop'/><method name='Play'/>"
+   "<method name='Seek'><arg direction='in' type='x' name='Offset'/></method>"
+   "<method name='SetPosition'><arg direction='in' type='o' name='TrackId'/>"
+   "<arg direction='in' type='x' name='Position'/></method>"
+   "<method name='OpenUri'><arg direction='in' type='s' name='Uri'/></method>"
+   "<property name='PlaybackStatus' type='s' access='read'/>"
+   "<property name='Rate' type='d' access='read'/>"
+   "<property name='Metadata' type='a{sv}' access='read'/>"
+   "<property name='Volume' type='d' access='read'/>"
+   "<property name='Position' type='x' access='read'/>"
+   "<property name='MinimumRate' type='d' access='read'/>"
+   "<property name='MaximumRate' type='d' access='read'/>"
+   "<property name='CanGoNext' type='b' access='read'/>"
+   "<property name='CanGoPrevious' type='b' access='read'/>"
+   "<property name='CanPlay' type='b' access='read'/>"
+   "<property name='CanPause' type='b' access='read'/>"
+   "<property name='CanSeek' type='b' access='read'/>"
+   "<property name='CanControl' type='b' access='read'/>"
+   "<signal name='Seeked'><arg name='Position' type='x'/></signal>"
+   "</interface>"
+   "</node>"))
+
+(define state-box (box #f))       ; canonical info hash or #f
+(define handler-box (box #f))
+(define conn-box (box #f))
+(define owner-box (box 0))
+(define root-reg-box (box 0))
+(define player-reg-box (box 0))
+(define node-box (box #f))
+(define bus-name-box (box #f))
+(define last-position-box (box 0.0))
+
+(define (session-connection)
+  (or (unbox conn-box)
+      (and g_bus_get_sync
+           (let ()
+             (define err (malloc _pointer 1))
+             (ptr-set! err _pointer 0)
+             (define c (g_bus_get_sync 2 #f err))
+             (when (or (not c) (ptr-ref err _pointer)) (set! c #f))
+             (when c (set-box! conn-box c))
+             c))))
+
+(define (supported?)
+  (and gio g_bus_get_sync g_dbus_connection_register_object
+       g_bus_own_name_on_connection g_variant_builder_init
+       (session-connection) #t))
+
+;; ---- GVariant helpers ----------------------------------------------------
+
+(define (new-builder)
+  ;; GVariantBuilder union: largest member gpointer x[16]; over-allocate.
+  (define b (malloc 256 1))
+  (memset b 0 256)
+  (g_variant_builder_init b "a{sv}")
+  b)
+
+(define (builder-add! b key variant)
+  (g_variant_builder_add_sv b "{sv}" key (g_variant_ref_sink variant)))
+
+(define (strv-1 s)
+  (define cstr (malloc _byte (add1 (string-length s))))
+  (memcpy cstr (string->bytes/utf-8 s) (string-length s))
+  (ptr-set! cstr _byte (string-length s) 0)
+  (define arr (malloc _pointer 2))
+  (ptr-set! arr _pointer 0 cstr)
+  (ptr-set! arr _pointer 1 #f)
+  (g_variant_new_strv arr 1))
+
+(define (metadata-variant info)
+  (define b (new-builder))
+  (builder-add! b "mpris:trackid" (g_variant_new_string "/org/mpris/MediaPlayer2/glaze"))
+  (builder-add! b "mpris:length"
+                (g_variant_new_int64 (inexact->exact (round (* 1e6 (hash-ref info 'duration 0.0))))))
+  (builder-add! b "xesam:title" (g_variant_new_string (hash-ref info 'title "")))
+  (builder-add! b "xesam:album" (g_variant_new_string (hash-ref info 'album "")))
+  (builder-add! b "xesam:artist"
+                (if (non-empty-string? (hash-ref info 'artist ""))
+                    (strv-1 (hash-ref info 'artist ""))
+                    (g_variant_new_strv #f 0)))
+  (g_variant_ref_sink (g_variant_builder_end b)))
+
+(define (playback-status info)
+  (cond [(not info) "Stopped"]
+        [(hash-ref info 'playing #f) "Playing"]
+        [else "Paused"]))
+
+(define (position-usecs info)
+  (inexact->exact (round (* 1e6 (hash-ref info 'position 0.0)))))
+
+;; ---- callbacks -----------------------------------------------------------
+
+(define (dispatch-command! name parameters)
+  (define handler (unbox handler-box))
+  (when handler
+    (case name
+      [("Play") (handler 'play #f)]
+      [("Pause") (handler 'pause #f)]
+      [("Stop") (handler 'stop #f)]
+      [("PlayPause") (handler 'toggle #f)]
+      [("Next") (handler 'next #f)]
+      [("Previous") (handler 'previous #f)]
+      [("Seek")
+       (handler 'seek-by (/ (g_variant_get_int64 (g_variant_get_child_value parameters 0)) 1e6))]
+      [("SetPosition")
+       (handler 'seek-to (/ (g_variant_get_int64 (g_variant_get_child_value parameters 1)) 1e6))]
+      [else (void)])))
+
+(define method-call-cb
+  (cast
+   (lambda (conn sender path iface method parameters invocation user)
+     (with-handlers ([exn:fail? (lambda (_)
+                                  (g_dbus_method_invocation_return_error
+                                   invocation 0 0 "glaze now-playing handler failed"))])
+       (dispatch-command! method parameters)
+       (g_dbus_method_invocation_return_value invocation #f)))
+   (_fun _GDBusConnection _string _string _string _string _GVariant _pointer _pointer -> _void)
+   _fpointer))
+
+(define (root-property name)
+  (define info (unbox state-box))
+  (case name
+    [("CanQuit" "CanRaise" "HasTrackList") (g_variant_new_boolean #f)]
+    [("Identity") (g_variant_new_string (if info (hash-ref info 'identifier "glaze") "glaze"))]
+    [("DesktopEntry") (g_variant_new_string "")]
+    [("SupportedUriSchemes" "SupportedMimeTypes") (g_variant_new_strv #f 0)]
+    [else #f]))
+
+(define (player-property name)
+  (define info (unbox state-box))
+  (case name
+    [("PlaybackStatus") (g_variant_new_string (playback-status info))]
+    [("Metadata") (metadata-variant (or info (hash 'title "" 'duration 0.0)))]
+    [("Position") (g_variant_new_int64 (if info (position-usecs info) 0))]
+    [("Rate" "Volume" "MinimumRate" "MaximumRate") (g_variant_new_double 1.0)]
+    [("CanGoNext" "CanGoPrevious" "CanPlay" "CanPause" "CanSeek" "CanControl")
+     (g_variant_new_boolean #t)]
+    [else #f]))
+
+(define get-property-cb
+  (cast
+   (lambda (conn sender path iface name err user)
+     (define v
+       (with-handlers ([exn:fail? (lambda (_) #f)])
+         (if (equal? iface "org.mpris.MediaPlayer2")
+             (root-property name)
+             (player-property name))))
+     (or v (g_variant_new_string "")))
+   (_fun _GDBusConnection _string _string _string _string _pointer _pointer -> _GVariant)
+   _fpointer))
+
+(define set-property-cb
+  (cast
+   (lambda (conn sender path iface name value err user) #f)
+   (_fun _GDBusConnection _string _string _string _string _GVariant _pointer _pointer -> _bool)
+   _fpointer))
+
+(define vtable
+  (make-GDBusInterfaceVTable method-call-cb get-property-cb set-property-cb
+                             (vector #f #f #f #f #f #f #f #f)))
+
+;; ---- publication ---------------------------------------------------------
+
+(define (sanitize-id id)
+  (string-join (filter non-empty-string? (regexp-split #px"[^A-Za-z0-9_]+" id)) "_"))
+
+(define (ensure-registered! info)
+  (define conn (session-connection))
+  (unless conn (error 'now-playing-linux "no session bus"))
+  (unless (unbox node-box)
+    (define err (malloc _pointer 1))
+    (ptr-set! err _pointer 0)
+    (define node (g_dbus_node_info_new_for_xml mpris-xml err))
+    (unless node (error 'now-playing-linux "MPRIS introspection XML rejected"))
+    (set-box! node-box node))
+  (define interfaces (node-interfaces (unbox node-box)))
+  (when (zero? (unbox root-reg-box))
+    (define err (malloc _pointer 1))
+    (ptr-set! err _pointer 0)
+    (set-box! root-reg-box
+              (g_dbus_connection_register_object
+               conn "/org/mpris/MediaPlayer2" (interface-at interfaces 0)
+               vtable #f #f err)))
+  (when (zero? (unbox player-reg-box))
+    (define err (malloc _pointer 1))
+    (ptr-set! err _pointer 0)
+    (set-box! player-reg-box
+              (g_dbus_connection_register_object
+               conn "/org/mpris/MediaPlayer2" (interface-at interfaces 1)
+               vtable #f #f err)))
+  (when (zero? (unbox owner-box))
+    (define name (string-append "org.mpris.MediaPlayer2."
+                                (sanitize-id (hash-ref info 'identifier "glaze"))))
+    (set-box! bus-name-box name)
+    (set-box! owner-box
+              (g_bus_own_name_on_connection conn name 0 #f #f #f #f #f))))
+
+(define (emit-properties! info)
+  (define conn (unbox conn-box))
+  (when conn
+    (define b (new-builder))
+    (builder-add! b "Metadata"
+                  (metadata-variant (or info (hash 'title "" 'duration 0.0))))
+    (builder-add! b "PlaybackStatus" (g_variant_new_string (playback-status info)))
+    (define dict (g_variant_ref_sink (g_variant_builder_end b)))
+    (define empty (g_variant_ref_sink (g_variant_new_strv #f 0)))
+    (define params
+      (g_variant_ref_sink
+       (g_variant_new_props "(sa{sv}as)" "org.mpris.MediaPlayer2.Player" dict empty)))
+    (define err (malloc _pointer 1))
+    (ptr-set! err _pointer 0)
+    (g_dbus_connection_emit_signal conn #f "/org/mpris/MediaPlayer2"
+                                   "org.freedesktop.DBus.Properties"
+                                   "PropertiesChanged" params err)
+    (define pos (hash-ref info 'position 0.0))
+    (when (and info (> (abs (- pos (unbox last-position-box))) 2.0))
+      (define err2 (malloc _pointer 1))
+      (ptr-set! err2 _pointer 0)
+      (g_dbus_connection_emit_signal
+       conn #f "/org/mpris/MediaPlayer2" "org.mpris.MediaPlayer2.Player"
+       "Seeked" (g_variant_ref_sink (g_variant_new_x "(x)" (position-usecs info))) err2))
+    (set-box! last-position-box pos)))
+
+(define (publish! info handler)
+  (set-box! handler-box handler)
+  (set-box! state-box info)
+  (cond
+    [info
+     (ensure-registered! info)
+     (emit-properties! info)]
+    [else
+     (set-box! last-position-box 0.0)
+     (emit-properties! #f)]))
+
+(define (set-handler! proc)
+  (set-box! handler-box proc))
+
+;; Read our own published properties back over the bus: acceptance evidence
+;; that the OS surface carries the state, not just host memory.
+(define (bus-get property)
+  (define conn (unbox conn-box))
+  (define name (unbox bus-name-box))
+  (and conn name
+       (let ()
+         (define err (malloc _pointer 1))
+         (ptr-set! err _pointer 0)
+         (define args
+           (g_variant_ref_sink
+            (g_variant_new_props "(ss)" "org.mpris.MediaPlayer2.Player" property)))
+         (define reply
+           (g_dbus_connection_call_sync conn name "/org/mpris/MediaPlayer2"
+                                        "org.freedesktop.DBus.Properties" "Get"
+                                        args #f 0 2000 #f err))
+         (and reply
+              (let ()
+                (define inner (g_variant_get_child_value reply 0))
+                (case property
+                  [("Metadata")
+                   (define title-v (g_variant_lookup_value inner "xesam:title" #f))
+                   (define title (and title-v (g_variant_get_string title-v #f)))
+                   (or title "")]
+                  [("PlaybackStatus") (g_variant_get_string inner #f)]
+                  [("Position") (/ (g_variant_get_int64 inner) 1e6)]
+                  [else #f]))))))
+
+(define (os-info)
+  (and (not (zero? (unbox owner-box)))
+       (let ()
+         (define title (bus-get "Metadata"))
+         (define status (bus-get "PlaybackStatus"))
+         (define pos (bus-get "Position"))
+         (and title status
+              (hash 'title title
+                    'playing (equal? status "Playing")
+                    'position (or pos 0.0)
+                    'bus-name (unbox bus-name-box))))))

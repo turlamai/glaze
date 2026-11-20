@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Host-owned OS Now Playing capability (glaze#153): new reviewed layer
+  `glaze/now-playing` (also re-exported by `glaze/services`) with
+  `now-playing-supported?`, `now-playing-set!`, `now-playing-clear!`,
+  `now-playing-info`, `now-playing-os-info`,
+  `now-playing-set-command-handler!`. macOS publishes through the public
+  `MediaPlayer.framework` (`MPNowPlayingInfoCenter` +
+  `MPRemoteCommandCenter`) and reads `nowPlayingInfo` back; Linux owns an
+  MPRIS2 name over GIO/GDBus on the session bus with root/player
+  interfaces, `PropertiesChanged`/`Seeked` signals, command dispatch and
+  a real bus property readback; Windows stays an inert stub because the
+  WebView2 web MediaSession → SMTC bridge is the verified path there.
+  Missing libraries or session bus degrade to `supported?` → `#f`, never
+  a startup crash. `now-playing-os-info` gives acceptance runs OS-surface
+  evidence instead of trusting the publish call. Backends are embedded by
+  `platform-backend-modules`; contract, normalization and per-platform
+  round-trips are gated by `glaze-test/now-playing-test.rkt` on all three
+  CI platforms. Docs: `docs/now-playing.md` / `.zh-CN.md`.
+
 - Linux packages honor a product icon (glaze#151): `raco glaze build
   --icon <path.png>` (and `build-app #:icon`) now flows the PNG into the
   deb/rpm hicolor entry and the AppImage/AppDir root icon, staged verbatim
