@@ -141,6 +141,7 @@ raco glaze verify            # Assert title/URL and capture the native window
 raco glaze measure size      # Report packaged artifact sizes against budgets
 raco glaze measure startup   # Launch a packaged artifact and require survival
 raco glaze build             # Build a distributable (exe + bundled assets)
+raco glaze clean --dry-run   # Remove build artifacts (dist; --out DIR --compiled)
 raco glaze install <rev>     # Pin the glaze package to a revision and link it
 raco glaze updater-keygen    # Create an Ed25519 update-signing keypair
 raco glaze update-sign       # Sign an update artifact

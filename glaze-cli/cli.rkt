@@ -6,6 +6,7 @@
          glaze-cli/inspect
          glaze-cli/private/acceptance
          glaze-cli/private/build-command
+         glaze-cli/private/clean
          glaze-cli/private/compliance
          glaze-cli/private/init
          glaze-cli/private/matrix
@@ -24,6 +25,7 @@
   (displayln "  init <name>   Create a native Glaze desktop project")
   (displayln "  dev           Run this project's native Glaze desktop app")
   (displayln "  build         Build a distributable (raco exe + raco distribute)")
+  (displayln "  clean         Remove build artifacts (dist; --out DIR --compiled --dry-run --json)")
   (displayln "  updater-keygen  Create an Ed25519 keypair for update signing")
   (displayln "  update-sign   Sign an update artifact (Ed25519 over its sha256)")
   (displayln "  update-verify Verify an update artifact signature")
@@ -92,6 +94,7 @@
      ["verify" (exit (verify-app))]
      ["measure" (measure-command rest)]
      ["build" (build-command rest)]
+     ["clean" (exit (clean-command rest))]
      ["updater-keygen" (updater-keygen-command rest)]
      ["update-sign" (updater-sign-command rest)]
      ["update-verify" (updater-verify-command rest)]

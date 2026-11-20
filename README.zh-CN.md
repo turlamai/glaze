@@ -159,6 +159,7 @@ raco glaze verify        # 断言 title/URL 并捕获原生窗口截图
 raco glaze measure size  # 对照预算报告打包产物体积
 raco glaze measure startup # 启动打包产物并要求存活
 raco glaze build         # 构建可分发包（exe + 内置资源）
+raco glaze clean --dry-run # 安全清理构建产物（dist；--out DIR --compiled）
 raco glaze install <rev> # 将 glaze 包固定到某个 revision 并 link
 raco glaze updater-keygen # 生成 Ed25519 更新签名密钥对
 raco glaze update-sign    # 签名更新制品
