@@ -80,7 +80,7 @@
      (unless (now-playing-supported?)
        (define ffi-lib* (dynamic-require 'glaze/ffi-discovery 'ffi-lib*))
        (define ffi-lib-reason (dynamic-require 'glaze/ffi-discovery 'ffi-lib-reason))
-       (define objc-get-class (dynamic-require 'ffi/unsafe/objc 'objc-get-class))
+       (define objc-get-class (dynamic-require 'ffi/unsafe/objc 'objc_lookUpClass))
        (define mp (ffi-lib* "/System/Library/Frameworks/MediaPlayer.framework/MediaPlayer" '(#f)))
        (printf "[now-playing-diag] mp-lib=~a reason=~a\n" mp (ffi-lib-reason))
        (for ([n (in-list '("MPNowPlayingInfoCenter" "MPRemoteCommandCenter"

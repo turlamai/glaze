@@ -29,7 +29,7 @@
   (and mediaplayer
        foundation
        (with-handlers ([exn:fail? (lambda (_) #f)])
-         (objc-get-class name))))
+         (objc_lookUpClass name))))
 
 (define center-class (class "MPNowPlayingInfoCenter"))
 (define command-center-class (class "MPRemoteCommandCenter"))
