@@ -41,6 +41,15 @@
 (unless program-files
   (error 'nsis-smoke "ProgramW6432/ProgramFiles is not set"))
 (define install-dir (build-path program-files "sampleapp"))
+(define program-data (getenv "ProgramData"))
+(unless program-data
+  (error 'nsis-smoke "ProgramData is not set"))
+(define all-users-shortcut
+  (build-path program-data "Microsoft" "Windows" "Start Menu" "Programs" "sampleapp.lnk"))
+(define public-desktop-shortcut
+  (and (getenv "PUBLIC") (build-path (getenv "PUBLIC") "Desktop" "sampleapp.lnk")))
+(define user-desktop-shortcut
+  (and (getenv "USERPROFILE") (build-path (getenv "USERPROFILE") "Desktop" "sampleapp.lnk")))
 
 (define (run! path . args)
   (unless (apply system* path args)
@@ -66,6 +75,11 @@
                   (error 'nsis-smoke "NSIS did not install sampleapp.exe"))
                 (unless (file-exists? (build-path install-dir "Uninstall.exe"))
                   (error 'nsis-smoke "NSIS did not write Uninstall.exe"))
+                (unless (file-exists? all-users-shortcut)
+                  (error 'nsis-smoke "NSIS did not create the all-users Start Menu shortcut"))
+                (when (or (and public-desktop-shortcut (file-exists? public-desktop-shortcut))
+                          (and user-desktop-shortcut (file-exists? user-desktop-shortcut)))
+                  (error 'nsis-smoke "NSIS created an unsolicited desktop shortcut"))
                 (run! (build-path install-dir "Uninstall.exe") "/S")
                 (let loop ([tries 30])
                   (cond
@@ -74,7 +88,9 @@
                        (error 'nsis-smoke "uninstall left ~a" install-dir))
                      (sleep 0.2)
                      (loop (sub1 tries))]
-                    [else (void)])))
+                    [else (void)]))
+                (when (file-exists? all-users-shortcut)
+                  (error 'nsis-smoke "uninstall left the all-users Start Menu shortcut")))
               (lambda () (cleanup!)))
 
 (displayln "NSIS install/uninstall smoke passed")
