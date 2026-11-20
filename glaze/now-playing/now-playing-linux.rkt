@@ -149,7 +149,7 @@
       (and g_bus_get_sync
            (let ()
              (define err (malloc _pointer 1))
-             (ptr-set! err _pointer 0)
+             (ptr-set! err _pointer #f)
              (define c (g_bus_get_sync 2 #f err))
              (when (or (not c) (ptr-ref err _pointer))
                ;; Keep the GError message for carrier diagnostics: a silent
@@ -157,7 +157,9 @@
                (with-handlers ([exn:fail? (lambda (_) (void))])
                  (define gerr (ptr-ref err _pointer))
                  (when gerr
-                   (define msg (ptr-ref gerr _pointer 8))
+                   ;; GError: guint32 domain + gint code, then gchar* message
+                   ;; at byte 8 = _pointer element 1.
+                   (define msg (ptr-ref gerr _pointer 1))
                    (when msg
                      (set-box! err-box (cast msg _pointer _string)))))
                (set! c #f))
@@ -334,7 +336,7 @@
     (error 'now-playing-linux "no session bus"))
   (unless (unbox node-box)
     (define err (malloc _pointer 1))
-    (ptr-set! err _pointer 0)
+    (ptr-set! err _pointer #f)
     (define node (g_dbus_node_info_new_for_xml mpris-xml err))
     (unless node
       (error 'now-playing-linux "MPRIS introspection XML rejected"))
@@ -342,7 +344,7 @@
   (define interfaces (node-interfaces (unbox node-box)))
   (when (zero? (unbox root-reg-box))
     (define err (malloc _pointer 1))
-    (ptr-set! err _pointer 0)
+    (ptr-set! err _pointer #f)
     (set-box! root-reg-box
               (g_dbus_connection_register_object conn
                                                  "/org/mpris/MediaPlayer2"
@@ -353,7 +355,7 @@
                                                  err)))
   (when (zero? (unbox player-reg-box))
     (define err (malloc _pointer 1))
-    (ptr-set! err _pointer 0)
+    (ptr-set! err _pointer #f)
     (set-box! player-reg-box
               (g_dbus_connection_register_object conn
                                                  "/org/mpris/MediaPlayer2"
@@ -380,7 +382,7 @@
       (g_variant_ref_sink
        (g_variant_new_props "(sa{sv}as)" "org.mpris.MediaPlayer2.Player" dict empty)))
     (define err (malloc _pointer 1))
-    (ptr-set! err _pointer 0)
+    (ptr-set! err _pointer #f)
     (g_dbus_connection_emit_signal conn
                                    #f
                                    "/org/mpris/MediaPlayer2"
@@ -391,7 +393,7 @@
     (define pos (hash-ref info 'position 0.0))
     (when (and info (> (abs (- pos (unbox last-position-box))) 2.0))
       (define err2 (malloc _pointer 1))
-      (ptr-set! err2 _pointer 0)
+      (ptr-set! err2 _pointer #f)
       (g_dbus_connection_emit_signal conn
                                      #f
                                      "/org/mpris/MediaPlayer2"
@@ -426,7 +428,7 @@
        name
        (let ()
          (define err (malloc _pointer 1))
-         (ptr-set! err _pointer 0)
+         (ptr-set! err _pointer #f)
          (define args
            (g_variant_ref_sink (g_variant_new_props "(ss)" "org.mpris.MediaPlayer2.Player" property)))
          (define reply
