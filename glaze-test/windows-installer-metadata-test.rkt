@@ -52,8 +52,9 @@
   (check-true (string-contains? wxs "WixShellExecTarget' Value='[INSTALLDIR]Demo.exe'"))
   (check-true (string-contains? wxs "DllEntry='WixShellExec'")
               "the launch action must come from the Util extension")
-  (check-true (string-contains? wxs "WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT (REMOVE = &quot;ALL&quot;)")
-              "offer launch on fresh install/repair, never on full uninstall")
+  (check-true
+   (string-contains? wxs "WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT (REMOVE = &quot;ALL&quot;)")
+   "offer launch on fresh install/repair, never on full uninstall")
   (check-true (string-contains? wxs "StartMenuApplicationShortcut")
               "a start-menu shortcut must be authored")
   (check-false (string-contains? wxs "DesktopShortcutComponent")
@@ -68,13 +69,15 @@
 (test-case "Windows MSI reuses the application's icon in Installed Apps"
   (define plain (windows-wxs "Demo" (string->path "C:/dist") "1.2.3" "Acme" "com.acme.demo"))
   (define branded
-    (windows-wxs "Demo" (string->path "C:/dist") "1.2.3" "Acme" "com.acme.demo"
+    (windows-wxs "Demo"
+                 (string->path "C:/dist")
+                 "1.2.3"
+                 "Acme"
+                 "com.acme.demo"
                  #:icon-ico (string->path "C:/assets/app.ico")))
   (check-false (string-contains? plain "ARPPRODUCTICON"))
-  (check-true (string-contains? branded
-                                "Icon Id='GlazeAppIcon.ico' SourceFile='C:/assets/app.ico'"))
-  (check-true (string-contains? branded
-                                "Property Id='ARPPRODUCTICON' Value='GlazeAppIcon.ico'")))
+  (check-true (string-contains? branded "Icon Id='GlazeAppIcon.ico' SourceFile='C:/assets/app.ico'"))
+  (check-true (string-contains? branded "Property Id='ARPPRODUCTICON' Value='GlazeAppIcon.ico'")))
 
 (test-case "configured wizard assets ride in through WixVariables"
   (define wxs
