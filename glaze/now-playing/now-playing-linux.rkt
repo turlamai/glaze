@@ -191,6 +191,14 @@
           (getenv "DBUS_SESSION_BUS_ADDRESS")
           'connected
           (and (unbox conn-box) #t)
+          'root-reg
+          (unbox root-reg-box)
+          'player-reg
+          (unbox player-reg-box)
+          'owner
+          (unbox owner-box)
+          'name
+          (unbox bus-name-box)
           'error
           (unbox err-box)))
 
@@ -397,13 +405,14 @@
 (define (publish! info handler)
   (set-box! handler-box handler)
   (set-box! state-box info)
-  (cond
-    [info
-     (ensure-registered! info)
-     (emit-properties! info)]
-    [else
-     (set-box! last-position-box 0.0)
-     (emit-properties! #f)]))
+  (with-handlers ([exn:fail? (lambda (e) (set-box! err-box (exn-message e)))])
+    (cond
+      [info
+       (ensure-registered! info)
+       (emit-properties! info)]
+      [else
+       (set-box! last-position-box 0.0)
+       (emit-properties! #f)])))
 
 (define (set-handler! proc)
   (set-box! handler-box proc))
