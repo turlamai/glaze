@@ -435,8 +435,8 @@
   (when (and (equal? (getenv "GLAZE_ALLOW_PROGRAMMATIC_PLAYBACK") "1")
              webkit_web_view_get_settings
              webkit_settings_set_media_playback_requires_user_gesture)
-    (webkit_settings_set_media_playback_requires_user_gesture
-     (webkit_web_view_get_settings webview) #f))
+    (webkit_settings_set_media_playback_requires_user_gesture (webkit_web_view_get_settings webview)
+                                                              #f))
   (gtk_container_add window webview)
   (webkit_web_view_load_uri webview
                             (if native-transport

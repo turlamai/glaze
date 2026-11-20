@@ -226,8 +226,7 @@
 ;;   get/put_AllowSingleSignOnUsingOSPrimaryAccount 9/10.
 ;; Propget strings are COM-owned: the caller frees them with
 ;; CoTaskMemFree, so they must come from CoTaskMemAlloc (ole32, bound above).
-(define CoTaskMemAlloc
-  (get-ffi-obj "CoTaskMemAlloc" ole32 (_fun _size -> _pointer)))
+(define CoTaskMemAlloc (get-ffi-obj "CoTaskMemAlloc" ole32 (_fun _size -> _pointer)))
 (define (com-wstr s)
   ;; CoTaskMemAlloc'd null-terminated UTF-16 copy of s.
   (define-values (out _in _status) (bytes-convert conv (string->bytes/utf-8 s)))
@@ -247,8 +246,10 @@
       [else
        (ptr-set! out _pointer 0 #f)
        E_NOINTERFACE]))
-  (define (addref self) 2)
-  (define (release self) 1)
+  (define (addref self)
+    2)
+  (define (release self)
+    1)
   (define (get-args self out)
     (ptr-set! out _pointer 0 (com-wstr (unbox args-box)))
     S_OK)
@@ -272,11 +273,13 @@
       (error 'make-environment-options "no available WebView2 runtime version"))
     (ptr-set! out _pointer 0 (com-wstr (wstr->string vp)))
     S_OK)
-  (define (put-ignore self value) S_OK)
+  (define (put-ignore self value)
+    S_OK)
   (define (get-false self out)
     (ptr-set! out _int32 0 0)
     S_OK)
-  (define (put-ignore-bool self value) S_OK)
+  (define (put-ignore-bool self value)
+    S_OK)
   (define fn-qi (function-ptr qi (_fun _pointer _pointer _pointer -> _int32)))
   (define fn-add (function-ptr addref (_fun _pointer -> _uint32)))
   (define fn-rel (function-ptr release (_fun _pointer -> _uint32)))
@@ -288,7 +291,8 @@
   (define fn-gf (function-ptr get-false (_fun _pointer _pointer -> _int32)))
   (define fn-pb (function-ptr put-ignore-bool (_fun _pointer _int32 -> _int32)))
   (define vt (malloc (* 11 (ctype-sizeof _pointer)) _pointer 'raw))
-  (for ([i 11] [fn (list fn-qi fn-add fn-rel fn-ga fn-pa fn-gn fn-pi fn-gv fn-pi fn-gf fn-pb)])
+  (for ([i 11]
+        [fn (list fn-qi fn-add fn-rel fn-ga fn-pa fn-gn fn-pi fn-gv fn-pi fn-gf fn-pb)])
     (ptr-set! vt _pointer i fn))
   (define obj (malloc (ctype-sizeof _pointer) _pointer 'raw))
   (ptr-set! obj _pointer 0 vt)
@@ -835,7 +839,8 @@
 
       (define data-folder (wstr (path->string (new-webview2-data-folder))))
       (define env-options
-        (and (allow-programmatic-playback?) CoTaskMemAlloc
+        (and (allow-programmatic-playback?)
+             CoTaskMemAlloc
              (make-environment-options "--autoplay-policy=no-user-gesture-required")))
       (define hr (CreateCoreWebView2EnvironmentWithOptions #f data-folder env-options env-handler))
       (unless (= (bitwise-and hr #xffffffff) 0)
