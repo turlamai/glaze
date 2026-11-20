@@ -32,6 +32,7 @@
   (define nsi (windows-nsis "Demo" (string->path "C:/dist") "1.2.3" "Acme" "com.acme.demo"))
   (check-true (string-contains? nsi "!include \"MUI2.nsh\""))
   (check-true (string-contains? nsi "MUI_PAGE_INSTFILES"))
+  (check-true (string-contains? nsi "MUI_LANGUAGE \"English\""))
   (check-false (string-contains? nsi "Page directory"))
   (check-true (string-contains? nsi "$SMPROGRAMS"))
   (check-false (string-contains? nsi "$DESKTOP")))
