@@ -22,8 +22,15 @@
     (with-handlers ([exn:fail? (lambda (e)
                                  (printf "[now-playing-diag] bus bootstrap error: ~a\n"
                                          (exn-message e)))])
-      (define-values (out in pid err control)
-        (process "dbus-daemon --session --nofork --print-address=1"))
+      ;; Racket 9.x process returns one list value; 8.x returned five.
+      (define parts
+        (call-with-values (lambda () (process "dbus-daemon --session --nofork --print-address=1"))
+                          (lambda vs
+                            (if (and (= 1 (length vs)) (list? (car vs)))
+                                (car vs)
+                                vs))))
+      (define out (list-ref parts 0))
+      (define control (list-ref parts 4))
       (define address (read-line out))
       (printf "[now-playing-diag] bus bootstrap address=~s\n" address)
       (when (and (string? address) (non-empty-string? address))
@@ -100,7 +107,7 @@
      (unless (hash? os)
        (printf "[now-playing-diag] macos readback os-info=#f diag=~s\n"
                (with-handlers ([exn:fail? (lambda (e) (exn-message e))])
-                 (dynamic-require 'glaze/now-playing/now-playing-macos 'diagnostics))))
+                 ((dynamic-require 'glaze/now-playing/now-playing-macos 'diagnostics)))))
      (check-pred hash? os)
      (check-equal? (hash-ref os 'title) "Glaze Now Playing Test")
      (check-equal? (hash-ref os 'playing) #t)
@@ -123,7 +130,7 @@
         (unless (hash? os)
           (printf "[now-playing-diag] linux round-trip os-info=#f diag=~s\n"
                   (with-handlers ([exn:fail? (lambda (e) (exn-message e))])
-                    (dynamic-require 'glaze/now-playing/now-playing-linux 'diagnostics))))
+                    ((dynamic-require 'glaze/now-playing/now-playing-linux 'diagnostics)))))
         (check-pred hash? os)
         (check-equal? (hash-ref os 'title) "Glaze Now Playing Test")
         (check-equal? (hash-ref os 'playing) #t)
