@@ -10,7 +10,21 @@
 (require glaze/now-playing
          rackunit
          racket/system
-         racket/string)
+         racket/string
+         ffi/unsafe)
+
+;; GDBus dispatches method calls and name callbacks on the main context;
+;; a bare sleep loop never pumps it. Pump the default context so the
+;; round-trip below is real bus evidence on headless CI.
+(define glib-iterate
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (get-ffi-obj 'g_main_context_iteration
+                 (ffi-lib "libglib-2.0" '("0" ""))
+                 (_fun _pointer _bool -> _bool))))
+(define (pump!)
+  (when glib-iterate
+    (with-handlers ([exn:fail? (lambda (_) (void))])
+      (glib-iterate #f #f))))
 
 ;; On headless Linux CI there is no session bus. Bootstrap a private one
 ;; before the first backend call so the MPRIS round-trip below is real bus
@@ -126,7 +140,16 @@
         (now-playing-set-command-handler! (lambda (cmd arg)
                                             (set! received (cons (cons cmd arg) received))))
         (now-playing-set! (canonical))
-        (define os (now-playing-os-info))
+        (define os
+          (let loop ([n 0])
+            (define v (now-playing-os-info))
+            (cond
+              [(hash? v) v]
+              [(< n 40)
+               (pump!)
+               (sleep 0.05)
+               (loop (add1 n))]
+              [else v])))
         (unless (hash? os)
           (printf "[now-playing-diag] linux round-trip os-info=#f diag=~s\n"
                   (with-handlers ([exn:fail? (lambda (e) (exn-message e))])
@@ -145,11 +168,22 @@
         (define deadline (+ (current-inexact-milliseconds) 5000))
         (let loop ()
           (when (and (null? received) (< (current-inexact-milliseconds) deadline))
+            (pump!)
             (sleep 0.05)
             (loop)))
         (check-true (and (pair? received) (equal? (car received) '(pause . #f))))
         (now-playing-clear!)
-        (check-equal? (hash-ref (now-playing-os-info) 'playing) #f))]
+        (define os2
+          (let loop ([n 0])
+            (define v (now-playing-os-info))
+            (cond
+              [(and (hash? v) (not (hash-ref v 'playing))) v]
+              [(< n 40)
+               (pump!)
+               (sleep 0.05)
+               (loop (add1 n))]
+              [else v])))
+        (check-equal? (hash-ref os2 'playing) #f))]
      [else
       (test-case "linux without a session bus degrades to unsupported"
         (check-false (now-playing-os-info)))])])
