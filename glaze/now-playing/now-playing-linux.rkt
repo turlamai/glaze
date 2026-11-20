@@ -22,7 +22,8 @@
 (provide supported?
          publish!
          os-info
-         set-handler!)
+         set-handler!
+         diagnostics)
 
 (define gio (ffi-lib* "libgio-2.0" '("0" "")))
 
@@ -138,6 +139,7 @@
 (define owner-box (box 0))
 (define root-reg-box (box 0))
 (define player-reg-box (box 0))
+(define err-box (box #f))
 (define node-box (box #f))
 (define bus-name-box (box #f))
 (define last-position-box (box 0.0))
@@ -150,19 +152,47 @@
              (ptr-set! err _pointer 0)
              (define c (g_bus_get_sync 2 #f err))
              (when (or (not c) (ptr-ref err _pointer))
+               ;; Keep the GError message for carrier diagnostics: a silent
+               ;; #f here once cost a full CI cycle to interpret.
+               (with-handlers ([exn:fail? (lambda (_) (void))])
+                 (define gerr (ptr-ref err _pointer))
+                 (when gerr
+                   (define msg (ptr-ref gerr _pointer 8))
+                   (when msg
+                     (set-box! err-box (cast msg _pointer _string)))))
                (set! c #f))
              (when c
                (set-box! conn-box c))
              c))))
 
+;; Capability, not runtime state: library + symbols present. Whether the
+;; session bus is reachable right now is reported by `diagnostics` and
+;; tolerated by publish!/os-info (optional-capability degradation).
 (define (supported?)
   (and gio
        g_bus_get_sync
        g_dbus_connection_register_object
        g_bus_own_name_on_connection
        g_variant_builder_init
-       (session-connection)
        #t))
+
+;; Carrier diagnostics for hosts whose verify logs must explain an inert
+;; Now Playing surface (podlens#63). Backend-local, not public API.
+(define (diagnostics)
+  (hasheq 'gio
+          (and gio #t)
+          'symbols
+          (and g_bus_get_sync
+               g_dbus_connection_register_object
+               g_bus_own_name_on_connection
+               g_variant_builder_init
+               #t)
+          'bus-address
+          (getenv "DBUS_SESSION_BUS_ADDRESS")
+          'connected
+          (and (unbox conn-box) #t)
+          'error
+          (unbox err-box)))
 
 ;; ---- GVariant helpers ----------------------------------------------------
 
