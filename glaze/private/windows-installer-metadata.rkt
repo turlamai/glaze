@@ -47,11 +47,17 @@
                      identifier
                      #:license-rtf [license-rtf #f]
                      #:banner-bmp [banner-bmp #f]
-                     #:dialog-bmp [dialog-bmp #f])
+                     #:dialog-bmp [dialog-bmp #f]
+                     #:icon-ico [icon-ico #f])
   (define dist (xml-escape (path->string dist-dir)))
   (define (wix-variable id path)
     (if path
         (format "    <WixVariable Id='~a' Value='~a' />\n" id (xml-escape (path->string path)))
+        ""))
+  (define icon-metadata
+    (if icon-ico
+        (format "    <Icon Id='GlazeAppIcon.ico' SourceFile='~a' />\n    <Property Id='ARPPRODUCTICON' Value='GlazeAppIcon.ico' />\n"
+                (xml-escape (path->string icon-ico)))
         ""))
   (format
    #<<WXEOF
@@ -64,7 +70,7 @@
       <ComponentGroupRef Id='ProductComponents' />
       <ComponentGroupRef Id='ShortcutComponents' />
     </Feature>
-~a~a~a    <Property Id='WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT' Value='Launch ~a' />
+~a~a~a~a    <Property Id='WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT' Value='Launch ~a' />
     <Property Id='WixShellExecTarget' Value='[INSTALLDIR]~a.exe' />
     <CustomAction Id='LaunchApplication' BinaryRef='Wix4UtilCA_~a' DllEntry='WixShellExec' Impersonate='yes' />
     <ui:WixUI Id='WixUI_Minimal' />
@@ -103,6 +109,7 @@ WXEOF
    (wix-variable "WixUILicenseRtf" license-rtf)
    (wix-variable "WixUIBannerBmp" banner-bmp)
    (wix-variable "WixUIDialogBmp" dialog-bmp)
+   icon-metadata
    (xml-escape app-name) ; license checkbox label
    (xml-escape app-name) ; shell-exec target
    (if (equal? (system-type 'arch) 'aarch64) "ARM64" "X64")
