@@ -51,6 +51,21 @@
         (putenv "DBUS_SESSION_BUS_ADDRESS" address)
         (set! private-bus-control control)))))
 
+;; First backend load happens here, before any dispatcher call can cache
+;; a silent partial instantiation: print the real exception if any.
+(when (eq? (system-type 'os) 'unix)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (printf "[now-playing-diag] first linux load error: ~a\n"
+                                       (exn-message e)))])
+    (dynamic-require 'glaze/now-playing/now-playing-linux 'supported?))
+  (with-handlers ([exn:fail? (lambda (e)
+                               (printf "[now-playing-diag] gio probe error: ~a\n" (exn-message e)))])
+    (define ffi-lib* (dynamic-require 'glaze/ffi-discovery 'ffi-lib*))
+    (define ffi-lib-reason (dynamic-require 'glaze/ffi-discovery 'ffi-lib-reason))
+    (printf "[now-playing-diag] gio-lib=~a reason=~a\n"
+            (ffi-lib* "libgio-2.0" '("0" ""))
+            (ffi-lib-reason))))
+
 (define (canonical)
   (hash 'identifier
         "site.glaze.test"
