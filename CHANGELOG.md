@@ -144,6 +144,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- macOS dmg creation no longer fails with `hdiutil: create failed - No
+  space left on device` on CI runners with ample free space: both the
+  branded and plain hdiutil paths sized the image via `-srcfolder`, whose
+  size estimation can dereference the staged `/Applications` symlink or
+  reserve against purgeable-only free space. The image is now created
+  empty with an explicit `-size` from `du -sk` of the staging dir (symlink
+  safe), attached, and the staged contents copied into the mounted volume
+  (the create-dmg approach), then converted to UDZO.
 - Linux autoplay hatch no longer crashes webview creation with a
   `log!` contract violation (glaze#149): the hatch readback used
   `glaze/log`'s `log-info`, which requires a `glaze-logger`, with
