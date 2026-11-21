@@ -49,9 +49,9 @@
               _int
               _pointer
               _pointer
+              #:blocking? #t
               ->
-              _GVariant
-              #:blocking? #t))
+              _GVariant))
 (defgio g_bus_own_name_on_connection
         (_fun _GDBusConnection _string _int _pointer _pointer _pointer _pointer _pointer -> _uint))
 (defgio g_dbus_node_info_new_for_xml (_fun _string _pointer -> _pointer))
