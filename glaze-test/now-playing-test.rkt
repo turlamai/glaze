@@ -212,6 +212,39 @@
         (check-equal? (hash-ref os 'playing) #t)
         (check-= (hash-ref os 'position) 3.0 0.01)
         (check-true (string-prefix? (hash-ref os 'bus-name) "org.mpris.MediaPlayer2."))
+        ;; Discriminators: does ANY incoming dispatch fire? 1) a method call
+        ;; (Pause) over the well-known name; 2) a Properties.Get addressed to
+        ;; our UNIQUE name (bypasses well-known name routing).
+        (system
+         "dbus-send --session --print-reply --reply-timeout=3000 --dest=org.mpris.MediaPlayer2.glaze /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Pause >/dev/null 2>&1 &")
+        (let loop ([n 0])
+          (pump!)
+          (sleep 0.05)
+          (when (and (null? received) (< n 60))
+            (loop (add1 n))))
+        (fprintf (current-error-port) "[now-playing-diag] method Pause received=~s\n" received)
+        (define diag0
+          (with-handlers ([exn:fail? (lambda (e) #f)])
+            ((dynamic-require 'glaze/now-playing/now-playing-linux 'diagnostics))))
+        (define uniq (and (hash? diag0) (hash-ref diag0 'unique-name #f)))
+        (fprintf (current-error-port) "[now-playing-diag] unique-name=~s\n" uniq)
+        (when uniq
+          (define uf "/tmp/glaze-np-get-unique.txt")
+          (system
+           (format
+            "dbus-send --session --print-reply --reply-timeout=3000 --dest=~a /org/mpris/MediaPlayer2 org.freedesktop.DBus.Properties.Get string:org.mpris.MediaPlayer2.Player string:Metadata > ~a 2>&1 &"
+            uniq
+            uf))
+          (let loop ([n 0])
+            (pump!)
+            (sleep 0.1)
+            (when (and (not (file-exists? uf)) (< n 50))
+              (loop (add1 n))))
+          (sleep 0.5)
+          (fprintf (current-error-port)
+                   "[now-playing-diag] unique Get out=~s\n"
+                   (with-handlers ([exn:fail? (lambda (e) "unreadable")])
+                     (file->string uf))))
         ;; Bus-surface evidence from an EXTERNAL client: a separate dbus-send
         ;; process reads Metadata back over the session bus. In-process
         ;; self-Get is avoided (owning-connection async finish idles do not

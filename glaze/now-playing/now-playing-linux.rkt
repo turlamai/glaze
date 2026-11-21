@@ -56,6 +56,7 @@
 ;; our pushed context deterministically.
 (defgio g_dbus_connection_new_for_address_sync
         (_fun _string _int _pointer _pointer _pointer -> _GDBusConnection))
+(defgio g_dbus_connection_get_unique_name (_fun _GDBusConnection -> _string))
 (defgio g_dbus_connection_register_object
         (_fun _GDBusConnection _string _pointer _pointer _pointer _pointer _pointer -> _uint))
 (defgio g_dbus_connection_emit_signal
@@ -307,6 +308,8 @@
           (unbox owner-box)
           'name
           (unbox bus-name-box)
+          'unique-name
+          (and (unbox conn-box) (g_dbus_connection_get_unique_name (unbox conn-box)))
           'error
           (unbox err-box)
           'get-callbacks
