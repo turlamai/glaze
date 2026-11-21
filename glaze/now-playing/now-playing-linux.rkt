@@ -278,21 +278,17 @@
       [else (void)])))
 
 (define method-call-cb
-  (cast
-   (lambda (conn sender path iface method parameters invocation user)
-     (fprintf (current-error-port) "[np-cb] method enter ~a.~a\n" iface method)
-     (with-handlers ([exn:fail?
-                      (lambda (e)
-                        (fprintf (current-error-port) "[np-cb] method error ~a\n" (exn-message e))
-                        (g_dbus_method_invocation_return_error invocation
-                                                               0
-                                                               0
-                                                               "glaze now-playing handler failed"))])
-       (dispatch-command! method parameters)
-       (g_dbus_method_invocation_return_value invocation #f))
-     (fprintf (current-error-port) "[np-cb] method exit ~a\n" method))
-   (_fun _GDBusConnection _string _string _string _string _GVariant _pointer _pointer -> _void)
-   _fpointer))
+  (cast (lambda (conn sender path iface method parameters invocation user)
+          (with-handlers ([exn:fail? (lambda (e)
+                                       (g_dbus_method_invocation_return_error
+                                        invocation
+                                        0
+                                        0
+                                        "glaze now-playing handler failed"))])
+            (dispatch-command! method parameters)
+            (g_dbus_method_invocation_return_value invocation #f)))
+        (_fun _GDBusConnection _string _string _string _string _GVariant _pointer _pointer -> _void)
+        _fpointer))
 
 (define (root-property name)
   (define info (unbox state-box))
@@ -322,16 +318,12 @@
 
 (define get-property-cb
   (cast (lambda (conn sender path iface name err user)
-          (fprintf (current-error-port) "[np-cb] get enter ~a.~a\n" iface name)
+          (set-box! get-cb-count (add1 (unbox get-cb-count)))
           (define v
-            (with-handlers ([exn:fail?
-                             (lambda (e)
-                               (fprintf (current-error-port) "[np-cb] get error ~a\n" (exn-message e))
-                               #f)])
+            (with-handlers ([exn:fail? (lambda (e) #f)])
               (if (equal? iface "org.mpris.MediaPlayer2")
                   (root-property name)
                   (player-property name))))
-          (fprintf (current-error-port) "[np-cb] get exit ~a v=~a\n" name (and v #t))
           (or v (g_variant_new_string "")))
         (_fun _GDBusConnection _string _string _string _string _pointer _pointer -> _GVariant)
         _fpointer))
