@@ -12,7 +12,8 @@
          racket/system
          racket/string
          racket/file
-         ffi/unsafe)
+         ffi/unsafe
+         ffi/unsafe/atomic)
 
 ;; GDBus dispatches method calls and name callbacks on the main context;
 ;; a bare sleep loop never pumps it. Pump the default context so the
@@ -196,6 +197,7 @@
         (fprintf (current-error-port)
                  "[now-playing-diag] os-loop done title=~s\n"
                  (and (hash? os) (hash-ref os 'title #f)))
+        (fprintf (current-error-port) "[np-test] post-os-loop atomic=~a\n" (in-atomic-mode?))
         (unless (hash? os)
           (fprintf (current-error-port)
                    "[now-playing-diag] linux round-trip os-info=#f diag=~s\n"

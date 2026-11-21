@@ -179,13 +179,12 @@
 
 (define pump-iters (box 0))
 
-;; GDBus callback atomicity differs across Racket versions (9.0 invokes
-;; callbacks inside atomic FFI mode, 9.3 outside). Escape only when needed:
-;; call-as-nonatomic raises outside an atomic area.
-(define (in-nonatomic thunk)
-  (if (in-atomic-mode?)
-      (call-as-nonatomic thunk)
-      (thunk)))
+;; GDBus callback bodies must not deschedule inside the foreign callback
+;; frame: Racket 9.0 raises internal-error, 9.3 corrupts the heap (podlens
+;; verify core-dumped with log-receiver #<garbage>). Run the body in atomic
+;; mode (nested atomic is legal); port writes then buffer without yielding.
+(define (in-callback thunk)
+  (call-as-atomic thunk))
 
 (define (start-pump!)
   (unless (or (unbox pump-running-box) (not (unbox ctx-box)))
@@ -382,17 +381,16 @@
 
 (define method-call-cb
   (cast (lambda (conn sender path iface method parameters invocation user)
-          ;; GDBus callback atomicity differs across Racket versions; escape
-          ;; only when actually atomic (see in-nonatomic).
-          (in-nonatomic (lambda ()
-                          (with-handlers ([exn:fail? (lambda (e)
-                                                       (g_dbus_method_invocation_return_error
-                                                        invocation
-                                                        0
-                                                        0
-                                                        "glaze now-playing handler failed"))])
-                            (dispatch-command! method parameters)
-                            (g_dbus_method_invocation_return_value invocation #f)))))
+          ;; Atomic body: no descheduling inside the foreign callback frame.
+          (in-callback (lambda ()
+                         (with-handlers ([exn:fail? (lambda (e)
+                                                      (g_dbus_method_invocation_return_error
+                                                       invocation
+                                                       0
+                                                       0
+                                                       "glaze now-playing handler failed"))])
+                           (dispatch-command! method parameters)
+                           (g_dbus_method_invocation_return_value invocation #f)))))
         (_fun _GDBusConnection _string _string _string _string _GVariant _pointer _pointer -> _void)
         _fpointer))
 
@@ -423,19 +421,18 @@
     [else #f]))
 
 (define get-property-cb
-  (cast
-   (lambda (conn sender path iface name err user)
-     (in-nonatomic (lambda ()
-                     (set-box! get-cb-count (add1 (unbox get-cb-count)))
-                     (fprintf (current-error-port) "[np-get] enter iface=~a name=~a\n" iface name)
-                     (define v
-                       (with-handlers ([exn:fail? (lambda (e) #f)])
-                         (if (equal? iface "org.mpris.MediaPlayer2")
-                             (root-property name)
-                             (player-property name))))
-                     (or v (g_variant_new_string "")))))
-   (_fun _GDBusConnection _string _string _string _string _pointer _pointer -> _GVariant)
-   _fpointer))
+  (cast (lambda (conn sender path iface name err user)
+          (in-callback (lambda ()
+                         (set-box! get-cb-count (add1 (unbox get-cb-count)))
+                         (fprintf (current-error-port) "[np-get] enter iface=~a name=~a\n" iface name)
+                         (define v
+                           (with-handlers ([exn:fail? (lambda (e) #f)])
+                             (if (equal? iface "org.mpris.MediaPlayer2")
+                                 (root-property name)
+                                 (player-property name))))
+                         (or v (g_variant_new_string "")))))
+        (_fun _GDBusConnection _string _string _string _string _pointer _pointer -> _GVariant)
+        _fpointer))
 
 (define set-property-cb
   (cast (lambda (conn sender path iface name value err user) #f)
