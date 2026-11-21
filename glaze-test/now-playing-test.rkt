@@ -153,6 +153,12 @@
      (now-playing-clear!)
      (check-false (now-playing-os-info)))]
   [(unix)
+   ;; Watchdog: any unbounded wait below must surface as a fast failure with
+   ;; the milestone prints flushed, not a silent CI hang.
+   (thread (lambda ()
+             (sleep 90)
+             (fprintf (current-error-port) "[now-playing-diag] WATCHDOG 90s reached\n")
+             (exit 1)))
    (test-case "linux backend module loads (no silent stub fallback)"
      (with-handlers ([exn:fail? (lambda (e)
                                   (printf "[now-playing-diag] linux load error: ~a\n"

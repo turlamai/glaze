@@ -476,6 +476,7 @@
 (defgio g_dbus_connection_call_finish (_fun _GDBusConnection _pointer _pointer -> _GVariant))
 
 (define (bus-get property)
+  (fprintf (current-error-port) "[np-bus] get enter ~a\n" property)
   (define conn (unbox conn-box))
   (define name (unbox bus-name-box))
   (and
@@ -515,7 +516,9 @@
           ;; mode), where descheduling is an internal error.
           (pump-context!)
           (loop)]
-         [else #f])))))
+         [else
+          (fprintf (current-error-port) "[np-bus] get timeout ~a\n" property)
+          #f])))))
 
 (define (parse-reply reply property)
   (and reply
