@@ -494,8 +494,9 @@
            (cond
              [(not (eq? (unbox reply-box) 'pending)) (parse-reply (unbox reply-box) property)]
              [(< (current-inexact-milliseconds) deadline)
+              ;; No sleep: bus-get may run inside a GDBus callback (atomic
+              ;; mode), where descheduling is an internal error.
               (pump-context!)
-              (sleep 0.02)
               (loop)]
              [else #f])))))
 
