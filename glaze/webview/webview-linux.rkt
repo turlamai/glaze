@@ -35,6 +35,7 @@
          racket/path
          racket/string
          "../ffi-discovery.rkt"
+         "../private/main-context-registry.rkt"
          "../native-transport.rkt"
          "../tray/tray-protocol.rkt"
          "../private/id-allocator.rkt")
@@ -339,11 +340,17 @@
       (loop))))
 
 (define (pump-loop wv transport)
+  (set-external-pump! #t)
   (let loop ()
     (unless (unbox (lin:webview-closed?-box wv))
       ;; Non-blocking iteration of the shared default main context (the one
       ;; gtk_init installed); FALSE = don't block waiting for events.
       (g_main_context_iteration #f #f)
+      ;; Extra contexts owned by glaze backends (Linux now-playing GDBus):
+      ;; dispatch their callbacks on this single pump thread instead of a
+      ;; second Racket thread (podlens#63 scheduler corruption).
+      (for ([ctx (in-list (registered-main-contexts))])
+        (g_main_context_iteration ctx #f))
       ;; Racket 9.0 can leave atomic mode set after an iteration that
       ;; dispatched FFI callbacks; drop it outside the foreign frame so the
       ;; rest of the loop (and the scheduler) keeps working.
@@ -361,7 +368,8 @@
           (set-box! (lin:webview-normal-geometry-box wv) current)))
       ;; Mandatory scheduler yield — same reasoning as the macOS pump.
       (sleep 0.005)
-      (loop))))
+      (loop)))
+  (set-external-pump! #f))
 
 (define (open-webview url
                       #:title [title "Glaze"]

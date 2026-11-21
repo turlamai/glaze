@@ -236,6 +236,11 @@
             (sleep 0.05)
             (loop)))
         (fprintf (current-error-port) "[now-playing-diag] external Get out=~s\n" (get-out))
+        (unless (string-contains? (get-out) "Glaze Now Playing Test")
+          (fprintf (current-error-port)
+                   "[now-playing-diag] external Get failed diag=~s\n"
+                   (with-handlers ([exn:fail? (lambda (e) (exn-message e))])
+                     ((dynamic-require 'glaze/now-playing/now-playing-linux 'diagnostics)))))
         (check-true (string-contains? (get-out) "Glaze Now Playing Test"))
         ;; Command round-trip: Pause arrives through GDBus on the main context.
         ;; Background the sender: a blocking --print-reply would wait for a

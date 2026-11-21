@@ -18,7 +18,8 @@
          ffi/unsafe/define
          ffi/unsafe/atomic
          glaze/ffi-discovery
-         racket/string)
+         racket/string
+         "../private/main-context-registry.rkt")
 
 (provide supported?
          publish!
@@ -196,11 +197,16 @@
                               (when (in-atomic-mode?)
                                 (end-atomic))
                               (set-box! pump-iters (add1 (unbox pump-iters)))
-                              (with-handlers ([exn:fail? (lambda (e)
-                                                           (fprintf (current-error-port)
-                                                                    "[np-pump] exn=~a\n"
-                                                                    (exn-message e)))])
-                                (g_main_context_iteration (unbox ctx-box) #f))
+                              ;; When a webview pump is live it iterates our
+                              ;; context (single iterator thread: a second
+                              ;; Racket thread dispatching GDBus callbacks
+                              ;; corrupts the scheduler under hosted WebKit).
+                              (unless (external-pump?)
+                                (with-handlers ([exn:fail? (lambda (e)
+                                                             (fprintf (current-error-port)
+                                                                      "[np-pump] exn=~a\n"
+                                                                      (exn-message e)))])
+                                  (g_main_context_iteration (unbox ctx-box) #f)))
                               ;; Racket 9.0 can leave atomic mode set after an
                               ;; FFI call that dispatched callbacks; a bare
                               ;; sleep then raises internal-error and kills
@@ -263,6 +269,7 @@
                (set-box! conn-box c)
                (when ctx
                  (set-box! ctx-box ctx)
+                 (register-main-context! ctx)
                  (start-pump!)))
              c))))
 
