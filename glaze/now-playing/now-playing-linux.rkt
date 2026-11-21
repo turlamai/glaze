@@ -160,6 +160,12 @@
 (define get-cb-count (box 0))
 (define ctx-box (box #f))
 (define pump-running-box (box #f))
+(define pump-thread-box (box #f))
+;; glaze/http.rkt shuts a fresh custodian down after every response; a pump
+;; thread spawned under a request custodian dies with that request
+;; (podlens#63: live dedicated context but get-callbacks stayed 0). Own a
+;; process-lifetime custodian for the pump, like sql.rkt does for its pool.
+(define pump-custodian (make-custodian))
 (define node-box (box #f))
 (define bus-name-box (box #f))
 (define last-position-box (box 0.0))
@@ -167,13 +173,15 @@
 (define (start-pump!)
   (unless (or (unbox pump-running-box) (not (unbox ctx-box)))
     (set-box! pump-running-box #t)
-    (thread (lambda ()
-              (let loop ()
-                (when (unbox pump-running-box)
-                  (with-handlers ([exn:fail? (lambda (_) (void))])
-                    (g_main_context_iteration (unbox ctx-box) #f))
-                  (sleep 0.005)
-                  (loop)))))))
+    (set-box! pump-thread-box
+              (parameterize ([current-custodian pump-custodian])
+                (thread (lambda ()
+                          (let loop ()
+                            (when (unbox pump-running-box)
+                              (with-handlers ([exn:fail? (lambda (_) (void))])
+                                (g_main_context_iteration (unbox ctx-box) #f))
+                              (sleep 0.005)
+                              (loop)))))))))
 
 (define (session-connection)
   (or (unbox conn-box)
@@ -256,6 +264,8 @@
           (format "~a" (unbox ctx-box))
           'ctx-is-default
           (and g_main_context_default (equal? (unbox ctx-box) (g_main_context_default)))
+          'pump-alive
+          (and (unbox pump-thread-box) (thread-running? (unbox pump-thread-box)))
           'get-title
           (hash-ref (or (unbox state-box) (hash)) 'title "")
           'get-status
