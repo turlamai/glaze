@@ -16,6 +16,7 @@
 
 (require ffi/unsafe
          ffi/unsafe/define
+         ffi/unsafe/atomic
          glaze/ffi-discovery
          racket/string)
 
@@ -48,6 +49,12 @@
 (define _GDBusConnection _pointer)
 
 (defgio g_bus_get_sync (_fun _int _pointer _pointer -> _GDBusConnection))
+;; Private connection: g_bus_get_sync returns a process-wide singleton whose
+;; context binding is fixed by whoever created it first (GTK/GNetworkMonitor
+;; may pre-create it on the default context). A private connection binds to
+;; our pushed context deterministically.
+(defgio g_dbus_connection_new_for_address_sync
+        (_fun _string _int _pointer _pointer _pointer -> _GDBusConnection))
 (defgio g_dbus_connection_register_object
         (_fun _GDBusConnection _string _pointer _pointer _pointer _pointer _pointer -> _uint))
 (defgio g_dbus_connection_emit_signal
@@ -170,6 +177,8 @@
 (define bus-name-box (box #f))
 (define last-position-box (box 0.0))
 
+(define pump-iters (box 0))
+
 (define (start-pump!)
   (unless (or (unbox pump-running-box) (not (unbox ctx-box)))
     (set-box! pump-running-box #t)
@@ -178,6 +187,7 @@
                 (thread (lambda ()
                           (let loop ()
                             (when (unbox pump-running-box)
+                              (set-box! pump-iters (add1 (unbox pump-iters)))
                               (with-handlers ([exn:fail? (lambda (_) (void))])
                                 (g_main_context_iteration (unbox ctx-box) #f))
                               (sleep 0.005)
@@ -194,15 +204,22 @@
                (and g_main_context_get_thread_default (g_main_context_get_thread_default)))
              (when ctx
                (g_main_context_push_thread_default ctx))
-             (define c (g_bus_get_sync 2 #f err))
+             (define addr (getenv "DBUS_SESSION_BUS_ADDRESS"))
+             (define private? (and addr g_dbus_connection_new_for_address_sync #t))
+             (define c
+               (if private?
+                   ;; AUTHENTICATION_CLIENT | MESSAGE_BUS_CONNECTION
+                   (g_dbus_connection_new_for_address_sync addr 3 #f #f err)
+                   (g_bus_get_sync 2 #f err)))
              (when ctx
                (g_main_context_pop_thread_default ctx))
              (fprintf (current-error-port)
-                      "[np-ctx] conn=~a ctx=~a default=~a thread-default=~a\n"
+                      "[np-ctx] conn=~a ctx=~a default=~a thread-default=~a private=~a\n"
                       c
                       ctx
                       (and g_main_context_default (g_main_context_default))
-                      before)
+                      before
+                      private?)
              (when (or (not c) (ptr-ref err _pointer))
                ;; Keep the GError message for carrier diagnostics: a silent
                ;; #f here once cost a full CI cycle to interpret.
@@ -266,6 +283,8 @@
           (and g_main_context_default (equal? (unbox ctx-box) (g_main_context_default)))
           'pump-alive
           (and (unbox pump-thread-box) (thread-running? (unbox pump-thread-box)))
+          'pump-iters
+          (unbox pump-iters)
           'get-title
           (hash-ref (or (unbox state-box) (hash)) 'title "")
           'get-status
@@ -337,14 +356,18 @@
 
 (define method-call-cb
   (cast (lambda (conn sender path iface method parameters invocation user)
-          (with-handlers ([exn:fail? (lambda (e)
-                                       (g_dbus_method_invocation_return_error
-                                        invocation
-                                        0
-                                        0
-                                        "glaze now-playing handler failed"))])
-            (dispatch-command! method parameters)
-            (g_dbus_method_invocation_return_value invocation #f)))
+          ;; GDBus invokes callbacks in atomic FFI mode; Racket 9.0 raises
+          ;; internal-error if anything inside deschedules. Escape atomicity
+          ;; for the whole callback body (9.3 tolerates either form).
+          (call-as-nonatomic (lambda ()
+                               (with-handlers ([exn:fail? (lambda (e)
+                                                            (g_dbus_method_invocation_return_error
+                                                             invocation
+                                                             0
+                                                             0
+                                                             "glaze now-playing handler failed"))])
+                                 (dispatch-command! method parameters)
+                                 (g_dbus_method_invocation_return_value invocation #f)))))
         (_fun _GDBusConnection _string _string _string _string _GVariant _pointer _pointer -> _void)
         _fpointer))
 
@@ -376,14 +399,16 @@
 
 (define get-property-cb
   (cast (lambda (conn sender path iface name err user)
-          (set-box! get-cb-count (add1 (unbox get-cb-count)))
-          (fprintf (current-error-port) "[np-get] enter iface=~a name=~a\n" iface name)
-          (define v
-            (with-handlers ([exn:fail? (lambda (e) #f)])
-              (if (equal? iface "org.mpris.MediaPlayer2")
-                  (root-property name)
-                  (player-property name))))
-          (or v (g_variant_new_string "")))
+          (call-as-nonatomic
+           (lambda ()
+             (set-box! get-cb-count (add1 (unbox get-cb-count)))
+             (fprintf (current-error-port) "[np-get] enter iface=~a name=~a\n" iface name)
+             (define v
+               (with-handlers ([exn:fail? (lambda (e) #f)])
+                 (if (equal? iface "org.mpris.MediaPlayer2")
+                     (root-property name)
+                     (player-property name))))
+             (or v (g_variant_new_string "")))))
         (_fun _GDBusConnection _string _string _string _string _pointer _pointer -> _GVariant)
         _fpointer))
 
