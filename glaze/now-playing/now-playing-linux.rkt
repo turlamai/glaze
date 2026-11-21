@@ -207,8 +207,9 @@
 ;; ---- GVariant helpers ----------------------------------------------------
 
 (define (new-builder)
-  ;; GVariantBuilder union: largest member gpointer x[16]; over-allocate.
-  (define b (malloc _byte 256))
+  ;; GVariantBuilder union: largest member gpointer x[16]; over-allocate
+  ;; with pointer alignment (a byte-aligned buffer trips valid_builder).
+  (define b (malloc _pointer 32))
   (memset b 0 256)
   (g_variant_builder_init b "a{sv}")
   b)
