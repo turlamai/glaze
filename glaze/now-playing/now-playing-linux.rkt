@@ -206,11 +206,21 @@
                (g_main_context_push_thread_default ctx))
              (define addr (getenv "DBUS_SESSION_BUS_ADDRESS"))
              (define private? (and addr g_dbus_connection_new_for_address_sync #t))
-             (define c
-               (if private?
-                   ;; AUTHENTICATION_CLIENT | MESSAGE_BUS_CONNECTION
-                   (g_dbus_connection_new_for_address_sync addr 3 #f #f err)
-                   (g_bus_get_sync 2 #f err)))
+             (define c0
+               (and private?
+                    ;; AUTHENTICATION_CLIENT | MESSAGE_BUS_CONNECTION
+                    (g_dbus_connection_new_for_address_sync addr 3 #f #f err)))
+             (when (and private? (not c0))
+               (with-handlers ([exn:fail? (lambda (_) (void))])
+                 (define gerr (ptr-ref err _pointer))
+                 (when gerr
+                   (define msg (ptr-ref gerr _pointer 1))
+                   (when msg
+                     (fprintf (current-error-port)
+                              "[np-ctx] private GError=~a\n"
+                              (cast msg _pointer _string)))))
+               (ptr-set! err _pointer #f))
+             (define c (or c0 (g_bus_get_sync 2 #f err)))
              (when ctx
                (g_main_context_pop_thread_default ctx))
              (fprintf (current-error-port)
@@ -219,7 +229,7 @@
                       ctx
                       (and g_main_context_default (g_main_context_default))
                       before
-                      private?)
+                      (and c0 #t))
              (when (or (not c) (ptr-ref err _pointer))
                ;; Keep the GError message for carrier diagnostics: a silent
                ;; #f here once cost a full CI cycle to interpret.
