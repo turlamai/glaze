@@ -205,8 +205,32 @@
         (check-equal? (hash-ref os 'playing) #t)
         (check-= (hash-ref os 'position) 3.0 0.01)
         (check-true (string-prefix? (hash-ref os 'bus-name) "org.mpris.MediaPlayer2."))
-        ;; Command round-trip: Pause arrives through GDBus on the main context.
+        ;; Bus-surface evidence from an EXTERNAL client: a separate dbus-send
+        ;; process reads Metadata back over the session bus. In-process
+        ;; self-Get is avoided (owning-connection async finish idles do not
+        ;; dispatch under Racket's atomic FFI mode).
         (define bus-name (hash-ref os 'bus-name))
+        (define get-file (format "/tmp/glaze-np-get-~a.txt" (current-process-id)))
+        (system
+         (format
+          "dbus-send --session --print-reply --reply-timeout=3000 --dest=~a /org/mpris/MediaPlayer2 org.freedesktop.DBus.Properties.Get string:org.mpris.MediaPlayer2.Player string:Metadata > ~a 2>&1 &"
+          bus-name
+          get-file))
+        (define (get-out)
+          (with-handlers ([exn:fail? (lambda (_) "")])
+            (if (file-exists? get-file)
+                (file->string get-file)
+                "")))
+        (define get-deadline (+ (current-inexact-milliseconds) 5000))
+        (let loop ()
+          (when (and (not (string-contains? (get-out) "Glaze Now Playing Test"))
+                     (< (current-inexact-milliseconds) get-deadline))
+            (pump!)
+            (sleep 0.05)
+            (loop)))
+        (fprintf (current-error-port) "[now-playing-diag] external Get out=~s\n" (get-out))
+        (check-true (string-contains? (get-out) "Glaze Now Playing Test"))
+        ;; Command round-trip: Pause arrives through GDBus on the main context.
         ;; Background the sender: a blocking --print-reply would wait for a
         ;; reply that only our own main-context pump can produce (deadlock).
         ;; Redirect its stdio: an inherited stdout pipe keeps raco test's

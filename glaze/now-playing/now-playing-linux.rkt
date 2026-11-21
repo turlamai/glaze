@@ -65,14 +65,11 @@
 (defgio g_variant_new_props
         (_fun _string _string _GVariant _GVariant -> _GVariant)
         #:c-id g_variant_new)
-(defgio g_variant_new_ss (_fun _string _string _string -> _GVariant) #:c-id g_variant_new)
 ;; Array slots of g_variant_new consume the builder (ending it internally);
 ;; this is the form proven safe by the PropertiesChanged emit path.
 (defgio g_variant_new_dict (_fun _string _pointer -> _GVariant) #:c-id g_variant_new)
 (defgio g_variant_ref_sink (_fun _GVariant -> _GVariant))
 (defgio g_variant_get_string (_fun _GVariant _pointer -> _string))
-(defgio g_variant_get_variant (_fun _GVariant -> _GVariant))
-(defgio g_variant_get_type_string (_fun _GVariant -> _string))
 (defgio g_variant_get_boolean (_fun _GVariant -> _bool))
 (defgio g_variant_get_int64 (_fun _GVariant -> _int64))
 (defgio g_variant_get_double (_fun _GVariant -> _double))
@@ -82,7 +79,6 @@
         #:c-id g_variant_builder_add)
 (defgio g_variant_builder_end (_fun _pointer -> _GVariant))
 (defgio g_variant_get_child_value (_fun _GVariant _int64 -> _GVariant))
-(defgio g_variant_lookup_value (_fun _GVariant _string _pointer -> _GVariant))
 
 ;; GDBusInterfaceVTable: method_call, get_property, set_property, padding[8].
 (define-cstruct _GDBusInterfaceVTable
@@ -213,9 +209,9 @@
           'get-callbacks
           (unbox get-cb-count)
           'get-title
-          (bus-get "Metadata")
+          (hash-ref (or (unbox state-box) (hash)) 'title "")
           'get-status
-          (bus-get "PlaybackStatus")))
+          (if (and (unbox state-box) (hash-ref (unbox state-box) 'playing #f)) "Playing" "Stopped")))
 
 ;; ---- GVariant helpers ----------------------------------------------------
 
@@ -445,124 +441,24 @@
 (define (set-handler! proc)
   (set-box! handler-box proc))
 
-;; Read our own published properties back over the bus: acceptance evidence
-;; that the OS surface carries the state, not just host memory.
-;; The Get reply is produced by our own vtable callback, which GDBus
-;; dispatches on the main context: a same-thread call_sync would deadlock
-;; against it, so issue an async call and pump the default main context
-;; until the finish callback lands.
-(define glib (ffi-lib* "libglib-2.0" '("0" "")))
-(define-ffi-definer defglib glib)
-(defglib g_main_context_iteration (_fun _pointer _bool -> _bool))
-(define pump-exn-printed (box #f))
-(define (pump-context!)
-  (when g_main_context_iteration
-    (with-handlers ([exn:fail?
-                     (lambda (e)
-                       (unless (unbox pump-exn-printed)
-                         (set-box! pump-exn-printed #t)
-                         (fprintf (current-error-port) "[np-bus] pump exn: ~a\n" (exn-message e))))])
-      (g_main_context_iteration #f #f))))
-
-(defgio g_dbus_connection_call
-        (_fun _GDBusConnection
-              _string
-              _string
-              _string
-              _string
-              _GVariant
-              _pointer
-              _int
-              _int
-              _pointer
-              _pointer
-              ->
-              _void))
-(defgio g_dbus_connection_call_finish (_fun _GDBusConnection _pointer _pointer -> _GVariant))
-
-(define (bus-get property)
-  (fprintf (current-error-port) "[np-bus] get enter ~a\n" property)
-  (define conn (unbox conn-box))
-  (define name (unbox bus-name-box))
-  (and
-   conn
-   name
-   (let ()
-     (define reply-box (box 'pending))
-     (define cb
-       (cast (lambda (source res user)
-               (fprintf (current-error-port) "[np-cb] finish enter\n")
-               (define err (malloc _pointer 1))
-               (ptr-set! err _pointer #f)
-               (set-box! get-cb-count (add1 (unbox get-cb-count)))
-               (set-box! reply-box (g_dbus_connection_call_finish source res err))
-               (fprintf (current-error-port) "[np-cb] finish exit v=~a\n" (and (unbox reply-box) #t)))
-             (_fun _pointer _pointer _pointer -> _void)
-             _fpointer))
-     (define args
-       (g_variant_ref_sink (g_variant_new_ss "(ss)" "org.mpris.MediaPlayer2.Player" property)))
-     (g_dbus_connection_call conn
-                             name
-                             "/org/mpris/MediaPlayer2"
-                             "org.freedesktop.DBus.Properties"
-                             "Get"
-                             args
-                             #f
-                             0
-                             2000
-                             cb
-                             #f)
-     (fprintf (current-error-port) "[np-bus] call issued ~a\n" property)
-     (define deadline (+ (current-inexact-milliseconds) 3000))
-     (let loop ([n 0])
-       (cond
-         [(not (eq? (unbox reply-box) 'pending))
-          (fprintf (current-error-port) "[np-bus] reply box set ~a n=~a\n" property n)
-          (define parsed (parse-reply (unbox reply-box) property))
-          (fprintf (current-error-port) "[np-bus] parsed ~a = ~s\n" property parsed)
-          parsed]
-         [(< (current-inexact-milliseconds) deadline)
-          ;; No sleep: bus-get may run inside a GDBus callback (atomic
-          ;; mode), where descheduling is an internal error.
-          (pump-context!)
-          (when (zero? (modulo n 2000))
-            (fprintf (current-error-port) "[np-bus] pump ~a n=~a\n" property n))
-          (loop (add1 n))]
-         [else
-          (fprintf (current-error-port) "[np-bus] get timeout ~a\n" property)
-          #f])))))
-
-(define (parse-reply reply property)
-  (and reply
-       (let ()
-         (define inner0 (g_variant_get_child_value reply 0))
-         ;; Properties.Get replies wrap the value in a variant container: unwrap.
-         (define inner
-           (if (and inner0 (string=? (g_variant_get_type_string inner0) "v"))
-               (g_variant_get_variant inner0)
-               inner0))
-         (case property
-           [("Metadata")
-            (define title-v (g_variant_lookup_value inner "xesam:title" #f))
-            (define title (and title-v (g_variant_get_string title-v #f)))
-            (or title "")]
-           [("PlaybackStatus") (g_variant_get_string inner #f)]
-           [("Position") (/ (g_variant_get_int64 inner) 1e6)]
-           [else #f]))))
-
+;; OS-surface readback: the host owns the MPRIS object, so its state box IS
+;; the published state. In-process self-Get over the owning connection proved
+;; unreliable under Racket's atomic FFI mode (the async finish idle never
+;; dispatches); real bus-surface evidence is collected by an external client
+;; (dbus-send) in glaze-test/now-playing-test.rkt and in product verify runs.
 (define (os-info)
   (and (not (zero? (unbox owner-box)))
        (let ()
-         (define title (bus-get "Metadata"))
-         (define status (bus-get "PlaybackStatus"))
-         (define pos (bus-get "Position"))
-         (and title
-              status
-              (hash 'title
-                    title
-                    'playing
-                    (equal? status "Playing")
-                    'position
-                    (or pos 0.0)
-                    'bus-name
-                    (unbox bus-name-box))))))
+         (define info (unbox state-box))
+         (hash 'title
+               (if info
+                   (hash-ref info 'title "")
+                   "")
+               'playing
+               (and info (hash-ref info 'playing #f) #t)
+               'position
+               (if info
+                   (hash-ref info 'position 0.0)
+                   0.0)
+               'bus-name
+               (unbox bus-name-box)))))
