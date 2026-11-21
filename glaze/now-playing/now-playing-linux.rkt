@@ -278,14 +278,17 @@
 
 (define method-call-cb
   (cast (lambda (conn sender path iface method parameters invocation user)
-          (with-handlers ([exn:fail? (lambda (_)
+          (printf "[np-cb] method enter ~a.~a\n" iface method)
+          (with-handlers ([exn:fail? (lambda (e)
+                                       (printf "[np-cb] method error ~a\n" (exn-message e))
                                        (g_dbus_method_invocation_return_error
                                         invocation
                                         0
                                         0
                                         "glaze now-playing handler failed"))])
             (dispatch-command! method parameters)
-            (g_dbus_method_invocation_return_value invocation #f)))
+            (g_dbus_method_invocation_return_value invocation #f))
+          (printf "[np-cb] method exit ~a\n" method))
         (_fun _GDBusConnection _string _string _string _string _GVariant _pointer _pointer -> _void)
         _fpointer))
 
@@ -317,11 +320,15 @@
 
 (define get-property-cb
   (cast (lambda (conn sender path iface name err user)
+          (printf "[np-cb] get enter ~a.~a\n" iface name)
           (define v
-            (with-handlers ([exn:fail? (lambda (_) #f)])
+            (with-handlers ([exn:fail? (lambda (e)
+                                         (printf "[np-cb] get error ~a\n" (exn-message e))
+                                         #f)])
               (if (equal? iface "org.mpris.MediaPlayer2")
                   (root-property name)
                   (player-property name))))
+          (printf "[np-cb] get exit ~a v=~a\n" name (and v #t))
           (or v (g_variant_new_string "")))
         (_fun _GDBusConnection _string _string _string _string _pointer _pointer -> _GVariant)
         _fpointer))
@@ -470,10 +477,12 @@
          (define reply-box (box 'pending))
          (define cb
            (cast (lambda (source res user)
+                   (printf "[np-cb] finish enter\n")
                    (define err (malloc _pointer 1))
                    (ptr-set! err _pointer #f)
                    (set-box! get-cb-count (add1 (unbox get-cb-count)))
-                   (set-box! reply-box (g_dbus_connection_call_finish source res err)))
+                   (set-box! reply-box (g_dbus_connection_call_finish source res err))
+                   (printf "[np-cb] finish exit v=~a\n" (and (unbox reply-box) #t)))
                  (_fun _pointer _pointer _pointer -> _void)
                  _fpointer))
          (define args
