@@ -176,6 +176,7 @@
                (sleep 0.05)
                (loop (add1 n))]
               [else v])))
+        (printf "[now-playing-diag] os-loop done title=~s\n" (and (hash? os) (hash-ref os 'title #f)))
         (unless (hash? os)
           (printf "[now-playing-diag] linux round-trip os-info=#f diag=~s\n"
                   (with-handlers ([exn:fail? (lambda (e) (exn-message e))])
@@ -189,16 +190,20 @@
         (define bus-name (hash-ref os 'bus-name))
         ;; Background the sender: a blocking --print-reply would wait for a
         ;; reply that only our own main-context pump can produce (deadlock).
+        ;; Redirect its stdio: an inherited stdout pipe keeps raco test's
+        ;; subprocess EOF wait alive forever after the test itself exits.
         (system
          (format
-          "dbus-send --session --print-reply --reply-timeout=3000 --dest=~a /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Pause &"
+          "dbus-send --session --print-reply --reply-timeout=3000 --dest=~a /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Pause >/dev/null 2>&1 &"
           bus-name))
+        (printf "[now-playing-diag] pause sender launched\n")
         (define deadline (+ (current-inexact-milliseconds) 5000))
         (let loop ()
           (when (and (null? received) (< (current-inexact-milliseconds) deadline))
             (pump!)
             (sleep 0.05)
             (loop)))
+        (printf "[now-playing-diag] pause received=~s\n" received)
         (check-true (and (pair? received) (equal? (car received) '(pause . #f))))
         (now-playing-clear!)
         (define os2
@@ -211,6 +216,7 @@
                (sleep 0.05)
                (loop (add1 n))]
               [else v])))
+        (printf "[now-playing-diag] os2 playing=~s\n" (and (hash? os2) (hash-ref os2 'playing #f)))
         (check-equal? (hash-ref os2 'playing) #f))]
      [else
       (test-case "linux without a session bus degrades to unsupported"
