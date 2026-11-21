@@ -187,9 +187,11 @@
         (check-true (string-prefix? (hash-ref os 'bus-name) "org.mpris.MediaPlayer2."))
         ;; Command round-trip: Pause arrives through GDBus on the main context.
         (define bus-name (hash-ref os 'bus-name))
+        ;; Background the sender: a blocking --print-reply would wait for a
+        ;; reply that only our own main-context pump can produce (deadlock).
         (system
          (format
-          "dbus-send --session --print-reply --dest=~a /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Pause"
+          "dbus-send --session --print-reply --reply-timeout=3000 --dest=~a /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Pause &"
           bus-name))
         (define deadline (+ (current-inexact-milliseconds) 5000))
         (let loop ()
