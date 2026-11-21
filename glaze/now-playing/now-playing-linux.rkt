@@ -140,6 +140,7 @@
 (define root-reg-box (box 0))
 (define player-reg-box (box 0))
 (define err-box (box #f))
+(define get-cb-count (box 0))
 (define node-box (box #f))
 (define bus-name-box (box #f))
 (define last-position-box (box 0.0))
@@ -202,7 +203,13 @@
           'name
           (unbox bus-name-box)
           'error
-          (unbox err-box)))
+          (unbox err-box)
+          'get-callbacks
+          (unbox get-cb-count)
+          'get-title
+          (bus-get "Metadata")
+          'get-status
+          (bus-get "PlaybackStatus")))
 
 ;; ---- GVariant helpers ----------------------------------------------------
 
@@ -464,6 +471,7 @@
            (cast (lambda (source res user)
                    (define err (malloc _pointer 1))
                    (ptr-set! err _pointer #f)
+                   (set-box! get-cb-count (add1 (unbox get-cb-count)))
                    (set-box! reply-box (g_dbus_connection_call_finish source res err)))
                  (_fun _pointer _pointer _pointer -> _void)
                  _fpointer))
