@@ -250,7 +250,7 @@
                 (if (non-empty-string? (hash-ref info 'artist ""))
                     (strv-1 (hash-ref info 'artist ""))
                     (g_variant_new_strv #f 0)))
-  (g_variant_ref_sink (g_variant_new_dict "(a{sv})" b)))
+  (g_variant_ref_sink (g_variant_new_dict "a{sv}" b)))
 
 (define (playback-status info)
   (cond
