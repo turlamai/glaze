@@ -28,6 +28,7 @@
 ;; fallbacks + never-raise + reported reason). Keep the version candidates
 ;; explicit per library even when all families currently agree.
 (require ffi/unsafe
+         ffi/unsafe/atomic
          racket/async-channel
          racket/file
          racket/list
@@ -343,6 +344,11 @@
       ;; Non-blocking iteration of the shared default main context (the one
       ;; gtk_init installed); FALSE = don't block waiting for events.
       (g_main_context_iteration #f #f)
+      ;; Racket 9.0 can leave atomic mode set after an iteration that
+      ;; dispatched FFI callbacks; drop it outside the foreign frame so the
+      ;; rest of the loop (and the scheduler) keeps working.
+      (when (in-atomic-mode?)
+        (end-atomic))
       ;; Signal callbacks only stash GLZ1 payloads; moving them into the
       ;; dispatcher must happen after the foreign stack has unwound.
       (when transport

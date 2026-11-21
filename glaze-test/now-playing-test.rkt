@@ -26,7 +26,11 @@
 (define (pump!)
   (when glib-iterate
     (with-handlers ([exn:fail? (lambda (_) (void))])
-      (glib-iterate #f #f))))
+      (glib-iterate #f #f))
+    ;; 9.0 can leave atomic mode set after an iteration that dispatched
+    ;; callbacks; drop it outside the foreign frame before allocating again.
+    (when (in-atomic-mode?)
+      (end-atomic))))
 
 ;; On headless Linux CI there is no session bus. Bootstrap a private one
 ;; before the first backend call so the MPRIS round-trip below is real bus

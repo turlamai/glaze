@@ -16,6 +16,7 @@
 
 (require ffi/unsafe
          ffi/unsafe/define
+         ffi/unsafe/atomic
          glaze/ffi-discovery
          racket/string)
 
@@ -186,6 +187,14 @@
                 (thread (lambda ()
                           (let loop ()
                             (when (unbox pump-running-box)
+                              ;; Racket 9.0 can leave atomic mode set after
+                              ;; an FFI iteration that dispatched callbacks;
+                              ;; any later allocation would then raise
+                              ;; internal-error (or spin without yielding).
+                              ;; Outside the foreign frame here, so dropping
+                              ;; atomicity may safely deschedule.
+                              (when (in-atomic-mode?)
+                                (end-atomic))
                               (set-box! pump-iters (add1 (unbox pump-iters)))
                               (with-handlers ([exn:fail? (lambda (e)
                                                            (fprintf (current-error-port)
