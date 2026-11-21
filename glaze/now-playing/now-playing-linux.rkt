@@ -190,7 +190,12 @@
                               (set-box! pump-iters (add1 (unbox pump-iters)))
                               (with-handlers ([exn:fail? (lambda (_) (void))])
                                 (g_main_context_iteration (unbox ctx-box) #f))
-                              (sleep 0.005)
+                              ;; Racket 9.0 can leave atomic mode set after an
+                              ;; FFI call that dispatched callbacks; a bare
+                              ;; sleep then raises internal-error and kills
+                              ;; the pump. Tolerate it and keep iterating.
+                              (with-handlers ([exn:fail? (lambda (_) (void))])
+                                (sleep 0.005))
                               (loop)))))))))
 
 (define (session-connection)
@@ -208,8 +213,8 @@
              (define private? (and addr g_dbus_connection_new_for_address_sync #t))
              (define c0
                (and private?
-                    ;; AUTHENTICATION_CLIENT | MESSAGE_BUS_CONNECTION
-                    (g_dbus_connection_new_for_address_sync addr 3 #f #f err)))
+                    ;; AUTHENTICATION_CLIENT (1) | MESSAGE_BUS_CONNECTION (4)
+                    (g_dbus_connection_new_for_address_sync addr 5 #f #f err)))
              (when (and private? (not c0))
                (with-handlers ([exn:fail? (lambda (_) (void))])
                  (define gerr (ptr-ref err _pointer))
