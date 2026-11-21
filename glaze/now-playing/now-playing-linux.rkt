@@ -60,7 +60,7 @@
 (defgio g_variant_new_boolean (_fun _bool -> _GVariant))
 (defgio g_variant_new_int64 (_fun _int64 -> _GVariant))
 (defgio g_variant_new_double (_fun _double -> _GVariant))
-(defgio g_variant_new_strv (_fun _pointer _int -> _GVariant))
+(defgio g_variant_new_strv (_fun _pointer _int64 -> _GVariant))
 (defgio g_variant_new_x (_fun _string _int64 -> _GVariant) #:c-id g_variant_new)
 (defgio g_variant_new_props
         (_fun _string _string _GVariant _GVariant -> _GVariant)
@@ -81,7 +81,7 @@
         (_fun _pointer _string _string _GVariant -> _void)
         #:c-id g_variant_builder_add)
 (defgio g_variant_builder_end (_fun _pointer -> _GVariant))
-(defgio g_variant_get_child_value (_fun _GVariant _int -> _GVariant))
+(defgio g_variant_get_child_value (_fun _GVariant _int64 -> _GVariant))
 (defgio g_variant_lookup_value (_fun _GVariant _string _pointer -> _GVariant))
 
 ;; GDBusInterfaceVTable: method_call, get_property, set_property, padding[8].
