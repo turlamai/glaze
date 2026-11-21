@@ -56,7 +56,10 @@
 (when (eq? (system-type 'os) 'unix)
   (with-handlers ([exn:fail? (lambda (e)
                                (printf "[now-playing-diag] first linux load error: ~a\n"
-                                       (exn-message e)))])
+                                       (exn-message e))
+                               (for ([frame (in-list (continuation-mark-set->context
+                                                      (exn-continuation-marks e)))])
+                                 (printf "[now-playing-diag]   at ~s\n" frame)))])
     (dynamic-require 'glaze/now-playing/now-playing-linux 'supported?))
   (with-handlers ([exn:fail? (lambda (e)
                                (printf "[now-playing-diag] gio probe error: ~a\n" (exn-message e)))])
