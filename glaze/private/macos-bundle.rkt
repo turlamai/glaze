@@ -125,9 +125,7 @@
                    (lambda ()
                      (stage-dmg-root bundle staging app-name)
                      (define-values (rw mount)
-                       (make-rw-image! (find-executable-path "hdiutil" #f)
-                                       staging
-                                       volume-name))
+                       (make-rw-image! (find-executable-path "hdiutil" #f) staging volume-name))
                      (set! rw-image rw)
                      (unless (run (find-executable-path "hdiutil" #f) "detach" mount)
                        (error 'build-app "hdiutil detach failed"))
@@ -144,7 +142,8 @@
                           dmg-path))
                    (lambda ()
                      (when rw-image
-                       (with-handlers ([exn:fail? void]) (delete-file rw-image)))
+                       (with-handlers ([exn:fail? void])
+                         (delete-file rw-image)))
                      (when (directory-exists? staging)
                        (delete-directory/files staging))))]
     [else
@@ -177,10 +176,9 @@
 ;; and is deterministic. Returns the rw image path and its mount point.
 (define (make-rw-image! hdiutil staging volume-name)
   (define du-out
-    (with-output-to-string
-      (lambda ()
-        (unless (run (find-executable-path "du" #f) "-sk" (path->string staging))
-          (error 'build-app "du failed sizing the dmg staging dir")))))
+    (with-output-to-string (lambda ()
+                             (unless (run (find-executable-path "du" #f) "-sk" (path->string staging))
+                               (error 'build-app "du failed sizing the dmg staging dir")))))
   (define kb (string->number (first (string-split du-out))))
   (unless kb
     (error 'build-app "cannot parse du output: ~a" du-out))
@@ -188,20 +186,20 @@
   (define rw-image (make-temporary-file "glaze-rw-~a.dmg"))
   (define attach-output
     (with-output-to-string
-      (lambda ()
-        (unless (run hdiutil
-                     "create"
-                     "-fs"
-                     "HFS+"
-                     "-volname"
-                     volume-name
-                     "-size"
-                     (format "~am" mb)
-                     "-ov"
-                     (path->string rw-image))
-          (error 'build-app "hdiutil create failed"))
-        (unless (run hdiutil "attach" (path->string rw-image) "-noautoopen" "-readwrite")
-          (error 'build-app "hdiutil attach failed")))))
+     (lambda ()
+       (unless (run hdiutil
+                    "create"
+                    "-fs"
+                    "HFS+"
+                    "-volname"
+                    volume-name
+                    "-size"
+                    (format "~am" mb)
+                    "-ov"
+                    (path->string rw-image))
+         (error 'build-app "hdiutil create failed"))
+       (unless (run hdiutil "attach" (path->string rw-image) "-noautoopen" "-readwrite")
+         (error 'build-app "hdiutil attach failed")))))
   (define mount-path
     (let* ([line (last (string-split (string-trim attach-output) "\n"))]
            [fields (string-split line "\t")])
@@ -217,44 +215,45 @@
   (define staging (make-temporary-file "glaze-dmg-~a" 'directory))
   (define rw-image #f)
   (define script-path (build-path staging "dmg-style.applescript"))
-  (dynamic-wind
-   (lambda () #f)
-   (lambda ()
-     (stage-dmg-root bundle staging app-name)
-     (make-directory* (build-path staging ".background"))
-     (copy-file background (build-path staging ".background" "background.png"))
-     (define-values (rw mount-path) (make-rw-image! hdiutil staging volume-name))
-     (set! rw-image rw)
-     (define disk-name (last (string-split mount-path "/")))
-     (call-with-output-file script-path
-                            #:exists 'truncate/replace
-                            (lambda (out) (display (dmg-style-applescript disk-name app-name) out)))
-     (define (detach!)
-       (with-handlers ([exn:fail? void])
-         (unless (run hdiutil "detach" mount-path)
-           (run hdiutil "detach" "-force" mount-path))))
-     (with-handlers ([exn:fail? (lambda (e)
-                                  (detach!)
-                                  (raise e))])
-       (unless (run (find-executable-path "osascript" #f) (path->string script-path))
-         (error 'build-app "DMG layout script failed; see output above"))
-       (when (find-executable-path "sync" #f)
-         (run (find-executable-path "sync" #f)))
-       (detach!))
-     (when (file-exists? dmg-path)
-       (delete-file dmg-path))
-     (unless (run hdiutil
-                  "convert"
-                  (path->string rw-image)
-                  "-format"
-                  "UDZO"
-                  "-ov"
-                  "-o"
-                  (path->string dmg-path))
-       (error 'build-app "hdiutil convert failed"))
-     dmg-path)
-   (lambda ()
-     (when rw-image
-       (with-handlers ([exn:fail? void]) (delete-file rw-image)))
-     (when (directory-exists? staging)
-       (delete-directory/files staging)))))
+  (dynamic-wind (lambda () #f)
+                (lambda ()
+                  (stage-dmg-root bundle staging app-name)
+                  (make-directory* (build-path staging ".background"))
+                  (copy-file background (build-path staging ".background" "background.png"))
+                  (define-values (rw mount-path) (make-rw-image! hdiutil staging volume-name))
+                  (set! rw-image rw)
+                  (define disk-name (last (string-split mount-path "/")))
+                  (call-with-output-file script-path
+                                         #:exists 'truncate/replace
+                                         (lambda (out)
+                                           (display (dmg-style-applescript disk-name app-name) out)))
+                  (define (detach!)
+                    (with-handlers ([exn:fail? void])
+                      (unless (run hdiutil "detach" mount-path)
+                        (run hdiutil "detach" "-force" mount-path))))
+                  (with-handlers ([exn:fail? (lambda (e)
+                                               (detach!)
+                                               (raise e))])
+                    (unless (run (find-executable-path "osascript" #f) (path->string script-path))
+                      (error 'build-app "DMG layout script failed; see output above"))
+                    (when (find-executable-path "sync" #f)
+                      (run (find-executable-path "sync" #f)))
+                    (detach!))
+                  (when (file-exists? dmg-path)
+                    (delete-file dmg-path))
+                  (unless (run hdiutil
+                               "convert"
+                               (path->string rw-image)
+                               "-format"
+                               "UDZO"
+                               "-ov"
+                               "-o"
+                               (path->string dmg-path))
+                    (error 'build-app "hdiutil convert failed"))
+                  dmg-path)
+                (lambda ()
+                  (when rw-image
+                    (with-handlers ([exn:fail? void])
+                      (delete-file rw-image)))
+                  (when (directory-exists? staging)
+                    (delete-directory/files staging)))))
