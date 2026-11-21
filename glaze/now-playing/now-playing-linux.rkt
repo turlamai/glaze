@@ -65,6 +65,7 @@
 (defgio g_variant_new_props
         (_fun _string _string _GVariant _GVariant -> _GVariant)
         #:c-id g_variant_new)
+(defgio g_variant_new_ss (_fun _string _string _string -> _GVariant) #:c-id g_variant_new)
 (defgio g_variant_ref_sink (_fun _GVariant -> _GVariant))
 (defgio g_variant_get_string (_fun _GVariant _pointer -> _string))
 (defgio g_variant_get_boolean (_fun _GVariant -> _bool))
@@ -476,7 +477,7 @@
                  (_fun _pointer _pointer _pointer -> _void)
                  _fpointer))
          (define args
-           (g_variant_ref_sink (g_variant_new_props "(ss)" "org.mpris.MediaPlayer2.Player" property)))
+           (g_variant_ref_sink (g_variant_new_ss "(ss)" "org.mpris.MediaPlayer2.Player" property)))
          (g_dbus_connection_call conn
                                  name
                                  "/org/mpris/MediaPlayer2"
