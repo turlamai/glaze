@@ -167,14 +167,13 @@
 (define (start-pump!)
   (unless (or (unbox pump-running-box) (not (unbox ctx-box)))
     (set-box! pump-running-box #t)
-    (thread
-     (lambda ()
-       (let loop ()
-         (when (unbox pump-running-box)
-           (with-handlers ([exn:fail? (lambda (_) (void))])
-             (g_main_context_iteration (unbox ctx-box) #f))
-           (sleep 0.005)
-           (loop)))))))
+    (thread (lambda ()
+              (let loop ()
+                (when (unbox pump-running-box)
+                  (with-handlers ([exn:fail? (lambda (_) (void))])
+                    (g_main_context_iteration (unbox ctx-box) #f))
+                  (sleep 0.005)
+                  (loop)))))))
 
 (define (session-connection)
   (or (unbox conn-box)
@@ -184,11 +183,12 @@
              (ptr-set! err _pointer #f)
              (define ctx (and g_main_context_new (g_main_context_new)))
              (define before
-               (and g_main_context_get_thread_default
-                    (g_main_context_get_thread_default)))
-             (when ctx (g_main_context_push_thread_default ctx))
+               (and g_main_context_get_thread_default (g_main_context_get_thread_default)))
+             (when ctx
+               (g_main_context_push_thread_default ctx))
              (define c (g_bus_get_sync 2 #f err))
-             (when ctx (g_main_context_pop_thread_default ctx))
+             (when ctx
+               (g_main_context_pop_thread_default ctx))
              (fprintf (current-error-port)
                       "[np-ctx] conn=~a ctx=~a default=~a thread-default=~a\n"
                       c
@@ -255,8 +255,7 @@
           'ctx
           (format "~a" (unbox ctx-box))
           'ctx-is-default
-          (and g_main_context_default
-               (equal? (unbox ctx-box) (g_main_context_default)))
+          (and g_main_context_default (equal? (unbox ctx-box) (g_main_context_default)))
           'get-title
           (hash-ref (or (unbox state-box) (hash)) 'title "")
           'get-status
