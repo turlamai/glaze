@@ -454,9 +454,14 @@
 (define glib (ffi-lib* "libglib-2.0" '("0" "")))
 (define-ffi-definer defglib glib)
 (defglib g_main_context_iteration (_fun _pointer _bool -> _bool))
+(define pump-exn-printed (box #f))
 (define (pump-context!)
   (when g_main_context_iteration
-    (with-handlers ([exn:fail? (lambda (_) (void))])
+    (with-handlers ([exn:fail?
+                     (lambda (e)
+                       (unless (unbox pump-exn-printed)
+                         (set-box! pump-exn-printed #t)
+                         (fprintf (current-error-port) "[np-bus] pump exn: ~a\n" (exn-message e))))])
       (g_main_context_iteration #f #f))))
 
 (defgio g_dbus_connection_call
