@@ -120,21 +120,31 @@
           dmg-path)]
     [(find-tool "hdiutil")
      (define staging (make-temporary-file "glaze-dmg-~a" 'directory))
+     (define rw-image #f)
      (dynamic-wind void
                    (lambda ()
                      (stage-dmg-root bundle staging app-name)
+                     (define-values (rw mount)
+                       (make-rw-image! (find-executable-path "hdiutil" #f)
+                                       staging
+                                       volume-name))
+                     (set! rw-image rw)
+                     (unless (run (find-executable-path "hdiutil" #f) "detach" mount)
+                       (error 'build-app "hdiutil detach failed"))
+                     (when (file-exists? dmg-path)
+                       (delete-file dmg-path))
                      (and (run (find-executable-path "hdiutil" #f)
-                               "create"
-                               "-volname"
-                               volume-name
-                               "-srcfolder"
-                               (path->string staging)
-                               "-ov"
+                               "convert"
+                               (path->string rw)
                                "-format"
                                "UDZO"
+                               "-ov"
+                               "-o"
                                (path->string dmg-path))
                           dmg-path))
                    (lambda ()
+                     (when rw-image
+                       (with-handlers ([exn:fail? void]) (delete-file rw-image)))
                      (when (directory-exists? staging)
                        (delete-directory/files staging))))]
     [else
@@ -158,9 +168,56 @@
   (make-file-or-directory-link "/Applications" apps-link)
   staging)
 
+;; Size the read/write image from the staged payload and copy the contents
+;; into the mounted volume. `hdiutil create -srcfolder` estimates the image
+;; size itself and can dereference the /Applications symlink (or reserve
+;; against purgeable-only free space on CI runners), failing with ENOSPC
+;; despite ample df free space. An explicit -size from `du -sk` (which does
+;; not follow symlinks) plus a post-attach copy is the create-dmg approach
+;; and is deterministic. Returns the rw image path and its mount point.
+(define (make-rw-image! hdiutil staging volume-name)
+  (define du-out
+    (with-output-to-string
+      (lambda ()
+        (unless (run (find-executable-path "du" #f) "-sk" (path->string staging))
+          (error 'build-app "du failed sizing the dmg staging dir")))))
+  (define kb (string->number (first (string-split du-out))))
+  (unless kb
+    (error 'build-app "cannot parse du output: ~a" du-out))
+  (define mb (+ (quotient kb 1024) (quotient kb 10240) 64))
+  (define rw-image (make-temporary-file "glaze-rw-~a.dmg"))
+  (define attach-output
+    (with-output-to-string
+      (lambda ()
+        (unless (run hdiutil
+                     "create"
+                     "-fs"
+                     "HFS+"
+                     "-volname"
+                     volume-name
+                     "-size"
+                     (format "~am" mb)
+                     "-format"
+                     "UDRW"
+                     "-ov"
+                     (path->string rw-image))
+          (error 'build-app "hdiutil create failed"))
+        (unless (run hdiutil "attach" (path->string rw-image) "-noautoopen" "-readwrite")
+          (error 'build-app "hdiutil attach failed")))))
+  (define mount-path
+    (let* ([line (last (string-split (string-trim attach-output) "\n"))]
+           [fields (string-split line "\t")])
+      (string-trim (last fields))))
+  (unless (run (find-executable-path "cp" #f)
+               "-R"
+               (string-append (path->string staging) "/.")
+               (string-append mount-path "/"))
+    (error 'build-app "copying staged dmg contents failed"))
+  (values rw-image mount-path))
+
 (define (create-branded-dmg! hdiutil background bundle dmg-path app-name volume-name)
   (define staging (make-temporary-file "glaze-dmg-~a" 'directory))
-  (define rw-image (build-path staging "dmg-rw.dmg"))
+  (define rw-image #f)
   (define script-path (build-path staging "dmg-style.applescript"))
   (dynamic-wind
    (lambda () #f)
@@ -168,28 +225,8 @@
      (stage-dmg-root bundle staging app-name)
      (make-directory* (build-path staging ".background"))
      (copy-file background (build-path staging ".background" "background.png"))
-     (define attach-output
-       (with-output-to-string
-        (lambda ()
-          (unless (run hdiutil
-                       "create"
-                       "-fs"
-                       "HFS+"
-                       "-volname"
-                       volume-name
-                       "-srcfolder"
-                       (path->string staging)
-                       "-format"
-                       "UDRW"
-                       "-ov"
-                       (path->string rw-image))
-            (error 'build-app "hdiutil create failed"))
-          (unless (run hdiutil "attach" (path->string rw-image) "-noautoopen" "-readwrite")
-            (error 'build-app "hdiutil attach failed")))))
-     (define mount-path
-       (let* ([line (last (string-split (string-trim attach-output) "\n"))]
-              [fields (string-split line "\t")])
-         (string-trim (last fields))))
+     (define-values (rw mount-path) (make-rw-image! hdiutil staging volume-name))
+     (set! rw-image rw)
      (define disk-name (last (string-split mount-path "/")))
      (call-with-output-file script-path
                             #:exists 'truncate/replace
@@ -219,5 +256,7 @@
        (error 'build-app "hdiutil convert failed"))
      dmg-path)
    (lambda ()
+     (when rw-image
+       (with-handlers ([exn:fail? void]) (delete-file rw-image)))
      (when (directory-exists? staging)
        (delete-directory/files staging)))))
