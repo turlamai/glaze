@@ -50,7 +50,8 @@
               _pointer
               _pointer
               ->
-              _GVariant))
+              _GVariant
+              #:blocking? #t))
 (defgio g_bus_own_name_on_connection
         (_fun _GDBusConnection _string _int _pointer _pointer _pointer _pointer _pointer -> _uint))
 (defgio g_dbus_node_info_new_for_xml (_fun _string _pointer -> _pointer))
@@ -425,39 +426,67 @@
 
 ;; Read our own published properties back over the bus: acceptance evidence
 ;; that the OS surface carries the state, not just host memory.
+;; The Get reply is produced by our own vtable callback, which GDBus
+;; dispatches on the main context: a same-thread call_sync would deadlock
+;; against it, so the sync call runs on a worker thread while the caller
+;; pumps the default main context.
+(define glib (ffi-lib* "libglib-2.0" '("0" "")))
+(define-ffi-definer defglib glib)
+(defglib g_main_context_iteration (_fun _pointer _bool -> _bool))
+(define (pump-context!)
+  (when g_main_context_iteration
+    (with-handlers ([exn:fail? (lambda (_) (void))])
+      (g_main_context_iteration #f #f))))
+
 (define (bus-get property)
   (define conn (unbox conn-box))
   (define name (unbox bus-name-box))
   (and conn
        name
        (let ()
-         (define err (malloc _pointer 1))
-         (ptr-set! err _pointer #f)
-         (define args
-           (g_variant_ref_sink (g_variant_new_props "(ss)" "org.mpris.MediaPlayer2.Player" property)))
-         (define reply
-           (g_dbus_connection_call_sync conn
-                                        name
-                                        "/org/mpris/MediaPlayer2"
-                                        "org.freedesktop.DBus.Properties"
-                                        "Get"
-                                        args
-                                        #f
-                                        0
-                                        2000
-                                        #f
-                                        err))
-         (and reply
-              (let ()
-                (define inner (g_variant_get_child_value reply 0))
-                (case property
-                  [("Metadata")
-                   (define title-v (g_variant_lookup_value inner "xesam:title" #f))
-                   (define title (and title-v (g_variant_get_string title-v #f)))
-                   (or title "")]
-                  [("PlaybackStatus") (g_variant_get_string inner #f)]
-                  [("Position") (/ (g_variant_get_int64 inner) 1e6)]
-                  [else #f]))))))
+         (define result (box #f))
+         (define worker (thread (lambda () (set-box! result (bus-get-sync conn name property)))))
+         (define deadline (+ (current-inexact-milliseconds) 3000))
+         (let loop ()
+           (cond
+             [(thread-dead? worker) (unbox result)]
+             [(< (current-inexact-milliseconds) deadline)
+              (pump-context!)
+              (sleep 0.02)
+              (loop)]
+             [else
+              (kill-thread worker)
+              #f])))))
+
+(define (bus-get-sync conn name property)
+  (let ()
+    (define err (malloc _pointer 1))
+    (ptr-set! err _pointer #f)
+    (define args
+      (g_variant_ref_sink (g_variant_new_props "(ss)" "org.mpris.MediaPlayer2.Player" property)))
+    (define reply
+      (g_dbus_connection_call_sync conn
+                                   name
+                                   "/org/mpris/MediaPlayer2"
+                                   "org.freedesktop.DBus.Properties"
+                                   "Get"
+                                   args
+                                   #f
+                                   0
+                                   2000
+                                   #f
+                                   err))
+    (and reply
+         (let ()
+           (define inner (g_variant_get_child_value reply 0))
+           (case property
+             [("Metadata")
+              (define title-v (g_variant_lookup_value inner "xesam:title" #f))
+              (define title (and title-v (g_variant_get_string title-v #f)))
+              (or title "")]
+             [("PlaybackStatus") (g_variant_get_string inner #f)]
+             [("Position") (/ (g_variant_get_int64 inner) 1e6)]
+             [else #f])))))
 
 (define (os-info)
   (and (not (zero? (unbox owner-box)))
