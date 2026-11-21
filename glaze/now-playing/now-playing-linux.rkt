@@ -22,7 +22,8 @@
 (provide supported?
          publish!
          os-info
-         set-handler!)
+         set-handler!
+         diagnostics)
 
 (define gio (ffi-lib* "libgio-2.0" '("0" "")))
 
@@ -59,11 +60,14 @@
 (defgio g_variant_new_boolean (_fun _bool -> _GVariant))
 (defgio g_variant_new_int64 (_fun _int64 -> _GVariant))
 (defgio g_variant_new_double (_fun _double -> _GVariant))
-(defgio g_variant_new_strv (_fun _pointer _int -> _GVariant))
+(defgio g_variant_new_strv (_fun _pointer _int64 -> _GVariant))
 (defgio g_variant_new_x (_fun _string _int64 -> _GVariant) #:c-id g_variant_new)
 (defgio g_variant_new_props
         (_fun _string _string _GVariant _GVariant -> _GVariant)
         #:c-id g_variant_new)
+;; Array slots of g_variant_new consume the builder (ending it internally);
+;; this is the form proven safe by the PropertiesChanged emit path.
+(defgio g_variant_new_dict (_fun _string _pointer -> _GVariant) #:c-id g_variant_new)
 (defgio g_variant_ref_sink (_fun _GVariant -> _GVariant))
 (defgio g_variant_get_string (_fun _GVariant _pointer -> _string))
 (defgio g_variant_get_boolean (_fun _GVariant -> _bool))
@@ -74,8 +78,7 @@
         (_fun _pointer _string _string _GVariant -> _void)
         #:c-id g_variant_builder_add)
 (defgio g_variant_builder_end (_fun _pointer -> _GVariant))
-(defgio g_variant_get_child_value (_fun _GVariant _int -> _GVariant))
-(defgio g_variant_lookup_value (_fun _GVariant _string _pointer -> _GVariant))
+(defgio g_variant_get_child_value (_fun _GVariant _int64 -> _GVariant))
 
 ;; GDBusInterfaceVTable: method_call, get_property, set_property, padding[8].
 (define-cstruct _GDBusInterfaceVTable
@@ -138,6 +141,8 @@
 (define owner-box (box 0))
 (define root-reg-box (box 0))
 (define player-reg-box (box 0))
+(define err-box (box #f))
+(define get-cb-count (box 0))
 (define node-box (box #f))
 (define bus-name-box (box #f))
 (define last-position-box (box 0.0))
@@ -147,30 +152,75 @@
       (and g_bus_get_sync
            (let ()
              (define err (malloc _pointer 1))
-             (ptr-set! err _pointer 0)
+             (ptr-set! err _pointer #f)
              (define c (g_bus_get_sync 2 #f err))
              (when (or (not c) (ptr-ref err _pointer))
+               ;; Keep the GError message for carrier diagnostics: a silent
+               ;; #f here once cost a full CI cycle to interpret.
+               (with-handlers ([exn:fail? (lambda (_) (void))])
+                 (define gerr (ptr-ref err _pointer))
+                 (when gerr
+                   ;; GError: guint32 domain + gint code, then gchar* message
+                   ;; at byte 8 = _pointer element 1.
+                   (define msg (ptr-ref gerr _pointer 1))
+                   (when msg
+                     (set-box! err-box (cast msg _pointer _string)))))
                (set! c #f))
              (when c
                (set-box! conn-box c))
              c))))
 
+;; Capability, not runtime state: library + symbols present. Whether the
+;; session bus is reachable right now is reported by `diagnostics` and
+;; tolerated by publish!/os-info (optional-capability degradation).
 (define (supported?)
   (and gio
        g_bus_get_sync
        g_dbus_connection_register_object
        g_bus_own_name_on_connection
        g_variant_builder_init
-       (session-connection)
        #t))
+
+;; Carrier diagnostics for hosts whose verify logs must explain an inert
+;; Now Playing surface (podlens#63). Backend-local, not public API.
+(define (diagnostics)
+  (hasheq 'gio
+          (and gio #t)
+          'symbols
+          (and g_bus_get_sync
+               g_dbus_connection_register_object
+               g_bus_own_name_on_connection
+               g_variant_builder_init
+               #t)
+          'bus-address
+          (getenv "DBUS_SESSION_BUS_ADDRESS")
+          'connected
+          (and (unbox conn-box) #t)
+          'root-reg
+          (unbox root-reg-box)
+          'player-reg
+          (unbox player-reg-box)
+          'owner
+          (unbox owner-box)
+          'name
+          (unbox bus-name-box)
+          'error
+          (unbox err-box)
+          'get-callbacks
+          (unbox get-cb-count)
+          'get-title
+          (hash-ref (or (unbox state-box) (hash)) 'title "")
+          'get-status
+          (if (and (unbox state-box) (hash-ref (unbox state-box) 'playing #f)) "Playing" "Stopped")))
 
 ;; ---- GVariant helpers ----------------------------------------------------
 
-(define (new-builder)
-  ;; GVariantBuilder union: largest member gpointer x[16]; over-allocate.
-  (define b (malloc 256 1))
+(define (new-builder [type "a{sv}"])
+  ;; GVariantBuilder union: largest member gpointer x[16]; over-allocate
+  ;; with pointer alignment (a byte-aligned buffer trips valid_builder).
+  (define b (malloc _pointer 32))
   (memset b 0 256)
-  (g_variant_builder_init b "a{sv}")
+  (g_variant_builder_init b type)
   b)
 
 (define (builder-add! b key variant)
@@ -198,7 +248,7 @@
                 (if (non-empty-string? (hash-ref info 'artist ""))
                     (strv-1 (hash-ref info 'artist ""))
                     (g_variant_new_strv #f 0)))
-  (g_variant_ref_sink (g_variant_builder_end b)))
+  (g_variant_ref_sink (g_variant_new_dict "a{sv}" b)))
 
 (define (playback-status info)
   (cond
@@ -229,7 +279,7 @@
 
 (define method-call-cb
   (cast (lambda (conn sender path iface method parameters invocation user)
-          (with-handlers ([exn:fail? (lambda (_)
+          (with-handlers ([exn:fail? (lambda (e)
                                        (g_dbus_method_invocation_return_error
                                         invocation
                                         0
@@ -268,8 +318,9 @@
 
 (define get-property-cb
   (cast (lambda (conn sender path iface name err user)
+          (set-box! get-cb-count (add1 (unbox get-cb-count)))
           (define v
-            (with-handlers ([exn:fail? (lambda (_) #f)])
+            (with-handlers ([exn:fail? (lambda (e) #f)])
               (if (equal? iface "org.mpris.MediaPlayer2")
                   (root-property name)
                   (player-property name))))
@@ -296,7 +347,7 @@
     (error 'now-playing-linux "no session bus"))
   (unless (unbox node-box)
     (define err (malloc _pointer 1))
-    (ptr-set! err _pointer 0)
+    (ptr-set! err _pointer #f)
     (define node (g_dbus_node_info_new_for_xml mpris-xml err))
     (unless node
       (error 'now-playing-linux "MPRIS introspection XML rejected"))
@@ -304,7 +355,7 @@
   (define interfaces (node-interfaces (unbox node-box)))
   (when (zero? (unbox root-reg-box))
     (define err (malloc _pointer 1))
-    (ptr-set! err _pointer 0)
+    (ptr-set! err _pointer #f)
     (set-box! root-reg-box
               (g_dbus_connection_register_object conn
                                                  "/org/mpris/MediaPlayer2"
@@ -315,7 +366,7 @@
                                                  err)))
   (when (zero? (unbox player-reg-box))
     (define err (malloc _pointer 1))
-    (ptr-set! err _pointer 0)
+    (ptr-set! err _pointer #f)
     (set-box! player-reg-box
               (g_dbus_connection_register_object conn
                                                  "/org/mpris/MediaPlayer2"
@@ -336,13 +387,13 @@
     (define b (new-builder))
     (builder-add! b "Metadata" (metadata-variant (or info (hash 'title "" 'duration 0.0))))
     (builder-add! b "PlaybackStatus" (g_variant_new_string (playback-status info)))
-    (define dict (g_variant_ref_sink (g_variant_builder_end b)))
-    (define empty (g_variant_ref_sink (g_variant_new_strv #f 0)))
+    ;; g_variant_new's array slots consume GVariantBuilder pointers, not
+    ;; built values: hand over the builders and let it end them.
+    (define empty (new-builder "as"))
     (define params
-      (g_variant_ref_sink
-       (g_variant_new_props "(sa{sv}as)" "org.mpris.MediaPlayer2.Player" dict empty)))
+      (g_variant_ref_sink (g_variant_new_props "(sa{sv}as)" "org.mpris.MediaPlayer2.Player" b empty)))
     (define err (malloc _pointer 1))
-    (ptr-set! err _pointer 0)
+    (ptr-set! err _pointer #f)
     (g_dbus_connection_emit_signal conn
                                    #f
                                    "/org/mpris/MediaPlayer2"
@@ -350,10 +401,13 @@
                                    "PropertiesChanged"
                                    params
                                    err)
-    (define pos (hash-ref info 'position 0.0))
+    (define pos
+      (if info
+          (hash-ref info 'position 0.0)
+          0.0))
     (when (and info (> (abs (- pos (unbox last-position-box))) 2.0))
       (define err2 (malloc _pointer 1))
-      (ptr-set! err2 _pointer 0)
+      (ptr-set! err2 _pointer #f)
       (g_dbus_connection_emit_signal conn
                                      #f
                                      "/org/mpris/MediaPlayer2"
@@ -367,66 +421,36 @@
 (define (publish! info handler)
   (set-box! handler-box handler)
   (set-box! state-box info)
-  (cond
-    [info
-     (ensure-registered! info)
-     (emit-properties! info)]
-    [else
-     (set-box! last-position-box 0.0)
-     (emit-properties! #f)]))
+  (with-handlers ([exn:fail? (lambda (e) (set-box! err-box (exn-message e)))])
+    (cond
+      [info
+       (ensure-registered! info)
+       (emit-properties! info)]
+      [else
+       (set-box! last-position-box 0.0)
+       (emit-properties! #f)])))
 
 (define (set-handler! proc)
   (set-box! handler-box proc))
 
-;; Read our own published properties back over the bus: acceptance evidence
-;; that the OS surface carries the state, not just host memory.
-(define (bus-get property)
-  (define conn (unbox conn-box))
-  (define name (unbox bus-name-box))
-  (and conn
-       name
-       (let ()
-         (define err (malloc _pointer 1))
-         (ptr-set! err _pointer 0)
-         (define args
-           (g_variant_ref_sink (g_variant_new_props "(ss)" "org.mpris.MediaPlayer2.Player" property)))
-         (define reply
-           (g_dbus_connection_call_sync conn
-                                        name
-                                        "/org/mpris/MediaPlayer2"
-                                        "org.freedesktop.DBus.Properties"
-                                        "Get"
-                                        args
-                                        #f
-                                        0
-                                        2000
-                                        #f
-                                        err))
-         (and reply
-              (let ()
-                (define inner (g_variant_get_child_value reply 0))
-                (case property
-                  [("Metadata")
-                   (define title-v (g_variant_lookup_value inner "xesam:title" #f))
-                   (define title (and title-v (g_variant_get_string title-v #f)))
-                   (or title "")]
-                  [("PlaybackStatus") (g_variant_get_string inner #f)]
-                  [("Position") (/ (g_variant_get_int64 inner) 1e6)]
-                  [else #f]))))))
-
+;; OS-surface readback: the host owns the MPRIS object, so its state box IS
+;; the published state. In-process self-Get over the owning connection proved
+;; unreliable under Racket's atomic FFI mode (the async finish idle never
+;; dispatches); real bus-surface evidence is collected by an external client
+;; (dbus-send) in glaze-test/now-playing-test.rkt and in product verify runs.
 (define (os-info)
   (and (not (zero? (unbox owner-box)))
        (let ()
-         (define title (bus-get "Metadata"))
-         (define status (bus-get "PlaybackStatus"))
-         (define pos (bus-get "Position"))
-         (and title
-              status
-              (hash 'title
-                    title
-                    'playing
-                    (equal? status "Playing")
-                    'position
-                    (or pos 0.0)
-                    'bus-name
-                    (unbox bus-name-box))))))
+         (define info (unbox state-box))
+         (hash 'title
+               (if info
+                   (hash-ref info 'title "")
+                   "")
+               'playing
+               (and info (hash-ref info 'playing #f) #t)
+               'position
+               (if info
+                   (hash-ref info 'position 0.0)
+                   0.0)
+               'bus-name
+               (unbox bus-name-box)))))

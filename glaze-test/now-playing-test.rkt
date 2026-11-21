@@ -10,7 +10,22 @@
 (require glaze/now-playing
          rackunit
          racket/system
-         racket/string)
+         racket/string
+         racket/file
+         ffi/unsafe)
+
+;; GDBus dispatches method calls and name callbacks on the main context;
+;; a bare sleep loop never pumps it. Pump the default context so the
+;; round-trip below is real bus evidence on headless CI.
+(define glib-iterate
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (get-ffi-obj 'g_main_context_iteration
+                 (ffi-lib "libglib-2.0" '("0" ""))
+                 (_fun _pointer _bool -> _bool))))
+(define (pump!)
+  (when glib-iterate
+    (with-handlers ([exn:fail? (lambda (_) (void))])
+      (glib-iterate #f #f))))
 
 ;; On headless Linux CI there is no session bus. Bootstrap a private one
 ;; before the first backend call so the MPRIS round-trip below is real bus
@@ -19,13 +34,47 @@
 (define private-bus-control #f)
 (when (eq? (system-type 'os) 'unix)
   (unless (getenv "DBUS_SESSION_BUS_ADDRESS")
-    (with-handlers ([exn:fail? (lambda (_) (void))])
-      (define-values (out in pid err control)
-        (process "dbus-daemon --session --nofork --print-address=1"))
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (fprintf (current-error-port)
+                                          "[now-playing-diag] bus bootstrap error: ~a\n"
+                                          (exn-message e)))])
+      ;; Racket 9.x process returns one list value; 8.x returned five.
+      (define parts
+        (call-with-values (lambda () (process "dbus-daemon --session --nofork --print-address=1"))
+                          (lambda vs
+                            (if (and (= 1 (length vs)) (list? (car vs)))
+                                (car vs)
+                                vs))))
+      (define out (list-ref parts 0))
+      (define control (list-ref parts 4))
       (define address (read-line out))
+      (fprintf (current-error-port) "[now-playing-diag] bus bootstrap address=~s\n" address)
       (when (and (string? address) (non-empty-string? address))
         (putenv "DBUS_SESSION_BUS_ADDRESS" address)
         (set! private-bus-control control)))))
+
+;; First backend load happens here, before any dispatcher call can cache
+;; a silent partial instantiation: print the real exception if any.
+(when (eq? (system-type 'os) 'unix)
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (fprintf (current-error-port)
+                              "[now-playing-diag] first linux load error: ~a\n"
+                              (exn-message e))
+                     (for ([frame (in-list (continuation-mark-set->context
+                                            (exn-continuation-marks e)))])
+                       (fprintf (current-error-port) "[now-playing-diag]   at ~s\n" frame)))])
+    (dynamic-require 'glaze/now-playing/now-playing-linux 'supported?))
+  (with-handlers ([exn:fail? (lambda (e)
+                               (fprintf (current-error-port)
+                                        "[now-playing-diag] gio probe error: ~a\n"
+                                        (exn-message e)))])
+    (define ffi-lib* (dynamic-require 'glaze/ffi-discovery 'ffi-lib*))
+    (define ffi-lib-reason (dynamic-require 'glaze/ffi-discovery 'ffi-lib-reason))
+    (fprintf (current-error-port)
+             "[now-playing-diag] gio-lib=~a reason=~a\n"
+             (ffi-lib* "libgio-2.0" '("0" ""))
+             (ffi-lib-reason))))
 
 (define (canonical)
   (hash 'identifier
@@ -73,6 +122,11 @@
      (check-false (now-playing-os-info)))]
   [(macosx)
    (test-case "macos backend module loads (no silent stub fallback)"
+     (with-handlers ([exn:fail? (lambda (e)
+                                  (fprintf (current-error-port)
+                                           "[now-playing-diag] macos load error: ~a\n"
+                                           (exn-message e)))])
+       (dynamic-require 'glaze/now-playing/now-playing-macos #f))
      (check-not-exn (lambda () (dynamic-require 'glaze/now-playing/now-playing-macos #f))))
    (test-case "macos publishes through MPNowPlayingInfoCenter and reads back"
      ;; Diagnostic evidence when the capability reports unsupported: which
@@ -82,18 +136,24 @@
        (define ffi-lib-reason (dynamic-require 'glaze/ffi-discovery 'ffi-lib-reason))
        (define objc-get-class (dynamic-require 'ffi/unsafe/objc 'objc_lookUpClass))
        (define mp (ffi-lib* "/System/Library/Frameworks/MediaPlayer.framework/MediaPlayer" '(#f)))
-       (printf "[now-playing-diag] mp-lib=~a reason=~a\n" mp (ffi-lib-reason))
+       (fprintf (current-error-port) "[now-playing-diag] mp-lib=~a reason=~a\n" mp (ffi-lib-reason))
        (for ([n (in-list '("MPNowPlayingInfoCenter" "MPRemoteCommandCenter"
                                                     "NSMutableDictionary"
                                                     "NSNumber"
                                                     "NSString"))])
-         (printf "[now-playing-diag] ~a=~a\n"
-                 n
-                 (with-handlers ([exn:fail? (lambda (e) (exn-message e))])
-                   (objc-get-class n)))))
+         (fprintf (current-error-port)
+                  "[now-playing-diag] ~a=~a\n"
+                  n
+                  (with-handlers ([exn:fail? (lambda (e) (exn-message e))])
+                    (objc-get-class n)))))
      (check-true (now-playing-supported?))
      (now-playing-set! (canonical))
      (define os (now-playing-os-info))
+     (unless (hash? os)
+       (fprintf (current-error-port)
+                "[now-playing-diag] macos readback os-info=#f diag=~s\n"
+                (with-handlers ([exn:fail? (lambda (e) (exn-message e))])
+                  ((dynamic-require 'glaze/now-playing/now-playing-macos 'diagnostics)))))
      (check-pred hash? os)
      (check-equal? (hash-ref os 'title) "Glaze Now Playing Test")
      (check-equal? (hash-ref os 'playing) #t)
@@ -103,7 +163,18 @@
      (now-playing-clear!)
      (check-false (now-playing-os-info)))]
   [(unix)
+   ;; Watchdog: any unbounded wait below must surface as a fast failure with
+   ;; the milestone prints flushed, not a silent CI hang.
+   (thread (lambda ()
+             (sleep 90)
+             (fprintf (current-error-port) "[now-playing-diag] WATCHDOG 90s reached\n")
+             (exit 1)))
    (test-case "linux backend module loads (no silent stub fallback)"
+     (with-handlers ([exn:fail? (lambda (e)
+                                  (fprintf (current-error-port)
+                                           "[now-playing-diag] linux load error: ~a\n"
+                                           (exn-message e)))])
+       (dynamic-require 'glaze/now-playing/now-playing-linux #f))
      (check-not-exn (lambda () (dynamic-require 'glaze/now-playing/now-playing-linux #f))))
    (cond
      [(now-playing-supported?)
@@ -112,26 +183,87 @@
         (now-playing-set-command-handler! (lambda (cmd arg)
                                             (set! received (cons (cons cmd arg) received))))
         (now-playing-set! (canonical))
-        (define os (now-playing-os-info))
+        (define os
+          (let loop ([n 0])
+            (define v (now-playing-os-info))
+            (cond
+              [(hash? v) v]
+              [(< n 40)
+               (pump!)
+               (sleep 0.05)
+               (loop (add1 n))]
+              [else v])))
+        (fprintf (current-error-port)
+                 "[now-playing-diag] os-loop done title=~s\n"
+                 (and (hash? os) (hash-ref os 'title #f)))
+        (unless (hash? os)
+          (fprintf (current-error-port)
+                   "[now-playing-diag] linux round-trip os-info=#f diag=~s\n"
+                   (with-handlers ([exn:fail? (lambda (e) (exn-message e))])
+                     ((dynamic-require 'glaze/now-playing/now-playing-linux 'diagnostics)))))
         (check-pred hash? os)
         (check-equal? (hash-ref os 'title) "Glaze Now Playing Test")
         (check-equal? (hash-ref os 'playing) #t)
         (check-= (hash-ref os 'position) 3.0 0.01)
         (check-true (string-prefix? (hash-ref os 'bus-name) "org.mpris.MediaPlayer2."))
-        ;; Command round-trip: Pause arrives through GDBus on the main context.
+        ;; Bus-surface evidence from an EXTERNAL client: a separate dbus-send
+        ;; process reads Metadata back over the session bus. In-process
+        ;; self-Get is avoided (owning-connection async finish idles do not
+        ;; dispatch under Racket's atomic FFI mode).
         (define bus-name (hash-ref os 'bus-name))
+        (define get-file "/tmp/glaze-np-get.txt")
         (system
          (format
-          "dbus-send --session --print-reply --dest=~a /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Pause"
+          "dbus-send --session --print-reply --reply-timeout=3000 --dest=~a /org/mpris/MediaPlayer2 org.freedesktop.DBus.Properties.Get string:org.mpris.MediaPlayer2.Player string:Metadata > ~a 2>&1 &"
+          bus-name
+          get-file))
+        (define (get-out)
+          (with-handlers ([exn:fail? (lambda (_) "")])
+            (if (file-exists? get-file)
+                (file->string get-file)
+                "")))
+        (define get-deadline (+ (current-inexact-milliseconds) 5000))
+        (let loop ()
+          (when (and (not (string-contains? (get-out) "Glaze Now Playing Test"))
+                     (< (current-inexact-milliseconds) get-deadline))
+            (pump!)
+            (sleep 0.05)
+            (loop)))
+        (fprintf (current-error-port) "[now-playing-diag] external Get out=~s\n" (get-out))
+        (check-true (string-contains? (get-out) "Glaze Now Playing Test"))
+        ;; Command round-trip: Pause arrives through GDBus on the main context.
+        ;; Background the sender: a blocking --print-reply would wait for a
+        ;; reply that only our own main-context pump can produce (deadlock).
+        ;; Redirect its stdio: an inherited stdout pipe keeps raco test's
+        ;; subprocess EOF wait alive forever after the test itself exits.
+        (system
+         (format
+          "dbus-send --session --print-reply --reply-timeout=3000 --dest=~a /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Pause >/dev/null 2>&1 &"
           bus-name))
+        (fprintf (current-error-port) "[now-playing-diag] pause sender launched\n")
         (define deadline (+ (current-inexact-milliseconds) 5000))
         (let loop ()
           (when (and (null? received) (< (current-inexact-milliseconds) deadline))
+            (pump!)
             (sleep 0.05)
             (loop)))
+        (fprintf (current-error-port) "[now-playing-diag] pause received=~s\n" received)
         (check-true (and (pair? received) (equal? (car received) '(pause . #f))))
         (now-playing-clear!)
-        (check-equal? (hash-ref (now-playing-os-info) 'playing) #f))]
+        (define os2
+          (let loop ([n 0])
+            (define v (now-playing-os-info))
+            (cond
+              [(and (hash? v) (not (hash-ref v 'playing))) v]
+              [(< n 40)
+               (pump!)
+               (sleep 0.05)
+               (loop (add1 n))]
+              [else v])))
+        (fprintf (current-error-port)
+                 "[now-playing-diag] os2 playing=~s\n"
+                 (and (hash? os2) (hash-ref os2 'playing #f)))
+        (check-equal? (hash-ref os2 'playing) #f))]
      [else
       (test-case "linux without a session bus degrades to unsupported"
         (check-false (now-playing-os-info)))])])
