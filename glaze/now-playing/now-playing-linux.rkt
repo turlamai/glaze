@@ -206,12 +206,12 @@
 
 ;; ---- GVariant helpers ----------------------------------------------------
 
-(define (new-builder)
+(define (new-builder [type "a{sv}"])
   ;; GVariantBuilder union: largest member gpointer x[16]; over-allocate
   ;; with pointer alignment (a byte-aligned buffer trips valid_builder).
   (define b (malloc _pointer 32))
   (memset b 0 256)
-  (g_variant_builder_init b "a{sv}")
+  (g_variant_builder_init b type)
   b)
 
 (define (builder-add! b key variant)
@@ -377,11 +377,11 @@
     (define b (new-builder))
     (builder-add! b "Metadata" (metadata-variant (or info (hash 'title "" 'duration 0.0))))
     (builder-add! b "PlaybackStatus" (g_variant_new_string (playback-status info)))
-    (define dict (g_variant_ref_sink (g_variant_builder_end b)))
-    (define empty (g_variant_ref_sink (g_variant_new_strv #f 0)))
+    ;; g_variant_new's array slots consume GVariantBuilder pointers, not
+    ;; built values: hand over the builders and let it end them.
+    (define empty (new-builder "as"))
     (define params
-      (g_variant_ref_sink
-       (g_variant_new_props "(sa{sv}as)" "org.mpris.MediaPlayer2.Player" dict empty)))
+      (g_variant_ref_sink (g_variant_new_props "(sa{sv}as)" "org.mpris.MediaPlayer2.Player" b empty)))
     (define err (malloc _pointer 1))
     (ptr-set! err _pointer #f)
     (g_dbus_connection_emit_signal conn
@@ -391,7 +391,10 @@
                                    "PropertiesChanged"
                                    params
                                    err)
-    (define pos (hash-ref info 'position 0.0))
+    (define pos
+      (if info
+          (hash-ref info 'position 0.0)
+          0.0))
     (when (and info (> (abs (- pos (unbox last-position-box))) 2.0))
       (define err2 (malloc _pointer 1))
       (ptr-set! err2 _pointer #f)
