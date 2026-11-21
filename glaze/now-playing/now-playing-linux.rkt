@@ -29,6 +29,21 @@
 
 (define-ffi-definer defgio gio)
 
+;; GMainContext lives in glib, not gio. The bus connection binds to the
+;; thread-default context at g_bus_get_sync time; hosts acquire it lazily
+;; from request threads, so the backend owns a dedicated context and pumps
+;; it itself instead of relying on the embedder's loop (podlens#63: an
+;; unpumped bound context answers every external Properties.Get with
+;; NoReply).
+(define glib (ffi-lib* "libglib-2.0" '("0" "")))
+(define-ffi-definer defglib glib)
+(defglib g_main_context_new (_fun -> _pointer))
+(defglib g_main_context_push_thread_default (_fun _pointer -> _void))
+(defglib g_main_context_pop_thread_default (_fun _pointer -> _void))
+(defglib g_main_context_iteration (_fun _pointer _bool -> _bool))
+(defglib g_main_context_default (_fun -> _pointer))
+(defglib g_main_context_get_thread_default (_fun -> _pointer))
+
 (define _GVariant _pointer)
 (define _GDBusConnection _pointer)
 
@@ -143,9 +158,23 @@
 (define player-reg-box (box 0))
 (define err-box (box #f))
 (define get-cb-count (box 0))
+(define ctx-box (box #f))
+(define pump-running-box (box #f))
 (define node-box (box #f))
 (define bus-name-box (box #f))
 (define last-position-box (box 0.0))
+
+(define (start-pump!)
+  (unless (or (unbox pump-running-box) (not (unbox ctx-box)))
+    (set-box! pump-running-box #t)
+    (thread
+     (lambda ()
+       (let loop ()
+         (when (unbox pump-running-box)
+           (with-handlers ([exn:fail? (lambda (_) (void))])
+             (g_main_context_iteration (unbox ctx-box) #f))
+           (sleep 0.005)
+           (loop)))))))
 
 (define (session-connection)
   (or (unbox conn-box)
@@ -153,7 +182,19 @@
            (let ()
              (define err (malloc _pointer 1))
              (ptr-set! err _pointer #f)
+             (define ctx (and g_main_context_new (g_main_context_new)))
+             (define before
+               (and g_main_context_get_thread_default
+                    (g_main_context_get_thread_default)))
+             (when ctx (g_main_context_push_thread_default ctx))
              (define c (g_bus_get_sync 2 #f err))
+             (when ctx (g_main_context_pop_thread_default ctx))
+             (fprintf (current-error-port)
+                      "[np-ctx] conn=~a ctx=~a default=~a thread-default=~a\n"
+                      c
+                      ctx
+                      (and g_main_context_default (g_main_context_default))
+                      before)
              (when (or (not c) (ptr-ref err _pointer))
                ;; Keep the GError message for carrier diagnostics: a silent
                ;; #f here once cost a full CI cycle to interpret.
@@ -167,7 +208,10 @@
                      (set-box! err-box (cast msg _pointer _string)))))
                (set! c #f))
              (when c
-               (set-box! conn-box c))
+               (set-box! conn-box c)
+               (when ctx
+                 (set-box! ctx-box ctx)
+                 (start-pump!)))
              c))))
 
 ;; Capability, not runtime state: library + symbols present. Whether the
@@ -208,6 +252,11 @@
           (unbox err-box)
           'get-callbacks
           (unbox get-cb-count)
+          'ctx
+          (format "~a" (unbox ctx-box))
+          'ctx-is-default
+          (and g_main_context_default
+               (equal? (unbox ctx-box) (g_main_context_default)))
           'get-title
           (hash-ref (or (unbox state-box) (hash)) 'title "")
           'get-status
@@ -319,6 +368,7 @@
 (define get-property-cb
   (cast (lambda (conn sender path iface name err user)
           (set-box! get-cb-count (add1 (unbox get-cb-count)))
+          (fprintf (current-error-port) "[np-get] enter iface=~a name=~a\n" iface name)
           (define v
             (with-handlers ([exn:fail? (lambda (e) #f)])
               (if (equal? iface "org.mpris.MediaPlayer2")
