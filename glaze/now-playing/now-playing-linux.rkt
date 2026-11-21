@@ -507,15 +507,22 @@
                              2000
                              cb
                              #f)
+     (fprintf (current-error-port) "[np-bus] call issued ~a\n" property)
      (define deadline (+ (current-inexact-milliseconds) 3000))
-     (let loop ()
+     (let loop ([n 0])
        (cond
-         [(not (eq? (unbox reply-box) 'pending)) (parse-reply (unbox reply-box) property)]
+         [(not (eq? (unbox reply-box) 'pending))
+          (fprintf (current-error-port) "[np-bus] reply box set ~a n=~a\n" property n)
+          (define parsed (parse-reply (unbox reply-box) property))
+          (fprintf (current-error-port) "[np-bus] parsed ~a = ~s\n" property parsed)
+          parsed]
          [(< (current-inexact-milliseconds) deadline)
           ;; No sleep: bus-get may run inside a GDBus callback (atomic
           ;; mode), where descheduling is an internal error.
           (pump-context!)
-          (loop)]
+          (when (zero? (modulo n 2000))
+            (fprintf (current-error-port) "[np-bus] pump ~a n=~a\n" property n))
+          (loop (add1 n))]
          [else
           (fprintf (current-error-port) "[np-bus] get timeout ~a\n" property)
           #f])))))
