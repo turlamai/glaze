@@ -179,6 +179,14 @@
 
 (define pump-iters (box 0))
 
+;; GDBus callback atomicity differs across Racket versions (9.0 invokes
+;; callbacks inside atomic FFI mode, 9.3 outside). Escape only when needed:
+;; call-as-nonatomic raises outside an atomic area.
+(define (in-nonatomic thunk)
+  (if (in-atomic-mode?)
+      (call-as-nonatomic thunk)
+      (thunk)))
+
 (define (start-pump!)
   (unless (or (unbox pump-running-box) (not (unbox ctx-box)))
     (set-box! pump-running-box #t)
@@ -188,7 +196,10 @@
                           (let loop ()
                             (when (unbox pump-running-box)
                               (set-box! pump-iters (add1 (unbox pump-iters)))
-                              (with-handlers ([exn:fail? (lambda (_) (void))])
+                              (with-handlers ([exn:fail? (lambda (e)
+                                                           (fprintf (current-error-port)
+                                                                    "[np-pump] exn=~a\n"
+                                                                    (exn-message e)))])
                                 (g_main_context_iteration (unbox ctx-box) #f))
                               ;; Racket 9.0 can leave atomic mode set after an
                               ;; FFI call that dispatched callbacks; a bare
@@ -213,8 +224,8 @@
              (define private? (and addr g_dbus_connection_new_for_address_sync #t))
              (define c0
                (and private?
-                    ;; AUTHENTICATION_CLIENT (1) | MESSAGE_BUS_CONNECTION (4)
-                    (g_dbus_connection_new_for_address_sync addr 5 #f #f err)))
+                    ;; AUTHENTICATION_CLIENT (1<<0) | MESSAGE_BUS_CONNECTION (1<<3)
+                    (g_dbus_connection_new_for_address_sync addr 9 #f #f err)))
              (when (and private? (not c0))
                (with-handlers ([exn:fail? (lambda (_) (void))])
                  (define gerr (ptr-ref err _pointer))
@@ -371,18 +382,17 @@
 
 (define method-call-cb
   (cast (lambda (conn sender path iface method parameters invocation user)
-          ;; GDBus invokes callbacks in atomic FFI mode; Racket 9.0 raises
-          ;; internal-error if anything inside deschedules. Escape atomicity
-          ;; for the whole callback body (9.3 tolerates either form).
-          (call-as-nonatomic (lambda ()
-                               (with-handlers ([exn:fail? (lambda (e)
-                                                            (g_dbus_method_invocation_return_error
-                                                             invocation
-                                                             0
-                                                             0
-                                                             "glaze now-playing handler failed"))])
-                                 (dispatch-command! method parameters)
-                                 (g_dbus_method_invocation_return_value invocation #f)))))
+          ;; GDBus callback atomicity differs across Racket versions; escape
+          ;; only when actually atomic (see in-nonatomic).
+          (in-nonatomic (lambda ()
+                          (with-handlers ([exn:fail? (lambda (e)
+                                                       (g_dbus_method_invocation_return_error
+                                                        invocation
+                                                        0
+                                                        0
+                                                        "glaze now-playing handler failed"))])
+                            (dispatch-command! method parameters)
+                            (g_dbus_method_invocation_return_value invocation #f)))))
         (_fun _GDBusConnection _string _string _string _string _GVariant _pointer _pointer -> _void)
         _fpointer))
 
@@ -413,19 +423,19 @@
     [else #f]))
 
 (define get-property-cb
-  (cast (lambda (conn sender path iface name err user)
-          (call-as-nonatomic
-           (lambda ()
-             (set-box! get-cb-count (add1 (unbox get-cb-count)))
-             (fprintf (current-error-port) "[np-get] enter iface=~a name=~a\n" iface name)
-             (define v
-               (with-handlers ([exn:fail? (lambda (e) #f)])
-                 (if (equal? iface "org.mpris.MediaPlayer2")
-                     (root-property name)
-                     (player-property name))))
-             (or v (g_variant_new_string "")))))
-        (_fun _GDBusConnection _string _string _string _string _pointer _pointer -> _GVariant)
-        _fpointer))
+  (cast
+   (lambda (conn sender path iface name err user)
+     (in-nonatomic (lambda ()
+                     (set-box! get-cb-count (add1 (unbox get-cb-count)))
+                     (fprintf (current-error-port) "[np-get] enter iface=~a name=~a\n" iface name)
+                     (define v
+                       (with-handlers ([exn:fail? (lambda (e) #f)])
+                         (if (equal? iface "org.mpris.MediaPlayer2")
+                             (root-property name)
+                             (player-property name))))
+                     (or v (g_variant_new_string "")))))
+   (_fun _GDBusConnection _string _string _string _string _pointer _pointer -> _GVariant)
+   _fpointer))
 
 (define set-property-cb
   (cast (lambda (conn sender path iface name value err user) #f)
