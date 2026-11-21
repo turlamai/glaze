@@ -434,72 +434,62 @@
       (g_variant_ref v)
       (g_variant_new_string "")))
 
-;; Racket's FFI trampoline can leave atomic mode set at the callback-exit
-;; safe point; a scheduler swap there dies ("terminated in atomic mode!",
-;; glaze#157). Run callback bodies nonatomic whenever entered atomic.
-(define (in-out-atomic thunk)
-  (if (in-atomic-mode?)
-      (call-as-nonatomic thunk)
-      (thunk)))
-
 (define get-property-cb
   (cast (lambda (conn sender path iface name err user)
-          (in-out-atomic (lambda ()
-                           (set-box! get-cb-count (add1 (unbox get-cb-count)))
-                           (if (zero? (g_strcmp0 iface c-root-iface))
-                               (cond
-                                 [(zero? (g_strcmp0 name (vector-ref prop-cvec 13))) (prop-ref 13)]
-                                 [(zero? (g_strcmp0 name (vector-ref prop-cvec 14))) (prop-ref 14)]
-                                 [(zero? (g_strcmp0 name (vector-ref prop-cvec 15))) (prop-ref 15)]
-                                 [(zero? (g_strcmp0 name (vector-ref prop-cvec 16))) (prop-ref 16)]
-                                 [(zero? (g_strcmp0 name (vector-ref prop-cvec 17))) (prop-ref 17)]
-                                 [(zero? (g_strcmp0 name (vector-ref prop-cvec 18))) (prop-ref 18)]
-                                 [(zero? (g_strcmp0 name (vector-ref prop-cvec 19))) (prop-ref 19)]
-                                 [else (g_variant_new_string "")])
-                               (cond
-                                 [(zero? (g_strcmp0 name (vector-ref prop-cvec 0))) (prop-ref 0)]
-                                 [(zero? (g_strcmp0 name (vector-ref prop-cvec 1))) (prop-ref 1)]
-                                 [(zero? (g_strcmp0 name (vector-ref prop-cvec 2))) (prop-ref 2)]
-                                 [(zero? (g_strcmp0 name (vector-ref prop-cvec 3))) (prop-ref 3)]
-                                 [(zero? (g_strcmp0 name (vector-ref prop-cvec 4))) (prop-ref 4)]
-                                 [(zero? (g_strcmp0 name (vector-ref prop-cvec 5))) (prop-ref 5)]
-                                 [(zero? (g_strcmp0 name (vector-ref prop-cvec 6))) (prop-ref 6)]
-                                 [(zero? (g_strcmp0 name (vector-ref prop-cvec 7))) (prop-ref 7)]
-                                 [(zero? (g_strcmp0 name (vector-ref prop-cvec 8))) (prop-ref 8)]
-                                 [(zero? (g_strcmp0 name (vector-ref prop-cvec 9))) (prop-ref 9)]
-                                 [(zero? (g_strcmp0 name (vector-ref prop-cvec 10))) (prop-ref 10)]
-                                 [(zero? (g_strcmp0 name (vector-ref prop-cvec 11))) (prop-ref 11)]
-                                 [(zero? (g_strcmp0 name (vector-ref prop-cvec 12))) (prop-ref 12)]
-                                 [else (g_variant_new_string "")])))))
+          (set-box! get-cb-count (add1 (unbox get-cb-count)))
+          (if (zero? (g_strcmp0 iface c-root-iface))
+              (cond
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 13))) (prop-ref 13)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 14))) (prop-ref 14)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 15))) (prop-ref 15)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 16))) (prop-ref 16)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 17))) (prop-ref 17)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 18))) (prop-ref 18)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 19))) (prop-ref 19)]
+                [else (g_variant_new_string "")])
+              (cond
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 0))) (prop-ref 0)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 1))) (prop-ref 1)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 2))) (prop-ref 2)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 3))) (prop-ref 3)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 4))) (prop-ref 4)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 5))) (prop-ref 5)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 6))) (prop-ref 6)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 7))) (prop-ref 7)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 8))) (prop-ref 8)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 9))) (prop-ref 9)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 10))) (prop-ref 10)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 11))) (prop-ref 11)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 12))) (prop-ref 12)]
+                [else (g_variant_new_string "")])))
         (_fun _pointer _pointer _pointer _pointer _pointer _pointer _pointer -> _pointer)
         _fpointer))
 
 (define method-call-cb
   (cast (lambda (conn sender path iface method parameters invocation user)
-          (in-out-atomic (lambda ()
-                           (define midx
-                             (cond
-                               [(zero? (g_strcmp0 method (vector-ref method-cvec 0))) 0]
-                               [(zero? (g_strcmp0 method (vector-ref method-cvec 1))) 1]
-                               [(zero? (g_strcmp0 method (vector-ref method-cvec 2))) 2]
-                               [(zero? (g_strcmp0 method (vector-ref method-cvec 3))) 3]
-                               [(zero? (g_strcmp0 method (vector-ref method-cvec 4))) 4]
-                               [(zero? (g_strcmp0 method (vector-ref method-cvec 5))) 5]
-                               [(zero? (g_strcmp0 method (vector-ref method-cvec 6))) 6]
-                               [(zero? (g_strcmp0 method (vector-ref method-cvec 7))) 7]
-                               [else -1]))
-                           (when (>= midx 0)
-                             (define i (unbox cmd-head))
-                             (unless (= (modulo (add1 i) 8) (unbox cmd-tail))
-                               (ptr-set! cmd-ring _pointer (* 2 i) invocation)
-                               (ptr-set! cmd-ring _pointer (+ (* 2 i) 1) (g_variant_ref parameters))
-                               (ptr-set! cmd-idx-ring _int64 i midx)
-                               (set-box! cmd-head (modulo (add1 i) 8)))))))
+          (define midx
+            (cond
+              [(zero? (g_strcmp0 method (vector-ref method-cvec 0))) 0]
+              [(zero? (g_strcmp0 method (vector-ref method-cvec 1))) 1]
+              [(zero? (g_strcmp0 method (vector-ref method-cvec 2))) 2]
+              [(zero? (g_strcmp0 method (vector-ref method-cvec 3))) 3]
+              [(zero? (g_strcmp0 method (vector-ref method-cvec 4))) 4]
+              [(zero? (g_strcmp0 method (vector-ref method-cvec 5))) 5]
+              [(zero? (g_strcmp0 method (vector-ref method-cvec 6))) 6]
+              [(zero? (g_strcmp0 method (vector-ref method-cvec 7))) 7]
+              [else -1]))
+          (when (>= midx 0)
+            (define i (unbox cmd-head))
+            (unless (= (modulo (add1 i) 8) (unbox cmd-tail))
+              (ptr-set! cmd-ring _pointer (* 2 i) invocation)
+              (ptr-set! cmd-ring _pointer (+ (* 2 i) 1) (g_variant_ref parameters))
+              (ptr-set! cmd-idx-ring _int64 i midx)
+              (set-box! cmd-head (modulo (add1 i) 8)))))
         (_fun _pointer _pointer _pointer _pointer _pointer _pointer _pointer _pointer -> _void)
         _fpointer))
 
 (define set-property-cb
-  (cast (lambda (conn sender path iface name value err user) (in-out-atomic (lambda () #f)))
+  (cast (lambda (conn sender path iface name value err user) #f)
         (_fun _pointer _pointer _pointer _pointer _pointer _pointer _pointer _pointer -> _bool)
         _fpointer))
 

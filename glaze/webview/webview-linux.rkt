@@ -346,11 +346,10 @@
       ;; Non-blocking iteration of the shared default main context (the one
       ;; gtk_init installed); FALSE = don't block waiting for events.
       (g_main_context_iteration #f #f)
-      ;; Extra contexts owned by glaze backends (Linux now-playing GDBus):
-      ;; dispatch their callbacks on this single pump thread instead of a
-      ;; second Racket thread (podlens#63 scheduler corruption).
-      (for ([ctx (in-list (registered-main-contexts))])
-        (g_main_context_iteration ctx #f))
+      ;; Backend GDBus contexts are deliberately NOT iterated here: incoming
+      ;; dispatch under Racket FFI callbacks is unreliable and corrupts the
+      ;; scheduler (glaze#157). The backend pump stands down while this pump
+      ;; is live; publication (outgoing) needs no iteration.
       ;; Racket 9.0 can leave atomic mode set after an iteration that
       ;; dispatched FFI callbacks; drop it outside the foreign frame so the
       ;; rest of the loop (and the scheduler) keeps working.
