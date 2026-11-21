@@ -66,6 +66,9 @@
         (_fun _string _string _GVariant _GVariant -> _GVariant)
         #:c-id g_variant_new)
 (defgio g_variant_new_ss (_fun _string _string _string -> _GVariant) #:c-id g_variant_new)
+;; Array slots of g_variant_new consume the builder (ending it internally);
+;; this is the form proven safe by the PropertiesChanged emit path.
+(defgio g_variant_new_dict (_fun _string _pointer -> _GVariant) #:c-id g_variant_new)
 (defgio g_variant_ref_sink (_fun _GVariant -> _GVariant))
 (defgio g_variant_get_string (_fun _GVariant _pointer -> _string))
 (defgio g_variant_get_boolean (_fun _GVariant -> _bool))
@@ -247,7 +250,7 @@
                 (if (non-empty-string? (hash-ref info 'artist ""))
                     (strv-1 (hash-ref info 'artist ""))
                     (g_variant_new_strv #f 0)))
-  (g_variant_ref_sink (g_variant_builder_end b)))
+  (g_variant_ref_sink (g_variant_new_dict "(a{sv})" b)))
 
 (define (playback-status info)
   (cond
