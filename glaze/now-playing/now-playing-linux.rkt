@@ -208,7 +208,7 @@
 
 (define (new-builder)
   ;; GVariantBuilder union: largest member gpointer x[16]; over-allocate.
-  (define b (malloc 256 1))
+  (define b (malloc _byte 256))
   (memset b 0 256)
   (g_variant_builder_init b "a{sv}")
   b)
