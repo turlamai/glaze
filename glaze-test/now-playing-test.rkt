@@ -97,6 +97,10 @@
      (check-false (now-playing-os-info)))]
   [(macosx)
    (test-case "macos backend module loads (no silent stub fallback)"
+     (with-handlers ([exn:fail? (lambda (e)
+                                  (printf "[now-playing-diag] macos load error: ~a\n"
+                                          (exn-message e)))])
+       (dynamic-require 'glaze/now-playing/now-playing-macos #f))
      (check-not-exn (lambda () (dynamic-require 'glaze/now-playing/now-playing-macos #f))))
    (test-case "macos publishes through MPNowPlayingInfoCenter and reads back"
      ;; Diagnostic evidence when the capability reports unsupported: which
@@ -132,6 +136,10 @@
      (check-false (now-playing-os-info)))]
   [(unix)
    (test-case "linux backend module loads (no silent stub fallback)"
+     (with-handlers ([exn:fail? (lambda (e)
+                                  (printf "[now-playing-diag] linux load error: ~a\n"
+                                          (exn-message e)))])
+       (dynamic-require 'glaze/now-playing/now-playing-linux #f))
      (check-not-exn (lambda () (dynamic-require 'glaze/now-playing/now-playing-linux #f))))
    (cond
      [(now-playing-supported?)
