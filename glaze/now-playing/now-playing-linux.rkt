@@ -16,7 +16,6 @@
 
 (require ffi/unsafe
          ffi/unsafe/define
-         ffi/unsafe/atomic
          glaze/ffi-discovery
          racket/string)
 
@@ -179,13 +178,6 @@
 
 (define pump-iters (box 0))
 
-;; GDBus callback bodies must not deschedule inside the foreign callback
-;; frame: Racket 9.0 raises internal-error, 9.3 corrupts the heap (podlens
-;; verify core-dumped with log-receiver #<garbage>). Run the body in atomic
-;; mode (nested atomic is legal); port writes then buffer without yielding.
-(define (in-callback thunk)
-  (call-as-atomic thunk))
-
 (define (start-pump!)
   (unless (or (unbox pump-running-box) (not (unbox ctx-box)))
     (set-box! pump-running-box #t)
@@ -206,6 +198,7 @@
                               ;; the pump. Tolerate it and keep iterating.
                               (with-handlers ([exn:fail? (lambda (_) (void))])
                                 (sleep 0.005))
+                              (drain-commands!)
                               (loop)))))))))
 
 (define (session-connection)
@@ -362,6 +355,141 @@
   (inexact->exact (round (* 1e6 (hash-ref info 'position 0.0)))))
 
 ;; ---- callbacks -----------------------------------------------------------
+;; GDBus invokes vtable callbacks inside a foreign stack frame. Any Racket
+;; allocation / break check there can deschedule and longjmp out of that
+;; frame: Racket 9.0 raises internal-error, 9.3 corrupts the heap (podlens
+;; verify core-dumped once callbacks actually dispatched). Even _string FFI
+;; arguments allocate in the wrapper. So the callbacks below are pure FFI +
+;; fixnum straight-line code: g_strcmp0 against static C strings, a
+;; precomputed variant table, and a command ring. All string conversion and
+;; handler dispatch happens on the pump thread, outside the foreign frame.
+
+(defgio g_variant_ref (_fun _GVariant -> _GVariant))
+(defgio g_variant_unref (_fun _GVariant -> _void))
+(defglib g_strcmp0 (_fun _pointer _pointer -> _int))
+
+(define (cstr s)
+  (define n (string-length s))
+  (define b (malloc _byte (add1 n)))
+  (for ([i (in-range n)])
+    (ptr-set! b _byte i (char->integer (string-ref s i))))
+  (ptr-set! b _byte n 0)
+  b)
+
+(define prop-names
+  '("PlaybackStatus" "Metadata"
+                     "Position"
+                     "Rate"
+                     "Volume"
+                     "MinimumRate"
+                     "MaximumRate"
+                     "CanGoNext"
+                     "CanGoPrevious"
+                     "CanPlay"
+                     "CanPause"
+                     "CanSeek"
+                     "CanControl"
+                     "CanQuit"
+                     "CanRaise"
+                     "HasTrackList"
+                     "Identity"
+                     "DesktopEntry"
+                     "SupportedUriSchemes"
+                     "SupportedMimeTypes"))
+(define prop-cvec (list->vector (map cstr prop-names)))
+(define c-root-iface (cstr "org.mpris.MediaPlayer2"))
+(define prop-table (malloc _pointer 20))
+(for ([i (in-range 20)])
+  (ptr-set! prop-table _pointer i #f))
+
+(define method-names '("Play" "Pause" "Stop" "PlayPause" "Next" "Previous" "Seek" "SetPosition"))
+(define method-cvec (list->vector (map cstr method-names)))
+(define cmd-ring (malloc _pointer 16))
+(define cmd-idx-ring (malloc _int64 8))
+(define cmd-head (box 0))
+(define cmd-tail (box 0))
+
+(define (prop-ref i)
+  (define v (ptr-ref prop-table _pointer i))
+  (if v
+      (g_variant_ref v)
+      (g_variant_new_string "")))
+
+(define get-property-cb
+  (cast (lambda (conn sender path iface name err user)
+          (set-box! get-cb-count (add1 (unbox get-cb-count)))
+          (if (zero? (g_strcmp0 iface c-root-iface))
+              (cond
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 13))) (prop-ref 13)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 14))) (prop-ref 14)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 15))) (prop-ref 15)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 16))) (prop-ref 16)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 17))) (prop-ref 17)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 18))) (prop-ref 18)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 19))) (prop-ref 19)]
+                [else (g_variant_new_string "")])
+              (cond
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 0))) (prop-ref 0)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 1))) (prop-ref 1)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 2))) (prop-ref 2)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 3))) (prop-ref 3)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 4))) (prop-ref 4)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 5))) (prop-ref 5)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 6))) (prop-ref 6)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 7))) (prop-ref 7)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 8))) (prop-ref 8)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 9))) (prop-ref 9)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 10))) (prop-ref 10)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 11))) (prop-ref 11)]
+                [(zero? (g_strcmp0 name (vector-ref prop-cvec 12))) (prop-ref 12)]
+                [else (g_variant_new_string "")])))
+        (_fun _pointer _pointer _pointer _pointer _pointer _pointer _pointer -> _pointer)
+        _fpointer))
+
+(define method-call-cb
+  (cast (lambda (conn sender path iface method parameters invocation user)
+          (define midx
+            (cond
+              [(zero? (g_strcmp0 method (vector-ref method-cvec 0))) 0]
+              [(zero? (g_strcmp0 method (vector-ref method-cvec 1))) 1]
+              [(zero? (g_strcmp0 method (vector-ref method-cvec 2))) 2]
+              [(zero? (g_strcmp0 method (vector-ref method-cvec 3))) 3]
+              [(zero? (g_strcmp0 method (vector-ref method-cvec 4))) 4]
+              [(zero? (g_strcmp0 method (vector-ref method-cvec 5))) 5]
+              [(zero? (g_strcmp0 method (vector-ref method-cvec 6))) 6]
+              [(zero? (g_strcmp0 method (vector-ref method-cvec 7))) 7]
+              [else -1]))
+          (when (>= midx 0)
+            (define i (unbox cmd-head))
+            (unless (= (modulo (add1 i) 8) (unbox cmd-tail))
+              (ptr-set! cmd-ring _pointer (* 2 i) invocation)
+              (ptr-set! cmd-ring _pointer (+ (* 2 i) 1) (g_variant_ref parameters))
+              (ptr-set! cmd-idx-ring _int64 i midx)
+              (set-box! cmd-head (modulo (add1 i) 8)))))
+        (_fun _pointer _pointer _pointer _pointer _pointer _pointer _pointer _pointer -> _void)
+        _fpointer))
+
+(define set-property-cb
+  (cast (lambda (conn sender path iface name value err user) #f)
+        (_fun _pointer _pointer _pointer _pointer _pointer _pointer _pointer _pointer -> _bool)
+        _fpointer))
+
+(define (drain-commands!)
+  (let loop ()
+    (define t (unbox cmd-tail))
+    (unless (= t (unbox cmd-head))
+      (define inv (ptr-ref cmd-ring _pointer (* 2 t)))
+      (define par (ptr-ref cmd-ring _pointer (+ (* 2 t) 1)))
+      (define midx (ptr-ref cmd-idx-ring _int64 t))
+      (set-box! cmd-tail (modulo (add1 t) 8))
+      (with-handlers
+          ([exn:fail?
+            (lambda (e)
+              (g_dbus_method_invocation_return_error inv 0 0 "glaze now-playing handler failed"))])
+        (dispatch-command! (list-ref method-names midx) par)
+        (g_dbus_method_invocation_return_value inv #f))
+      (g_variant_unref par)
+      (loop))))
 
 (define (dispatch-command! name parameters)
   (define handler (unbox handler-box))
@@ -379,65 +507,34 @@
        (handler 'seek-to (/ (g_variant_get_int64 (g_variant_get_child_value parameters 1)) 1e6))]
       [else (void)])))
 
-(define method-call-cb
-  (cast (lambda (conn sender path iface method parameters invocation user)
-          ;; Atomic body: no descheduling inside the foreign callback frame.
-          (in-callback (lambda ()
-                         (with-handlers ([exn:fail? (lambda (e)
-                                                      (g_dbus_method_invocation_return_error
-                                                       invocation
-                                                       0
-                                                       0
-                                                       "glaze now-playing handler failed"))])
-                           (dispatch-command! method parameters)
-                           (g_dbus_method_invocation_return_value invocation #f)))))
-        (_fun _GDBusConnection _string _string _string _string _GVariant _pointer _pointer -> _void)
-        _fpointer))
+(define (store-prop! i v)
+  (define old (ptr-ref prop-table _pointer i))
+  (when old
+    (g_variant_unref old))
+  (ptr-set! prop-table _pointer i (g_variant_ref_sink v)))
 
-(define (root-property name)
-  (define info (unbox state-box))
-  (case name
-    [("CanQuit" "CanRaise" "HasTrackList") (g_variant_new_boolean #f)]
-    [("Identity")
-     (g_variant_new_string (if info
-                               (hash-ref info 'identifier "glaze")
-                               "glaze"))]
-    [("DesktopEntry") (g_variant_new_string "")]
-    [("SupportedUriSchemes" "SupportedMimeTypes") (g_variant_new_strv #f 0)]
-    [else #f]))
-
-(define (player-property name)
-  (define info (unbox state-box))
-  (case name
-    [("PlaybackStatus") (g_variant_new_string (playback-status info))]
-    [("Metadata") (metadata-variant (or info (hash 'title "" 'duration 0.0)))]
-    [("Position")
-     (g_variant_new_int64 (if info
-                              (position-usecs info)
-                              0))]
-    [("Rate" "Volume" "MinimumRate" "MaximumRate") (g_variant_new_double 1.0)]
-    [("CanGoNext" "CanGoPrevious" "CanPlay" "CanPause" "CanSeek" "CanControl")
-     (g_variant_new_boolean #t)]
-    [else #f]))
-
-(define get-property-cb
-  (cast (lambda (conn sender path iface name err user)
-          (in-callback (lambda ()
-                         (set-box! get-cb-count (add1 (unbox get-cb-count)))
-                         (fprintf (current-error-port) "[np-get] enter iface=~a name=~a\n" iface name)
-                         (define v
-                           (with-handlers ([exn:fail? (lambda (e) #f)])
-                             (if (equal? iface "org.mpris.MediaPlayer2")
-                                 (root-property name)
-                                 (player-property name))))
-                         (or v (g_variant_new_string "")))))
-        (_fun _GDBusConnection _string _string _string _string _pointer _pointer -> _GVariant)
-        _fpointer))
-
-(define set-property-cb
-  (cast (lambda (conn sender path iface name value err user) #f)
-        (_fun _GDBusConnection _string _string _string _string _GVariant _pointer _pointer -> _bool)
-        _fpointer))
+;; Precompute every property variant on the publishing (request) thread so
+;; the foreign-frame callback only refs a ready pointer.
+(define (build-props! info)
+  (store-prop! 0 (g_variant_new_string (playback-status info)))
+  (store-prop! 1 (metadata-variant (or info (hash 'title "" 'duration 0.0))))
+  (store-prop! 2
+               (g_variant_new_int64 (if info
+                                        (position-usecs info)
+                                        0)))
+  (for ([i (in-range 3 7)])
+    (store-prop! i (g_variant_new_double 1.0)))
+  (for ([i (in-range 7 13)])
+    (store-prop! i (g_variant_new_boolean #t)))
+  (for ([i (in-range 13 16)])
+    (store-prop! i (g_variant_new_boolean #f)))
+  (store-prop! 16
+               (g_variant_new_string (if info
+                                         (hash-ref info 'identifier "glaze")
+                                         "glaze")))
+  (store-prop! 17 (g_variant_new_string ""))
+  (store-prop! 18 (g_variant_new_strv #f 0))
+  (store-prop! 19 (g_variant_new_strv #f 0)))
 
 (define vtable
   (make-GDBusInterfaceVTable method-call-cb get-property-cb set-property-cb #f #f #f #f #f #f #f #f))
@@ -530,9 +627,11 @@
   (with-handlers ([exn:fail? (lambda (e) (set-box! err-box (exn-message e)))])
     (cond
       [info
+       (build-props! info)
        (ensure-registered! info)
        (emit-properties! info)]
       [else
+       (build-props! #f)
        (set-box! last-position-box 0.0)
        (emit-properties! #f)])))
 
