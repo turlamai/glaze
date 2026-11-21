@@ -197,8 +197,6 @@
                      volume-name
                      "-size"
                      (format "~am" mb)
-                     "-format"
-                     "UDRW"
                      "-ov"
                      (path->string rw-image))
           (error 'build-app "hdiutil create failed"))
