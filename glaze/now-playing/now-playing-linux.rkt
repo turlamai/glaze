@@ -71,6 +71,8 @@
 (defgio g_variant_new_dict (_fun _string _pointer -> _GVariant) #:c-id g_variant_new)
 (defgio g_variant_ref_sink (_fun _GVariant -> _GVariant))
 (defgio g_variant_get_string (_fun _GVariant _pointer -> _string))
+(defgio g_variant_get_variant (_fun _GVariant -> _GVariant))
+(defgio g_variant_get_type_string (_fun _GVariant -> _string))
 (defgio g_variant_get_boolean (_fun _GVariant -> _bool))
 (defgio g_variant_get_int64 (_fun _GVariant -> _int64))
 (defgio g_variant_get_double (_fun _GVariant -> _double))
@@ -518,7 +520,12 @@
 (define (parse-reply reply property)
   (and reply
        (let ()
-         (define inner (g_variant_get_child_value reply 0))
+         (define inner0 (g_variant_get_child_value reply 0))
+         ;; Properties.Get replies wrap the value in a variant container: unwrap.
+         (define inner
+           (if (and inner0 (string=? (g_variant_get_type_string inner0) "v"))
+               (g_variant_get_variant inner0)
+               inner0))
          (case property
            [("Metadata")
             (define title-v (g_variant_lookup_value inner "xesam:title" #f))
