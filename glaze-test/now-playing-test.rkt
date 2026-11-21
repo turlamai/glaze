@@ -11,6 +11,7 @@
          rackunit
          racket/system
          racket/string
+         racket/file
          ffi/unsafe)
 
 ;; GDBus dispatches method calls and name callbacks on the main context;
@@ -210,7 +211,7 @@
         ;; self-Get is avoided (owning-connection async finish idles do not
         ;; dispatch under Racket's atomic FFI mode).
         (define bus-name (hash-ref os 'bus-name))
-        (define get-file (format "/tmp/glaze-np-get-~a.txt" (current-process-id)))
+        (define get-file "/tmp/glaze-np-get.txt")
         (system
          (format
           "dbus-send --session --print-reply --reply-timeout=3000 --dest=~a /org/mpris/MediaPlayer2 org.freedesktop.DBus.Properties.Get string:org.mpris.MediaPlayer2.Player string:Metadata > ~a 2>&1 &"
