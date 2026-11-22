@@ -297,6 +297,7 @@
                         app-publisher
                         app-identifier
                         project-dir
+                        (and icon-path (path->complete-path icon-path))
                         (asset-path dmg-background 'dmg-background)
                         (asset-path installer-license 'installer-license)
                         (asset-path installer-banner 'installer-banner)
@@ -334,6 +335,7 @@
                         publisher
                         identifier
                         project-dir
+                        icon
                         dmg-background
                         installer-license
                         installer-banner
@@ -349,7 +351,8 @@
                              #:project-dir project-dir
                              #:license-rtf installer-license
                              #:banner-bmp installer-banner
-                             #:dialog-bmp installer-dialog)]
+                             #:dialog-bmp installer-dialog
+                             #:icon-ico icon)]
     [(macosx) (make-macos-installer out-dir app-name (or version "0.0.0") dmg-background)]
     [else
      (make-linux-installer

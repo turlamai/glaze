@@ -35,9 +35,9 @@
                '(("&" . "&amp;") ("<" . "&lt;") (">" . "&gt;") ("'" . "&apos;") ("\"" . "&quot;")))])
     (string-replace result (car replacement) (cdr replacement))))
 
-;; Minimal WiX v4 source referencing the dist directory contents. The wizard
-;; UI (welcome, license agreement, install directory, progress, exit) comes
-;; from the UI extension; the exit page offers launching the app through the
+;; Minimal WiX v4 source referencing the dist directory contents. The shorter
+;; UI keeps the license, progress and finish pages without a redundant install-
+;; directory choice. The exit page offers launching the app through the
 ;; Util extension's WixShellExec. Optional paths (license RTF, wizard
 ;; bitmaps) ride in as WixVariables; omitted ones keep the wizard defaults.
 (define (windows-wxs app-name
@@ -47,11 +47,18 @@
                      identifier
                      #:license-rtf [license-rtf #f]
                      #:banner-bmp [banner-bmp #f]
-                     #:dialog-bmp [dialog-bmp #f])
+                     #:dialog-bmp [dialog-bmp #f]
+                     #:icon-ico [icon-ico #f])
   (define dist (xml-escape (path->string dist-dir)))
   (define (wix-variable id path)
     (if path
         (format "    <WixVariable Id='~a' Value='~a' />\n" id (xml-escape (path->string path)))
+        ""))
+  (define icon-metadata
+    (if icon-ico
+        (format
+         "    <Icon Id='GlazeAppIcon.ico' SourceFile='~a' />\n    <Property Id='ARPPRODUCTICON' Value='GlazeAppIcon.ico' />\n"
+         (xml-escape (path->string icon-ico)))
         ""))
   (format
    #<<WXEOF
@@ -64,13 +71,12 @@
       <ComponentGroupRef Id='ProductComponents' />
       <ComponentGroupRef Id='ShortcutComponents' />
     </Feature>
-~a~a~a    <Property Id='WIXUI_INSTALLDIR' Value='INSTALLDIR' />
-    <Property Id='WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT' Value='Launch ~a' />
+~a~a~a~a    <Property Id='WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT' Value='Launch ~a' />
     <Property Id='WixShellExecTarget' Value='[INSTALLDIR]~a.exe' />
     <CustomAction Id='LaunchApplication' BinaryRef='Wix4UtilCA_~a' DllEntry='WixShellExec' Impersonate='yes' />
-    <ui:WixUI Id='WixUI_InstallDir' />
+    <ui:WixUI Id='WixUI_Minimal' />
     <UI>
-      <Publish Dialog='ExitDialog' Control='Finish' Event='DoAction' Value='LaunchApplication' Condition='WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed' Order='2' />
+      <Publish Dialog='ExitDialog' Control='Finish' Event='DoAction' Value='LaunchApplication' Condition='WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT (REMOVE = &quot;ALL&quot;)' Order='2' />
     </UI>
   </Package>
   <Fragment>
@@ -80,18 +86,13 @@
     <StandardDirectory Id='ProgramMenuFolder'>
       <Directory Id='ApplicationProgramsFolder' Name='~a' />
     </StandardDirectory>
-    <StandardDirectory Id='DesktopFolder' />
   </Fragment>
   <Fragment>
     <ComponentGroup Id='ShortcutComponents' Directory='ApplicationProgramsFolder'>
       <Component Id='StartMenuShortcutComponent' Guid='*'>
         <Shortcut Id='StartMenuApplicationShortcut' Name='~a' Target='[INSTALLDIR]~a.exe' WorkingDirectory='INSTALLDIR' />
         <RemoveFolder Id='RemoveApplicationProgramsFolder' Directory='ApplicationProgramsFolder' On='uninstall' />
-        <RegistryValue Root='HKCU' Key='Software\~a\Shortcuts' Name='StartMenu' Type='integer' Value='1' KeyPath='yes' />
-      </Component>
-      <Component Id='DesktopShortcutComponent' Guid='*' Directory='DesktopFolder'>
-        <Shortcut Id='DesktopApplicationShortcut' Name='~a' Target='[INSTALLDIR]~a.exe' WorkingDirectory='INSTALLDIR' />
-        <RegistryValue Root='HKCU' Key='Software\~a\Shortcuts' Name='Desktop' Type='integer' Value='1' KeyPath='yes' />
+        <RegistryValue Root='HKLM' Key='Software\~a\Shortcuts' Name='StartMenu' Type='integer' Value='1' KeyPath='yes' />
       </Component>
     </ComponentGroup>
   </Fragment>
@@ -109,6 +110,7 @@ WXEOF
    (wix-variable "WixUILicenseRtf" license-rtf)
    (wix-variable "WixUIBannerBmp" banner-bmp)
    (wix-variable "WixUIDialogBmp" dialog-bmp)
+   icon-metadata
    (xml-escape app-name) ; license checkbox label
    (xml-escape app-name) ; shell-exec target
    (if (equal? (system-type 'arch) 'aarch64) "ARM64" "X64")
@@ -117,9 +119,6 @@ WXEOF
    (xml-escape app-name) ; start-menu shortcut name
    (xml-escape app-name) ; start-menu shortcut target
    (xml-escape identifier) ; start-menu registry key
-   (xml-escape app-name) ; desktop shortcut name
-   (xml-escape app-name) ; desktop shortcut target
-   (xml-escape identifier) ; desktop registry key
    dist ; harvested payload
    ))
 
@@ -224,19 +223,21 @@ WXEOF
   (format
    #<<NSI
 Unicode True
+!include "MUI2.nsh"
 Name "~a"
 OutFile "~a\~a-setup.exe"
 RequestExecutionLevel admin
 InstallDir "$PROGRAMFILES64\~a"
 InstallDirRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\~a" "InstallLocation"
-Page directory
-Page instfiles
-UninstPage instfiles
+!insertmacro MUI_PAGE_INSTFILES
+!insertmacro MUI_UNPAGE_INSTFILES
+!insertmacro MUI_LANGUAGE "English"
 Section "Install"
   SetRegView 64
+  SetShellVarContext all
   SetOutPath "$INSTDIR"
   File /r /x "*.msi" /x "*-setup.exe" /x "*.wxs" /x "*.nsi" "~a\*.*"
-  CreateShortcut "$DESKTOP\~a.lnk" "$INSTDIR\~a.exe"
+  CreateShortcut "$SMPROGRAMS\~a.lnk" "$INSTDIR\~a.exe"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\~a" "DisplayName" "~a"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\~a" "DisplayVersion" "~a"
@@ -250,7 +251,8 @@ Section "Install"
 SectionEnd
 Section "Uninstall"
   SetRegView 64
-  Delete "$DESKTOP\~a.lnk"
+  SetShellVarContext all
+  Delete "$SMPROGRAMS\~a.lnk"
   RMDir /r "$INSTDIR"
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\~a"
 SectionEnd
