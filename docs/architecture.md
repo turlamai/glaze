@@ -80,6 +80,7 @@ Current physical owners are:
 | Build entry generation | `glaze/private/build-entry.rkt` | `glaze/build.rkt` |
 | Linux, macOS, and Windows package metadata | `glaze/private/*-package-metadata.rkt`, `glaze/private/macos-bundle-metadata.rkt`, and `glaze/private/windows-installer-metadata.rkt` | `glaze/build.rkt` |
 | Build graph, staging, signing, and notarization | `glaze/build.rkt` | public compatibility owner; further G2 boundary work remains |
+| Windows window capture (PrintWindow → BMP row order → PNG) | `glaze/private/windows-capture.rkt` | `glaze/webview/webview-windows.rkt`; the pure BMP encoder is platform-independent and unit-tested |
 
 The CLI is the first completed physical boundary. `glaze-cli/cli.rkt` is a
 small executable dispatcher; implementations live under `glaze-cli/private/`

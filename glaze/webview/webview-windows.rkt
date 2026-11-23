@@ -43,15 +43,16 @@
 
 (require ffi/unsafe
          racket/async-channel
-         racket/file
          racket/list
+         racket/path
          racket/string
          racket/system
          racket/runtime-path
          "../native-transport.rkt"
          "../tray/tray-protocol.rkt"
          "../private/id-allocator.rkt"
-         "../private/win32-arch.rkt")
+         "../private/win32-arch.rkt"
+         "../private/windows-capture.rkt")
 
 (provide open-webview
          supported?
@@ -77,7 +78,6 @@
 (define user32 (ffi-lib "user32"))
 (define kernel32 (ffi-lib "kernel32"))
 (define ole32 (ffi-lib "ole32"))
-(define gdi32 (ffi-lib "gdi32"))
 (define loader
   (or (with-handlers ([exn:fail? (lambda (e) #f)])
         (ffi-lib loader-path))
@@ -370,27 +370,8 @@
 (define GetModuleHandleW
   (get-ffi-obj "GetModuleHandleW" kernel32 (_fun _pointer -> _pointer) (lambda () #f)))
 (define CoInitialize (get-ffi-obj "CoInitialize" ole32 (_fun _pointer -> _int32) (lambda () #f)))
-
-;; ---- GDI capture bindings (capture! via PrintWindow) ----
 (define GetClientRect
   (get-ffi-obj "GetClientRect" user32 (_fun _pointer _pointer -> _bool) (lambda () #f)))
-(define GetDC (get-ffi-obj "GetDC" user32 (_fun _pointer -> _pointer) (lambda () #f)))
-(define ReleaseDC (get-ffi-obj "ReleaseDC" user32 (_fun _pointer _pointer -> _int) (lambda () #f)))
-(define CreateCompatibleDC
-  (get-ffi-obj "CreateCompatibleDC" gdi32 (_fun _pointer -> _pointer) (lambda () #f)))
-(define DeleteDC (get-ffi-obj "DeleteDC" gdi32 (_fun _pointer -> _bool) (lambda () #f)))
-(define CreateCompatibleBitmap
-  (get-ffi-obj "CreateCompatibleBitmap" gdi32 (_fun _pointer _int _int -> _pointer) (lambda () #f)))
-(define SelectObject
-  (get-ffi-obj "SelectObject" gdi32 (_fun _pointer _pointer -> _pointer) (lambda () #f)))
-(define DeleteObject (get-ffi-obj "DeleteObject" gdi32 (_fun _pointer -> _bool) (lambda () #f)))
-(define PrintWindow
-  (get-ffi-obj "PrintWindow" user32 (_fun _pointer _pointer _uint -> _bool) (lambda () #f)))
-(define GetDIBits
-  (get-ffi-obj "GetDIBits"
-               gdi32
-               (_fun _pointer _pointer _uint _uint _pointer _pointer _uint -> _int)
-               (lambda () #f)))
 
 (define-cstruct _WNDCLASSEXW
                 ([cbSize _uint] [style _uint]
@@ -420,20 +401,6 @@
                                 [ptMaxPosition _POINT]
                                 [rcNormalPosition _RECT]
                                 [rcDevice _RECT]))
-;; BITMAPINFOHEADER + BITMAPINFO for GetDIBits.
-(define-cstruct _BMIH
-                ([biSize _uint] [biWidth _long]
-                                [biHeight _long]
-                                [biPlanes _ushort]
-                                [biBitCount _ushort]
-                                [biCompression _uint]
-                                [biSizeImage _uint]
-                                [biXPelsPerMeter _long]
-                                [biYPelsPerMeter _long]
-                                [biClrUsed _uint]
-                                [biClrImportant _uint]))
-(define-cstruct _BMI ([bmiHeader _BMIH] [bmiColors _uint32]))
-
 (define WM_DESTROY 2)
 (define WM_CLOSE 16)
 (define WM_SIZE 5)
@@ -443,9 +410,6 @@
 (define CW_USEDEFAULT -2147483648)
 (define SW_SHOW 5)
 (define PM_REMOVE 1)
-(define PW_RENDERFULLCONTENT 2)
-(define BI_RGB 0)
-(define DIB_RGB_COLORS 0)
 (define class-name #"GlazeWebView")
 
 (struct win:webview
@@ -941,99 +905,20 @@
 (define title (lambda (wv) ((cwv-getter 48) (win:webview-cwv-box wv)))) ; get_DocumentTitle
 (define url (lambda (wv) ((cwv-getter 4) (win:webview-cwv-box wv)))) ; get_Source
 
-;; Window capture: PrintWindow into a DIB, write a BMP, convert to PNG with
-;; PowerShell's System.Drawing (present on every Windows install).
+;; Window capture is owned by glaze/private/windows-capture (glaze#140):
+;; PrintWindow into a top-down DIB, then a BMP whose rows are stored in
+;; bottom-up file order. A closed window or a failed stage returns #f after
+;; logging the underlying reason.
 (define (capture! wv [dest #f])
-  (with-handlers ([exn:fail? (lambda (e)
-                               (log "capture failed: ~a" (exn-message e))
-                               #f)])
-    (and
-     (not (unbox (win:webview-closed?-box wv)))
-     GetClientRect
-     PrintWindow
-     (let ()
-       (define hwnd (unbox (win:webview-hwnd-box wv)))
-       (define rc (make-RECT 0 0 0 0))
-       (GetClientRect hwnd rc)
-       (define w (- (RECT-right rc) (RECT-left rc)))
-       (define h (- (RECT-bottom rc) (RECT-top rc)))
-       (and
-        (> w 0)
-        (> h 0)
-        (let ()
-          (define hdc (GetDC hwnd))
-          (define mem (CreateCompatibleDC hdc))
-          (define bmp (CreateCompatibleBitmap hdc w h))
-          (define old (SelectObject mem bmp))
-          (define pw-ok? (PrintWindow hwnd mem PW_RENDERFULLCONTENT))
-          (unless pw-ok?
-            (log "capture: PrintWindow failed"))
-          (define bmi
-            (make-BMI (make-BMIH (ctype-sizeof _BMIH)
-                                 w
-                                 (- h) ; top-down
-                                 1
-                                 32
-                                 BI_RGB
-                                 0
-                                 0
-                                 0
-                                 0
-                                 0)
-                      0))
-          (define buf (malloc (* 4 w h) _uint8 'raw))
-          (define got (GetDIBits mem bmp 0 h buf bmi DIB_RGB_COLORS))
-          (unless (> got 0)
-            (log "capture: GetDIBits returned ~a" got))
-          (SelectObject mem old)
-          (DeleteObject bmp)
-          (DeleteDC mem)
-          (ReleaseDC hwnd hdc)
-          (and (> got 0)
-               (let ()
-                 ;; BMP file: header + (padded) BGRA rows.
-                 (define row (* 4 w))
-                 (define data-size (* row h))
-                 (define file-size (+ 54 data-size))
-                 (define out (make-bytes file-size 0))
-                 (bytes-copy! out 0 (bytes #x42 #x4D))
-                 (integer->integer-bytes file-size 4 #f #f out 2)
-                 (integer->integer-bytes 54 4 #f #f out 10)
-                 (integer->integer-bytes 40 4 #f #f out 14)
-                 (integer->integer-bytes w 4 #f #f out 18)
-                 (integer->integer-bytes h 4 #f #f out 22)
-                 (bytes-set! out 26 1)
-                 (bytes-set! out 28 32)
-                 (integer->integer-bytes data-size 4 #f #f out 34)
-                 (memcpy (ptr-add out 54) buf data-size)
-                 (define bmp-path (make-temporary-file "glaze-capture-~a.bmp"))
-                 (call-with-output-file bmp-path (lambda (o) (write-bytes out o)) #:exists 'replace)
-                 (define png-path
-                   (if dest
-                       (if (string? dest)
-                           (string->path dest)
-                           dest)
-                       (make-temporary-file "glaze-capture-~a.png")))
-                 (define ps
-                   (string-append "Add-Type -AssemblyName System.Drawing;"
-                                  "$b=[System.Drawing.Bitmap]::FromFile('"
-                                  (path->string bmp-path)
-                                  "');$b.Save('"
-                                  (path->string png-path)
-                                  "', [System.Drawing.Imaging.ImageFormat]::Png);$b.Dispose()"))
-                 (define ok?
-                   (with-handlers ([exn:fail? (lambda (e)
-                                                (log "capture: powershell failed: ~a" (exn-message e))
-                                                #f)])
-                     (parameterize ([current-directory (find-system-path 'temp-dir)])
-                       (system* (find-executable-path "powershell.exe")
-                                "-NoProfile"
-                                "-NonInteractive"
-                                "-Command"
-                                ps))))
-                 (delete-file bmp-path)
-                 (and ok? (file-exists? png-path) png-path)))))))))
+  (and (not (unbox (win:webview-closed?-box wv)))
+       (let ([hwnd (unbox (win:webview-hwnd-box wv))])
+         (and hwnd
+              (with-handlers ([exn:fail? (lambda (e)
+                                           (log "capture failed: ~a" (exn-message e))
+                                           #f)])
+                (capture-window->png hwnd dest))))))
 
+;; ---- window controls ----
 ;; ---- window controls ----
 (define SetWindowTextW
   (get-ffi-obj "SetWindowTextW" user32 (_fun _pointer _pointer -> _bool) (lambda () #f)))

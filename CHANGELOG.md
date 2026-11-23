@@ -144,6 +144,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Windows `webview-capture!` no longer saves vertically mirrored PNGs
+  (glaze#140). `GetDIBits` was asked for a top-down DIB (negative
+  `biHeight`) while the BMP file was written with a positive height, which
+  declares bottom-up storage — so every row was read back upside-down. The
+  capture path moved out of the WebView2 backend into the private owner
+  `glaze/private/windows-capture.rkt`: `top-down-bgra->bmp-bytes` is pure,
+  stores the rows in BMP bottom-up order, and is covered by
+  `glaze-test/windows-capture-test.rkt` on every platform. A failed
+  `PrintWindow`/`GetDIBits` stage now returns `#f` with the reason logged
+  instead of writing a blank image, GDI objects are released on every exit
+  path, the temporary BMP is always removed, and PowerShell path literals
+  are quoted safely.
+
 - macOS dmg creation no longer fails with `hdiutil: create failed - No
   space left on device` on CI runners with ample free space: both the
   branded and plain hdiutil paths sized the image via `-srcfolder`, whose
