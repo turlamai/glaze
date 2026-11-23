@@ -11,6 +11,7 @@
          rackunit
          racket/system
          racket/string
+         racket/port
          racket/file
          ffi/unsafe
          ffi/unsafe/atomic)
@@ -180,13 +181,11 @@
             (define exe (find-executable-path "dbus-send"))
             (if exe
                 (let ()
-                  (define out (open-output-string))
-                  (define err (open-output-string))
-                  (define-values (p _in _out _err)
+                  (define-values (p out err)
                     (apply subprocess
                            #f
-                           out
-                           err
+                           #f
+                           #f
                            exe
                            "--print-reply"
                            (string-append "--dest=" (hash-ref os 'bus-name))
@@ -200,7 +199,7 @@
                   (unless (sync/timeout 0 p)
                     (subprocess-kill p #t))
                   (subprocess-wait p)
-                  (string-append (get-output-string out) (get-output-string err)))
+                  (string-append (port->string out) (port->string err)))
                 "probe error: dbus-send not found")))
         (now-playing-set! (canonical))
         (define os
