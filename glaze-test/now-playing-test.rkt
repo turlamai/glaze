@@ -181,7 +181,7 @@
             (define exe (find-executable-path "dbus-send"))
             (if exe
                 (let ()
-                  (define-values (p out err)
+                  (define-values (p out _stdin err)
                     (apply subprocess
                            #f
                            #f
