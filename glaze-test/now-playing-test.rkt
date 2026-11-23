@@ -254,15 +254,14 @@
         (check-true (string-contains? (sig-out) "Metadata"))
         (check-true (string-contains? (sig-out) "Glaze Now Playing Test"))
         (define get-out
-          (probe "org.freedesktop.DBus.Properties"
-                 "Get"
+          (probe "org.freedesktop.DBus.Properties.Get"
                  "string:org.mpris.MediaPlayer2.Player"
                  "string:Metadata"))
         (fprintf (current-error-port) "[now-playing-diag] external Get -> ~a\n" get-out)
         (check-false (string-contains? get-out "NoReply"))
         (check-false (string-contains? get-out "UnknownMethod"))
         (check-true (string-contains? get-out "Glaze Now Playing Test"))
-        (define pause-out (probe "org.mpris.MediaPlayer2.Player" "Pause"))
+        (define pause-out (probe "org.mpris.MediaPlayer2.Player.Pause"))
         (fprintf (current-error-port) "[now-playing-diag] external Pause -> ~a\n" pause-out)
         (define pause-deadline (+ (current-inexact-milliseconds) 3000))
         (let loop ()
