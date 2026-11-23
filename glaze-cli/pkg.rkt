@@ -34,6 +34,7 @@
 
 (define glaze-repo-url "https://github.com/turlamai/glaze")
 (define legacy-pkg-names '("glaze-lib" "glaze-cli" "glaze-doc" "glaze-test"))
+(define legacy-pkg-symbols (map string->symbol legacy-pkg-names))
 (define glaze-pkg-names (cons "glaze" legacy-pkg-names))
 
 ;; ---- pure helpers -------------------------------------------------------------
@@ -333,7 +334,11 @@
     (newline)
     (exit (if (null? all-problems) 0 1)))
   (printf "glaze package table:\n")
-  (for ([(name row) (in-hash packages)])
+  (for ([(name row) (in-hash packages)]
+        ;; The four pre-single-package names are only interesting when they
+        ;; are still present; listing them as "not installed" on every
+        ;; healthy machine reads like a problem.
+        #:unless (and (equal? (hash-ref row 'state) "not-installed") (memq name legacy-pkg-symbols)))
     (case (hash-ref row 'state)
       [("link") (printf "  ~a: link -> ~a\n" name (hash-ref row 'target))]
       [("installed") (printf "  ~a: installed (non-link): ~a\n" name (hash-ref row 'description))]

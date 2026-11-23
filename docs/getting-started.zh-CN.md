@@ -137,8 +137,11 @@ raco glaze build --name myapp
 打包完成后，把产物对照家族的体积/启动预算上报：
 
 ```sh
-raco glaze measure
+raco glaze measure size
+raco glaze measure startup
 ```
+
+`measure size` 列出 `dist/` 下的产物并对照仓库内的体积预算；`measure startup` 启动打包后的应用并报告冷启动时间。任一预算超出都会以非零退出码结束。
 
 签名与公证参数（`--sign`、`--notarize`、`--timestamp-url`）以及 Ed25519 更新管线（`updater-keygen`、`update-sign`、`update-verify`、`manifest-sign`、`manifest-verify`）见 `raco glaze help`；发布流程见[发布与更新（英文）](release-and-updates.md)。
 

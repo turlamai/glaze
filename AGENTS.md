@@ -237,12 +237,19 @@ raco glaze verify
 raco glaze inspect [--json]
 raco glaze doctor [--fix] [--json]
 raco glaze schema write|check [--json]
-raco glaze build
-raco glaze measure size|startup
+raco glaze build [--name --version --installer --sign --notarize ...]
+raco glaze clean [--out DIR --compiled --dry-run --json]
+raco glaze measure size|startup [--budget <file>] [--artifact <name>]
 raco glaze install <rev>
 raco glaze updater-keygen
 raco glaze update-sign|update-verify
 raco glaze manifest-sign|manifest-verify
+raco glaze compliance [--json]
+raco glaze support-bundle [--out FILE]
+raco glaze acceptance [--json --out FILE]
+raco glaze matrix <report>... [--json]
+raco glaze check-release-version <tag> [--allow-rc --json]
+raco glaze verify-release-assets <manifest> <dir> <pubkey> [--base-url URL --json]
 raco glaze help
 ```
 
@@ -274,6 +281,8 @@ glaze/
 │   ├── dialogs.rkt
 │   ├── deeplink.rkt
 │   ├── autolaunch.rkt
+│   ├── native-transport.rkt
+│   ├── private/          ; implementation-only owners（G2 边界，见 docs/architecture.md）
 │   ├── sys/
 │   ├── tray/
 │   └── webview/
@@ -284,10 +293,12 @@ glaze/
 │       ├── webview-linux.rkt
 │       └── webview-stub.rkt
 ├── glaze-cli/
+│   └── private/          ; 各命令的实现模块
 ├── glaze-doc/
 ├── glaze-test/
 ├── examples/
-└── scripts/
+├── scripts/
+└── docs/                 ; 架构、API 稳定性、发布流程等仓库文档
 ```
 
 仓库根是一个 `collection 'multi` 的 Racket 包。集合级 `scribblings` / `raco-commands` 要放在相应 collection 的 `info.rkt`，不要只放根 `info.rkt`。
