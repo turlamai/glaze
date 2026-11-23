@@ -144,6 +144,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Linux Now Playing answers external D-Bus calls again (glaze#157).
+  `g_dbus_connection_register_object` dispatches its vtable on the
+  thread-default main context of the *registering* thread, but registration
+  ran under the global default context while the backend only pumped its
+  private connection context: every `Properties.Get` and player command from
+  another process timed out with `NoReply` unless a webview happened to pump
+  the default context. Registration (and name ownership) now runs under the
+  backend's own context, the backend pump never stands down while a webview
+  is open, `diagnostics` reports `thread-default-now`, and the Linux CI test
+  asserts an external `Properties.Get` reply and an incoming `Pause` instead
+  of skipping them. The unused `glaze/private/main-context-registry` is
+  removed.
+
 - Windows `webview-capture!` no longer saves vertically mirrored PNGs
   (glaze#140). `GetDIBits` was asked for a top-down DIB (negative
   `biHeight`) while the BMP file was written with a positive height, which

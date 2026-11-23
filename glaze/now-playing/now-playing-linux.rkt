@@ -18,8 +18,7 @@
          ffi/unsafe/define
          ffi/unsafe/atomic
          glaze/ffi-discovery
-         racket/string
-         "../private/main-context-registry.rkt")
+         racket/string)
 
 (provide supported?
          publish!
@@ -198,16 +197,19 @@
                               (when (in-atomic-mode?)
                                 (end-atomic))
                               (set-box! pump-iters (add1 (unbox pump-iters)))
-                              ;; When a webview pump is live it iterates our
-                              ;; context (single iterator thread: a second
-                              ;; Racket thread dispatching GDBus callbacks
-                              ;; corrupts the scheduler under hosted WebKit).
-                              (unless (external-pump?)
-                                (with-handlers ([exn:fail? (lambda (e)
-                                                             (fprintf (current-error-port)
-                                                                      "[np-pump] exn=~a\n"
-                                                                      (exn-message e)))])
-                                  (g_main_context_iteration (unbox ctx-box) #f)))
+                              ;; The vtable is registered under this context
+                              ;; (see ensure-registered!), so this pump is the
+                              ;; only thing that dispatches incoming MPRIS
+                              ;; method calls and property reads. It always
+                              ;; runs: standing down while a webview pump is
+                              ;; live left every incoming call unanswered
+                              ;; (glaze#157). The webview pump only iterates
+                              ;; the default context, a different one.
+                              (with-handlers ([exn:fail? (lambda (e)
+                                                           (fprintf (current-error-port)
+                                                                    "[np-pump] exn=~a\n"
+                                                                    (exn-message e)))])
+                                (g_main_context_iteration (unbox ctx-box) #f))
                               ;; Racket 9.0 can leave atomic mode set after an
                               ;; FFI call that dispatched callbacks; a bare
                               ;; sleep then raises internal-error and kills
@@ -270,7 +272,6 @@
                (set-box! conn-box c)
                (when ctx
                  (set-box! ctx-box ctx)
-                 (register-main-context! ctx)
                  (start-pump!)))
              c))))
 
@@ -318,6 +319,8 @@
           (format "~a" (unbox ctx-box))
           'ctx-is-default
           (and g_main_context_default (equal? (unbox ctx-box) (g_main_context_default)))
+          'thread-default-now
+          (and g_main_context_get_thread_default (g_main_context_get_thread_default))
           'pump-alive
           (and (unbox pump-thread-box) (thread-running? (unbox pump-thread-box)))
           'pump-iters
@@ -575,33 +578,49 @@
       (error 'now-playing-linux "MPRIS introspection XML rejected"))
     (set-box! node-box node))
   (define interfaces (node-interfaces (unbox node-box)))
-  (when (zero? (unbox root-reg-box))
-    (define err (malloc _pointer 1))
-    (ptr-set! err _pointer #f)
-    (set-box! root-reg-box
-              (g_dbus_connection_register_object conn
-                                                 "/org/mpris/MediaPlayer2"
-                                                 (interface-at interfaces 0)
-                                                 vtable
-                                                 #f
-                                                 #f
-                                                 err)))
-  (when (zero? (unbox player-reg-box))
-    (define err (malloc _pointer 1))
-    (ptr-set! err _pointer #f)
-    (set-box! player-reg-box
-              (g_dbus_connection_register_object conn
-                                                 "/org/mpris/MediaPlayer2"
-                                                 (interface-at interfaces 1)
-                                                 vtable
-                                                 #f
-                                                 #f
-                                                 err)))
-  (when (zero? (unbox owner-box))
-    (define name
-      (string-append "org.mpris.MediaPlayer2." (sanitize-id (hash-ref info 'identifier "glaze"))))
-    (set-box! bus-name-box name)
-    (set-box! owner-box (g_bus_own_name_on_connection conn name 0 #f #f #f #f #f))))
+  ;; GDBus invokes the vtable in the THREAD-DEFAULT main context of the
+  ;; registering thread (GIO docs for g_dbus_connection_register_object) — not
+  ;; in the context the connection was created in. Registration used to run on
+  ;; whatever request thread published first, i.e. under the global default
+  ;; context, which nothing iterates in a headless process: every incoming
+  ;; call and Properties.Get timed out with NoReply (glaze#157). Register
+  ;; under the backend's own pumped context so the pump below dispatches them.
+  (define ctx (unbox ctx-box))
+  (when ctx
+    (g_main_context_push_thread_default ctx))
+  (dynamic-wind void
+                (lambda ()
+                  (when (zero? (unbox root-reg-box))
+                    (define err (malloc _pointer 1))
+                    (ptr-set! err _pointer #f)
+                    (set-box! root-reg-box
+                              (g_dbus_connection_register_object conn
+                                                                 "/org/mpris/MediaPlayer2"
+                                                                 (interface-at interfaces 0)
+                                                                 vtable
+                                                                 #f
+                                                                 #f
+                                                                 err)))
+                  (when (zero? (unbox player-reg-box))
+                    (define err (malloc _pointer 1))
+                    (ptr-set! err _pointer #f)
+                    (set-box! player-reg-box
+                              (g_dbus_connection_register_object conn
+                                                                 "/org/mpris/MediaPlayer2"
+                                                                 (interface-at interfaces 1)
+                                                                 vtable
+                                                                 #f
+                                                                 #f
+                                                                 err)))
+                  (when (zero? (unbox owner-box))
+                    (define name
+                      (string-append "org.mpris.MediaPlayer2."
+                                     (sanitize-id (hash-ref info 'identifier "glaze"))))
+                    (set-box! bus-name-box name)
+                    (set-box! owner-box (g_bus_own_name_on_connection conn name 0 #f #f #f #f #f))))
+                (lambda ()
+                  (when ctx
+                    (g_main_context_pop_thread_default ctx)))))
 
 (define (emit-properties! info)
   (define conn (unbox conn-box))
