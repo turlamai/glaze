@@ -15,7 +15,8 @@ raco glaze doctor --json
 raco glaze schema check --json
 raco glaze verify
 raco glaze build
-raco glaze measure
+raco glaze measure size
+raco glaze measure startup
 ```
 
 - `inspect --json` reports the versioned project contract, editable sources,
@@ -34,7 +35,8 @@ raco glaze measure
 - `build` packages the app; it warns when the project schema is not `ready`
   (run `raco glaze schema write` before release), so an out-of-date baseline
   at least cannot ship silently.
-- `measure` reports the packaged artifact's size and startup time against the
+- `measure size` / `measure startup` report the packaged artifact's size and
+  startup time against the
   checked-in budgets and fails when a budget is exceeded, so a size or
   startup regression surfaces at build time, not in release review.
 

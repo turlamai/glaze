@@ -137,8 +137,11 @@ Expected: a distributable under `dist/`. For an installer use `--installer` with
 After packaging, report the artifact against the family size/startup budgets:
 
 ```sh
-raco glaze measure
+raco glaze measure size
+raco glaze measure startup
 ```
+
+`measure size` lists every artifact under `dist/` and checks them against the checked-in size budget; `measure startup` launches the packaged app and reports cold-start time. Both exit non-zero when a budget is exceeded.
 
 Signing and notarization flags (`--sign`, `--notarize`, `--timestamp-url`) and the Ed25519 update pipeline (`updater-keygen`, `update-sign`, `update-verify`, `manifest-sign`, `manifest-verify`) are documented by `raco glaze help`; the release workflow lives in [release-and-updates](release-and-updates.md).
 
