@@ -103,19 +103,6 @@
 (defgio g_variant_builder_end (_fun _pointer -> _GVariant))
 (defgio g_variant_get_child_value (_fun _GVariant _int64 -> _GVariant))
 
-;; GDBusInterfaceVTable: method_call, get_property, set_property, padding[8].
-(define-cstruct _GDBusInterfaceVTable
-                ([method_call _fpointer] [get_property _fpointer]
-                                         [set_property _fpointer]
-                                         [pad0 _pointer]
-                                         [pad1 _pointer]
-                                         [pad2 _pointer]
-                                         [pad3 _pointer]
-                                         [pad4 _pointer]
-                                         [pad5 _pointer]
-                                         [pad6 _pointer]
-                                         [pad7 _pointer]))
-
 ;; GDBusNodeInfo { gint ref_count; gchar *path; GDBusInterfaceInfo **interfaces; ... }
 (define (node-interfaces node)
   (ptr-ref node _pointer 2))
@@ -166,6 +153,14 @@
 (define player-reg-box (box 0))
 (define err-box (box #f))
 (define get-cb-count (box 0))
+;; Notes from inside foreign callbacks, flushed to stderr by the pump thread
+;; after the foreign frame unwinds: writing to a port from a callback or from
+;; the handler that receives its re-raised exception runs in atomic mode and
+;; kills the thread with "attempt to deschedule".
+(define cb-notes-box (box '()))
+(define (cb-note! msg)
+  (with-handlers ([exn:fail? (lambda (_) (void))])
+    (set-box! cb-notes-box (cons msg (unbox cb-notes-box)))))
 (define ctx-box (box #f))
 (define pump-running-box (box #f))
 (define pump-thread-box (box #f))
@@ -183,41 +178,56 @@
 (define (start-pump!)
   (unless (or (unbox pump-running-box) (not (unbox ctx-box)))
     (set-box! pump-running-box #t)
-    (set-box! pump-thread-box
-              (parameterize ([current-custodian pump-custodian])
-                (thread (lambda ()
-                          (let loop ()
-                            (when (unbox pump-running-box)
-                              ;; Racket 9.0 can leave atomic mode set after
-                              ;; an FFI iteration that dispatched callbacks;
-                              ;; any later allocation would then raise
-                              ;; internal-error (or spin without yielding).
-                              ;; Outside the foreign frame here, so dropping
-                              ;; atomicity may safely deschedule.
-                              (when (in-atomic-mode?)
-                                (end-atomic))
-                              (set-box! pump-iters (add1 (unbox pump-iters)))
-                              ;; The vtable is registered under this context
-                              ;; (see ensure-registered!), so this pump is the
-                              ;; only thing that dispatches incoming MPRIS
-                              ;; method calls and property reads. It always
-                              ;; runs: standing down while a webview pump is
-                              ;; live left every incoming call unanswered
-                              ;; (glaze#157). The webview pump only iterates
-                              ;; the default context, a different one.
-                              (with-handlers ([exn:fail? (lambda (e)
-                                                           (fprintf (current-error-port)
-                                                                    "[np-pump] exn=~a\n"
-                                                                    (exn-message e)))])
-                                (g_main_context_iteration (unbox ctx-box) #f))
-                              ;; Racket 9.0 can leave atomic mode set after an
-                              ;; FFI call that dispatched callbacks; a bare
-                              ;; sleep then raises internal-error and kills
-                              ;; the pump. Tolerate it and keep iterating.
-                              (with-handlers ([exn:fail? (lambda (_) (void))])
-                                (sleep 0.005))
-                              (drain-commands!)
-                              (loop)))))))))
+    (set-box!
+     pump-thread-box
+     (parameterize ([current-custodian pump-custodian])
+       (thread (lambda ()
+                 (let loop ()
+                   (when (unbox pump-running-box)
+                     ;; Racket 9.0 can leave atomic mode set after
+                     ;; an FFI iteration that dispatched callbacks;
+                     ;; any later allocation would then raise
+                     ;; internal-error (or spin without yielding).
+                     ;; Outside the foreign frame here, so dropping
+                     ;; atomicity may safely deschedule.
+                     (when (in-atomic-mode?)
+                       (end-atomic))
+                     (set-box! pump-iters (add1 (unbox pump-iters)))
+                     ;; The vtable is registered under this context
+                     ;; (see ensure-registered!), so this pump is the
+                     ;; only thing that dispatches incoming MPRIS
+                     ;; method calls and property reads. It always
+                     ;; runs: standing down while a webview pump is
+                     ;; live left every incoming call unanswered
+                     ;; (glaze#157). The webview pump only iterates
+                     ;; the default context, a different one.
+                     (with-handlers ([exn:fail? (lambda (e)
+                                                  ;; I/O here would run in
+                                                  ;; atomic mode and
+                                                  ;; deschedule; stash
+                                                  ;; it for after the
+                                                  ;; foreign frame.
+                                                  (cb-note! (string-append "iteration exn: "
+                                                                           (exn-message e))))])
+                       (g_main_context_iteration (unbox ctx-box) #f))
+                     ;; A callback exception is re-raised on return
+                     ;; from the foreign call, which can also leave
+                     ;; atomic mode set (Racket 9.x).
+                     (when (in-atomic-mode?)
+                       (end-atomic))
+                     (let ([notes (unbox cb-notes-box)])
+                       (unless (null? notes)
+                         (set-box! cb-notes-box '())
+                         (for ([n (in-list (reverse notes))])
+                           (fprintf (current-error-port) "[np-cb] ~a\n" n))))
+                     ;; Racket 9.0 can leave atomic mode set after an
+                     ;; FFI call that dispatched callbacks; a bare
+                     ;; sleep then raises internal-error and kills
+                     ;; the pump. Tolerate it and keep iterating.
+                     (with-handlers ([exn:fail? (lambda (_) (void))])
+                       (sleep 0.005))
+                     (drain-commands!)
+                     (loop)))))))))
 
 (define (session-connection)
   (or (unbox conn-box)
@@ -437,57 +447,75 @@
       (g_variant_ref v)
       (g_variant_new_string "")))
 
+(define (cb-protect label thunk fallback)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cb-note! (format "~a exn: ~a" label (exn-message e)))
+                               fallback)])
+    (thunk)))
+
+(define (get-property conn sender path iface name err user)
+  (cb-note! "get")
+  (set-box! get-cb-count (add1 (unbox get-cb-count)))
+  (if (zero? (g_strcmp0 iface c-root-iface))
+      (cond
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 13))) (prop-ref 13)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 14))) (prop-ref 14)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 15))) (prop-ref 15)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 16))) (prop-ref 16)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 17))) (prop-ref 17)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 18))) (prop-ref 18)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 19))) (prop-ref 19)]
+        [else (g_variant_new_string "")])
+      (cond
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 0))) (prop-ref 0)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 1))) (prop-ref 1)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 2))) (prop-ref 2)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 3))) (prop-ref 3)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 4))) (prop-ref 4)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 5))) (prop-ref 5)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 6))) (prop-ref 6)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 7))) (prop-ref 7)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 8))) (prop-ref 8)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 9))) (prop-ref 9)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 10))) (prop-ref 10)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 11))) (prop-ref 11)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 12))) (prop-ref 12)]
+        [else (g_variant_new_string "")])))
+
 (define get-property-cb
   (cast (lambda (conn sender path iface name err user)
-          (set-box! get-cb-count (add1 (unbox get-cb-count)))
-          (if (zero? (g_strcmp0 iface c-root-iface))
-              (cond
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 13))) (prop-ref 13)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 14))) (prop-ref 14)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 15))) (prop-ref 15)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 16))) (prop-ref 16)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 17))) (prop-ref 17)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 18))) (prop-ref 18)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 19))) (prop-ref 19)]
-                [else (g_variant_new_string "")])
-              (cond
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 0))) (prop-ref 0)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 1))) (prop-ref 1)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 2))) (prop-ref 2)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 3))) (prop-ref 3)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 4))) (prop-ref 4)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 5))) (prop-ref 5)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 6))) (prop-ref 6)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 7))) (prop-ref 7)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 8))) (prop-ref 8)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 9))) (prop-ref 9)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 10))) (prop-ref 10)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 11))) (prop-ref 11)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 12))) (prop-ref 12)]
-                [else (g_variant_new_string "")])))
+          (cb-protect "get"
+                      (lambda () (get-property conn sender path iface name err user))
+                      (g_variant_new_string "")))
         (_fun _pointer _pointer _pointer _pointer _pointer _pointer _pointer -> _pointer)
         _fpointer))
 
+(define (method-call conn sender path iface method parameters invocation user)
+  (define midx
+    (cond
+      [(zero? (g_strcmp0 method (vector-ref method-cvec 0))) 0]
+      [(zero? (g_strcmp0 method (vector-ref method-cvec 1))) 1]
+      [(zero? (g_strcmp0 method (vector-ref method-cvec 2))) 2]
+      [(zero? (g_strcmp0 method (vector-ref method-cvec 3))) 3]
+      [(zero? (g_strcmp0 method (vector-ref method-cvec 4))) 4]
+      [(zero? (g_strcmp0 method (vector-ref method-cvec 5))) 5]
+      [(zero? (g_strcmp0 method (vector-ref method-cvec 6))) 6]
+      [(zero? (g_strcmp0 method (vector-ref method-cvec 7))) 7]
+      [else -1]))
+  (when (>= midx 0)
+    (define i (unbox cmd-head))
+    (unless (= (modulo (add1 i) 8) (unbox cmd-tail))
+      (ptr-set! cmd-ring _pointer (* 2 i) invocation)
+      (ptr-set! cmd-ring _pointer (+ (* 2 i) 1) (g_variant_ref parameters))
+      (ptr-set! cmd-idx-ring _int64 i midx)
+      (set-box! cmd-head (modulo (add1 i) 8)))))
+
 (define method-call-cb
   (cast (lambda (conn sender path iface method parameters invocation user)
-          (define midx
-            (cond
-              [(zero? (g_strcmp0 method (vector-ref method-cvec 0))) 0]
-              [(zero? (g_strcmp0 method (vector-ref method-cvec 1))) 1]
-              [(zero? (g_strcmp0 method (vector-ref method-cvec 2))) 2]
-              [(zero? (g_strcmp0 method (vector-ref method-cvec 3))) 3]
-              [(zero? (g_strcmp0 method (vector-ref method-cvec 4))) 4]
-              [(zero? (g_strcmp0 method (vector-ref method-cvec 5))) 5]
-              [(zero? (g_strcmp0 method (vector-ref method-cvec 6))) 6]
-              [(zero? (g_strcmp0 method (vector-ref method-cvec 7))) 7]
-              [else -1]))
-          (when (>= midx 0)
-            (define i (unbox cmd-head))
-            (unless (= (modulo (add1 i) 8) (unbox cmd-tail))
-              (ptr-set! cmd-ring _pointer (* 2 i) invocation)
-              (ptr-set! cmd-ring _pointer (+ (* 2 i) 1) (g_variant_ref parameters))
-              (ptr-set! cmd-idx-ring _int64 i midx)
-              (set-box! cmd-head (modulo (add1 i) 8)))))
+          (cb-protect "method"
+                      (lambda ()
+                        (method-call conn sender path iface method parameters invocation user))
+                      (void)))
         (_fun _pointer _pointer _pointer _pointer _pointer _pointer _pointer _pointer -> _void)
         _fpointer))
 
@@ -559,7 +587,19 @@
   (store-prop! 19 (g_variant_new_strv #f 0)))
 
 (define vtable
-  (make-GDBusInterfaceVTable method-call-cb get-property-cb set-property-cb #f #f #f #f #f #f #f #f))
+  ;; GDBusInterfaceVTable { method_call, get_property, set_property, gpointer
+  ;; padding[8] } = 11 pointers. Deliberately NOT a GC-managed cstruct: its
+  ;; slots hold raw code addresses, and the collector scans pointer-typed
+  ;; cstruct fields as object references. Marking a code address as an object
+  ;; corrupted the heap the first time GDBus dispatched a callback (glaze#157:
+  ;; "add1" receiving a box on 9.3, invalid memory reference on 9.0). Raw
+  ;; memory is never scanned; one block per process, never freed. The
+  ;; "_fpointer" objects stay alive through the module-level definitions.
+  (let ([vt (malloc (* 11 (ctype-sizeof _pointer)) 'raw)])
+    (ptr-set! vt _fpointer 0 method-call-cb)
+    (ptr-set! vt _fpointer 1 get-property-cb)
+    (ptr-set! vt _fpointer 2 set-property-cb)
+    vt))
 
 ;; ---- publication ---------------------------------------------------------
 
