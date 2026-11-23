@@ -1264,6 +1264,13 @@ changing the application's rendering model.
                     [#:menu menu list?]
                     [#:on-event on-event procedure? (lambda (e) (void))])
          tray?]{}
+
+@racket[on-event] is called with @racket['click] when the user left-clicks
+the icon (Windows and Linux) and with @racket['double-click] on Windows.
+Right-click shows the menu and reports no event; on macOS the menu opens on
+click and no event is reported. The handler runs on the tray's message-loop
+thread, so it must not block; an exception raised by the handler is logged
+and contained.
 @defproc[(tray-set-tooltip! [tray tray?] [tooltip string?]) void?]{}
 @defproc[(tray-set-icon! [tray tray?] [icon any/c]) void?]{}
 @defproc[(tray-set-menu! [tray tray?] [menu list?]) void?]{}

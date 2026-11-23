@@ -656,6 +656,16 @@ SSE 与嵌入式 WebView 前端共享同一个本地 origin。
 - macOS：`NSStatusItem` / `NSMenu`
 - Linux：`libayatana-appindicator` + GTK
 
+`make-tray #:on-event` 在用户左键点击图标时收到 `'click`（Windows、Linux）和 `'double-click`（Windows）；右键弹菜单不上报事件。回调运行在托盘自己的消息循环线程上，不要阻塞；回调抛错会被记录并吞掉，不会杀掉托盘。macOS 点击直接弹菜单，暂不上报事件。Windows 下 Explorer 重启后图标会自动恢复。
+
+```racket
+(make-tray #:tooltip "我的应用"
+           #:menu (list (make-menu-item "显示" #:action show-window)
+                        (menu-separator)
+                        (make-menu-item "退出" #:action (lambda () (app-quit!))))
+           #:on-event (lambda (event) (when (eq? event 'click) (show-window))))
+```
+
 ## 应用平台 API
 
 ```racket

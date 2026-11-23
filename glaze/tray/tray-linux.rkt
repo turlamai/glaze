@@ -15,8 +15,9 @@
 ;;     per-item function pointer kept alive in a registry (GC would otherwise
 ;;     reclaim it and the next click jumps into freed memory).
 ;;
-;; IMPORTANT: this module only loads on 'unix via dynamic-require. CI on Linux
-;; (with libayatana-appindicator3-dev + libgtk-3-dev installed) exercises it.
+;; IMPORTANT: this module only loads on 'unix via dynamic-require. The hosted
+;; CI runners install GTK 3 but not libayatana-appindicator3, so CI covers
+;; only the stub fallback; the native path is exercised on Linux desktops.
 
 (require ffi/unsafe
          racket/path
@@ -112,6 +113,22 @@
 ;; The tray handle holds the indicator + the current menu.
 (struct lin:tray (indicator [menu-box #:mutable]) #:transparent)
 
+;; AppIndicator "activate" callbacks are kept alive separately from the
+;; menu-item closures: build-menu clears the latter on every set-menu!.
+(define indicator-closures (box '()))
+
+(define (remember-indicator-closure! c)
+  (set-box! indicator-closures (cons c (unbox indicator-closures))))
+
+;; Forward the indicator's "activate" signal (primary click) as 'click. A
+;; failing handler must not escape into the GLib callback.
+(define (make-activate-handler on-event)
+  (lambda (_indicator _data)
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (eprintf "[glaze-tray] on-event click failed: ~a\n"
+                                          (exn-message e)))])
+      (on-event 'click))))
+
 (define (supported?)
   (and (eq? (system-type 'os) 'unix)
        indicator-lib
@@ -145,6 +162,13 @@
 
   (define menu (build-menu items))
   (app_indicator_set_menu indicator menu)
+
+  ;; Primary click on the indicator -> (on-event 'click). The menu is shown
+  ;; by the status-notifier host; only the activation signal is ours.
+  (when g_signal_connect_data
+    (define cb (function-ptr (make-activate-handler on-event) (_fun _pointer _pointer -> _void)))
+    (remember-indicator-closure! cb)
+    (g_signal_connect_data indicator "activate" cb #f #f 0))
 
   (lin:tray indicator menu))
 
