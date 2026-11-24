@@ -49,6 +49,13 @@
 
 (define gobject-lib (try-ffi-lib "gobject-2.0" '("0")))
 
+;; Bindings (resolved only if the libraries loaded; otherwise #f). Defined
+;; before the first use below: a module-level use ahead of its definition
+;; made this module fail to load on every Linux host, so the dispatcher
+;; always fell back to the stub.
+(define (maybe-bind lib name type)
+  (and lib (get-ffi-obj name lib type (lambda () #f))))
+
 ;; GTK must be initialized before any widget call. In a webview app the
 ;; window backend already did it; standalone tray processes (and the test
 ;; suite) would otherwise abort inside appindicator with "Can't create a
@@ -59,10 +66,6 @@
   (unless (or gtk-initialized? (not gtk_init))
     (gtk_init #f #f)
     (set! gtk-initialized? #t)))
-
-;; Bindings (resolved only if the libraries loaded; otherwise #f).
-(define (maybe-bind lib name type)
-  (and lib (get-ffi-obj name lib type (lambda () #f))))
 
 (define app_indicator_new
   (maybe-bind indicator-lib "app_indicator_new" (_fun _string _string _int -> _pointer)))

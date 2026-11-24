@@ -18,6 +18,17 @@
   (check-not-false (memq '#:on-event (append required-keywords optional-keywords))
                    "make-tray accepts #:on-event"))
 
+(when (eq? (system-type 'os) 'unix)
+  ;; The dispatcher dynamic-requires this module for every Linux tray; a
+  ;; module-level use ahead of its definition made it fail to load on every
+  ;; Linux host (the error surfaced only in a package, where the stub
+  ;; fallback was missing too). A runner without libayatana-appindicator must
+  ;; still load the module and answer #f.
+  (test-case "the Linux backend module loads and reports its support"
+    (define supported? (dynamic-require 'glaze/tray/tray-linux 'supported?))
+    (check-true (procedure? supported?) "tray-linux exports supported?")
+    (check-true (boolean? (supported?)) "supported? answers with a boolean")))
+
 (when (and (eq? (system-type 'os) 'windows) (not (getenv "GLAZE_TEST_NO_TRAY")))
   (define mod-make-tray (dynamic-require 'glaze/tray/tray-windows 'make-tray))
   (define mod-close (dynamic-require 'glaze/tray/tray-windows 'close))
