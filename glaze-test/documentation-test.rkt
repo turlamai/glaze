@@ -108,3 +108,35 @@
   (define name (path->string (file-name-from-path guide)))
   (check-not-false (member name mapped-guides)
                    (format "docs/README.md must link top-level guide ~a" name)))
+
+;; Scribble resolves a plain @image path against the renderer's working
+;; directory. `raco setup` renders from the package directory while CI and
+;; `raco scribble` run from the repository root, so every document asset must
+;; be located through a runtime path relative to the .scrbl file, and that
+;; path must exist. A missing asset fails the package build on the catalog.
+(define scribblings-root (build-path repository-root "glaze-doc" "scribblings"))
+(define runtime-path-rx #px"@\\(define-runtime-path\\s+\\S+\\s+\"([^\"]+)\"")
+(define (runtime-path-destinations scrbl)
+  (regexp-match* runtime-path-rx (file->string scrbl) #:match-select cadr))
+
+(define scribble-sources
+  (filter (lambda (path) (regexp-match? #rx#"[.]scrbl$" (path->bytes path)))
+          (directory-list scribblings-root #:build? #t)))
+
+(define (plain-image-paths scrbl)
+  (regexp-match* #px"@image\\[\"([^\"]+)\"" (file->string scrbl) #:match-select cadr))
+
+(for* ([scrbl (in-list scribble-sources)]
+       [destination (in-list (plain-image-paths scrbl))])
+  (check-false destination
+               (format "working-directory-relative @image in ~a: ~a; use define-runtime-path"
+                       (find-relative-path repository-root scrbl)
+                       destination)))
+
+(for* ([scrbl (in-list scribble-sources)]
+       [destination (in-list (runtime-path-destinations scrbl))])
+  (define target (build-path (path-only scrbl) destination))
+  (check-true (file-exists? target)
+              (format "missing Scribble asset ~a referenced by ~a"
+                      destination
+                      (find-relative-path repository-root scrbl))))
