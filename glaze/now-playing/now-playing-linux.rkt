@@ -18,8 +18,7 @@
          ffi/unsafe/define
          ffi/unsafe/atomic
          glaze/ffi-discovery
-         racket/string
-         "../private/main-context-registry.rkt")
+         racket/string)
 
 (provide supported?
          publish!
@@ -116,7 +115,6 @@
                                          [pad5 _pointer]
                                          [pad6 _pointer]
                                          [pad7 _pointer]))
-
 ;; GDBusNodeInfo { gint ref_count; gchar *path; GDBusInterfaceInfo **interfaces; ... }
 (define (node-interfaces node)
   (ptr-ref node _pointer 2))
@@ -167,6 +165,23 @@
 (define player-reg-box (box 0))
 (define err-box (box #f))
 (define get-cb-count (box 0))
+;; A callback must not let an exception escape: Racket re-raises it when the
+;; foreign call returns, which can leave the pump thread in atomic mode, and
+;; I/O from there kills the pump ("attempt to deschedule"). Callback errors
+;; are recorded here and printed by the pump after the foreign frame.
+;; Every C callback here is created with function-ptr and bound at module
+;; level on purpose — the same discipline as every other platform backend.
+;; Observed on Racket 9.0/9.3 CS (glaze#157): a callback built with
+;; `(cast proc (_fun ...) _fpointer)` worked until the next garbage
+;; collection and then dispatched into corrupt memory (`add1` given a box,
+;; or an invalid memory reference); under GC pressure it failed on every
+;; run. `cast` copies the raw address out of a temporary block, so nothing
+;; keeps the callback object itself alive. function-ptr returns that object,
+;; and these definitions hold it for the life of the process.
+(define cb-notes-box (box '()))
+(define (cb-note! msg)
+  (with-handlers ([exn:fail? (lambda (_) (void))])
+    (set-box! cb-notes-box (cons msg (unbox cb-notes-box)))))
 (define ctx-box (box #f))
 (define pump-running-box (box #f))
 (define pump-thread-box (box #f))
@@ -184,38 +199,56 @@
 (define (start-pump!)
   (unless (or (unbox pump-running-box) (not (unbox ctx-box)))
     (set-box! pump-running-box #t)
-    (set-box! pump-thread-box
-              (parameterize ([current-custodian pump-custodian])
-                (thread (lambda ()
-                          (let loop ()
-                            (when (unbox pump-running-box)
-                              ;; Racket 9.0 can leave atomic mode set after
-                              ;; an FFI iteration that dispatched callbacks;
-                              ;; any later allocation would then raise
-                              ;; internal-error (or spin without yielding).
-                              ;; Outside the foreign frame here, so dropping
-                              ;; atomicity may safely deschedule.
-                              (when (in-atomic-mode?)
-                                (end-atomic))
-                              (set-box! pump-iters (add1 (unbox pump-iters)))
-                              ;; When a webview pump is live it iterates our
-                              ;; context (single iterator thread: a second
-                              ;; Racket thread dispatching GDBus callbacks
-                              ;; corrupts the scheduler under hosted WebKit).
-                              (unless (external-pump?)
-                                (with-handlers ([exn:fail? (lambda (e)
-                                                             (fprintf (current-error-port)
-                                                                      "[np-pump] exn=~a\n"
-                                                                      (exn-message e)))])
-                                  (g_main_context_iteration (unbox ctx-box) #f)))
-                              ;; Racket 9.0 can leave atomic mode set after an
-                              ;; FFI call that dispatched callbacks; a bare
-                              ;; sleep then raises internal-error and kills
-                              ;; the pump. Tolerate it and keep iterating.
-                              (with-handlers ([exn:fail? (lambda (_) (void))])
-                                (sleep 0.005))
-                              (drain-commands!)
-                              (loop)))))))))
+    (set-box!
+     pump-thread-box
+     (parameterize ([current-custodian pump-custodian])
+       (thread (lambda ()
+                 (let loop ()
+                   (when (unbox pump-running-box)
+                     ;; Racket 9.0 can leave atomic mode set after
+                     ;; an FFI iteration that dispatched callbacks;
+                     ;; any later allocation would then raise
+                     ;; internal-error (or spin without yielding).
+                     ;; Outside the foreign frame here, so dropping
+                     ;; atomicity may safely deschedule.
+                     (when (in-atomic-mode?)
+                       (end-atomic))
+                     (set-box! pump-iters (add1 (unbox pump-iters)))
+                     ;; The vtable is registered under this context
+                     ;; (see ensure-registered!), so this pump is the
+                     ;; only thing that dispatches incoming MPRIS
+                     ;; method calls and property reads. It always
+                     ;; runs: standing down while a webview pump is
+                     ;; live left every incoming call unanswered
+                     ;; (glaze#157). The webview pump only iterates
+                     ;; the default context, a different one.
+                     (with-handlers ([exn:fail? (lambda (e)
+                                                  ;; I/O here would run in
+                                                  ;; atomic mode and
+                                                  ;; deschedule; stash
+                                                  ;; it for after the
+                                                  ;; foreign frame.
+                                                  (cb-note! (string-append "iteration exn: "
+                                                                           (exn-message e))))])
+                       (g_main_context_iteration (unbox ctx-box) #f))
+                     ;; A callback exception is re-raised on return
+                     ;; from the foreign call, which can also leave
+                     ;; atomic mode set (Racket 9.x).
+                     (when (in-atomic-mode?)
+                       (end-atomic))
+                     (let ([notes (unbox cb-notes-box)])
+                       (unless (null? notes)
+                         (set-box! cb-notes-box '())
+                         (for ([n (in-list (reverse notes))])
+                           (fprintf (current-error-port) "[np-cb] ~a\n" n))))
+                     ;; Racket 9.0 can leave atomic mode set after an
+                     ;; FFI call that dispatched callbacks; a bare
+                     ;; sleep then raises internal-error and kills
+                     ;; the pump. Tolerate it and keep iterating.
+                     (with-handlers ([exn:fail? (lambda (_) (void))])
+                       (sleep 0.005))
+                     (drain-commands!)
+                     (loop)))))))))
 
 (define (session-connection)
   (or (unbox conn-box)
@@ -270,7 +303,6 @@
                (set-box! conn-box c)
                (when ctx
                  (set-box! ctx-box ctx)
-                 (register-main-context! ctx)
                  (start-pump!)))
              c))))
 
@@ -318,6 +350,8 @@
           (format "~a" (unbox ctx-box))
           'ctx-is-default
           (and g_main_context_default (equal? (unbox ctx-box) (g_main_context_default)))
+          'thread-default-now
+          (and g_main_context_get_thread_default (g_main_context_get_thread_default))
           'pump-alive
           (and (unbox pump-thread-box) (thread-running? (unbox pump-thread-box)))
           'pump-iters
@@ -434,64 +468,79 @@
       (g_variant_ref v)
       (g_variant_new_string "")))
 
+(define (cb-protect label thunk fallback)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cb-note! (format "~a exn: ~a" label (exn-message e)))
+                               fallback)])
+    (thunk)))
+
+(define (get-property conn sender path iface name err user)
+  (set-box! get-cb-count (add1 (unbox get-cb-count)))
+  (if (zero? (g_strcmp0 iface c-root-iface))
+      (cond
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 13))) (prop-ref 13)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 14))) (prop-ref 14)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 15))) (prop-ref 15)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 16))) (prop-ref 16)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 17))) (prop-ref 17)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 18))) (prop-ref 18)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 19))) (prop-ref 19)]
+        [else (g_variant_new_string "")])
+      (cond
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 0))) (prop-ref 0)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 1))) (prop-ref 1)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 2))) (prop-ref 2)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 3))) (prop-ref 3)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 4))) (prop-ref 4)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 5))) (prop-ref 5)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 6))) (prop-ref 6)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 7))) (prop-ref 7)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 8))) (prop-ref 8)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 9))) (prop-ref 9)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 10))) (prop-ref 10)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 11))) (prop-ref 11)]
+        [(zero? (g_strcmp0 name (vector-ref prop-cvec 12))) (prop-ref 12)]
+        [else (g_variant_new_string "")])))
+
 (define get-property-cb
-  (cast (lambda (conn sender path iface name err user)
-          (set-box! get-cb-count (add1 (unbox get-cb-count)))
-          (if (zero? (g_strcmp0 iface c-root-iface))
-              (cond
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 13))) (prop-ref 13)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 14))) (prop-ref 14)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 15))) (prop-ref 15)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 16))) (prop-ref 16)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 17))) (prop-ref 17)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 18))) (prop-ref 18)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 19))) (prop-ref 19)]
-                [else (g_variant_new_string "")])
-              (cond
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 0))) (prop-ref 0)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 1))) (prop-ref 1)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 2))) (prop-ref 2)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 3))) (prop-ref 3)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 4))) (prop-ref 4)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 5))) (prop-ref 5)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 6))) (prop-ref 6)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 7))) (prop-ref 7)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 8))) (prop-ref 8)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 9))) (prop-ref 9)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 10))) (prop-ref 10)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 11))) (prop-ref 11)]
-                [(zero? (g_strcmp0 name (vector-ref prop-cvec 12))) (prop-ref 12)]
-                [else (g_variant_new_string "")])))
-        (_fun _pointer _pointer _pointer _pointer _pointer _pointer _pointer -> _pointer)
-        _fpointer))
+  (function-ptr (lambda (conn sender path iface name err user)
+                  (cb-protect "get"
+                              (lambda () (get-property conn sender path iface name err user))
+                              (g_variant_new_string "")))
+                (_fun _pointer _pointer _pointer _pointer _pointer _pointer _pointer -> _pointer)))
+
+(define (method-call conn sender path iface method parameters invocation user)
+  (define midx
+    (cond
+      [(zero? (g_strcmp0 method (vector-ref method-cvec 0))) 0]
+      [(zero? (g_strcmp0 method (vector-ref method-cvec 1))) 1]
+      [(zero? (g_strcmp0 method (vector-ref method-cvec 2))) 2]
+      [(zero? (g_strcmp0 method (vector-ref method-cvec 3))) 3]
+      [(zero? (g_strcmp0 method (vector-ref method-cvec 4))) 4]
+      [(zero? (g_strcmp0 method (vector-ref method-cvec 5))) 5]
+      [(zero? (g_strcmp0 method (vector-ref method-cvec 6))) 6]
+      [(zero? (g_strcmp0 method (vector-ref method-cvec 7))) 7]
+      [else -1]))
+  (when (>= midx 0)
+    (define i (unbox cmd-head))
+    (unless (= (modulo (add1 i) 8) (unbox cmd-tail))
+      (ptr-set! cmd-ring _pointer (* 2 i) invocation)
+      (ptr-set! cmd-ring _pointer (+ (* 2 i) 1) (g_variant_ref parameters))
+      (ptr-set! cmd-idx-ring _int64 i midx)
+      (set-box! cmd-head (modulo (add1 i) 8)))))
 
 (define method-call-cb
-  (cast (lambda (conn sender path iface method parameters invocation user)
-          (define midx
-            (cond
-              [(zero? (g_strcmp0 method (vector-ref method-cvec 0))) 0]
-              [(zero? (g_strcmp0 method (vector-ref method-cvec 1))) 1]
-              [(zero? (g_strcmp0 method (vector-ref method-cvec 2))) 2]
-              [(zero? (g_strcmp0 method (vector-ref method-cvec 3))) 3]
-              [(zero? (g_strcmp0 method (vector-ref method-cvec 4))) 4]
-              [(zero? (g_strcmp0 method (vector-ref method-cvec 5))) 5]
-              [(zero? (g_strcmp0 method (vector-ref method-cvec 6))) 6]
-              [(zero? (g_strcmp0 method (vector-ref method-cvec 7))) 7]
-              [else -1]))
-          (when (>= midx 0)
-            (define i (unbox cmd-head))
-            (unless (= (modulo (add1 i) 8) (unbox cmd-tail))
-              (ptr-set! cmd-ring _pointer (* 2 i) invocation)
-              (ptr-set! cmd-ring _pointer (+ (* 2 i) 1) (g_variant_ref parameters))
-              (ptr-set! cmd-idx-ring _int64 i midx)
-              (set-box! cmd-head (modulo (add1 i) 8)))))
-        (_fun _pointer _pointer _pointer _pointer _pointer _pointer _pointer _pointer -> _void)
-        _fpointer))
+  (function-ptr
+   (lambda (conn sender path iface method parameters invocation user)
+     (cb-protect "method"
+                 (lambda () (method-call conn sender path iface method parameters invocation user))
+                 (void)))
+   (_fun _pointer _pointer _pointer _pointer _pointer _pointer _pointer _pointer -> _void)))
 
 (define set-property-cb
-  (cast (lambda (conn sender path iface name value err user) #f)
-        (_fun _pointer _pointer _pointer _pointer _pointer _pointer _pointer _pointer -> _bool)
-        _fpointer))
+  (function-ptr
+   (lambda (conn sender path iface name value err user) #f)
+   (_fun _pointer _pointer _pointer _pointer _pointer _pointer _pointer _pointer -> _bool)))
 
 (define (drain-commands!)
   (let loop ()
@@ -575,33 +624,49 @@
       (error 'now-playing-linux "MPRIS introspection XML rejected"))
     (set-box! node-box node))
   (define interfaces (node-interfaces (unbox node-box)))
-  (when (zero? (unbox root-reg-box))
-    (define err (malloc _pointer 1))
-    (ptr-set! err _pointer #f)
-    (set-box! root-reg-box
-              (g_dbus_connection_register_object conn
-                                                 "/org/mpris/MediaPlayer2"
-                                                 (interface-at interfaces 0)
-                                                 vtable
-                                                 #f
-                                                 #f
-                                                 err)))
-  (when (zero? (unbox player-reg-box))
-    (define err (malloc _pointer 1))
-    (ptr-set! err _pointer #f)
-    (set-box! player-reg-box
-              (g_dbus_connection_register_object conn
-                                                 "/org/mpris/MediaPlayer2"
-                                                 (interface-at interfaces 1)
-                                                 vtable
-                                                 #f
-                                                 #f
-                                                 err)))
-  (when (zero? (unbox owner-box))
-    (define name
-      (string-append "org.mpris.MediaPlayer2." (sanitize-id (hash-ref info 'identifier "glaze"))))
-    (set-box! bus-name-box name)
-    (set-box! owner-box (g_bus_own_name_on_connection conn name 0 #f #f #f #f #f))))
+  ;; GDBus invokes the vtable in the THREAD-DEFAULT main context of the
+  ;; registering thread (GIO docs for g_dbus_connection_register_object) — not
+  ;; in the context the connection was created in. Registration used to run on
+  ;; whatever request thread published first, i.e. under the global default
+  ;; context, which nothing iterates in a headless process: every incoming
+  ;; call and Properties.Get timed out with NoReply (glaze#157). Register
+  ;; under the backend's own pumped context so the pump below dispatches them.
+  (define ctx (unbox ctx-box))
+  (when ctx
+    (g_main_context_push_thread_default ctx))
+  (dynamic-wind void
+                (lambda ()
+                  (when (zero? (unbox root-reg-box))
+                    (define err (malloc _pointer 1))
+                    (ptr-set! err _pointer #f)
+                    (set-box! root-reg-box
+                              (g_dbus_connection_register_object conn
+                                                                 "/org/mpris/MediaPlayer2"
+                                                                 (interface-at interfaces 0)
+                                                                 vtable
+                                                                 #f
+                                                                 #f
+                                                                 err)))
+                  (when (zero? (unbox player-reg-box))
+                    (define err (malloc _pointer 1))
+                    (ptr-set! err _pointer #f)
+                    (set-box! player-reg-box
+                              (g_dbus_connection_register_object conn
+                                                                 "/org/mpris/MediaPlayer2"
+                                                                 (interface-at interfaces 1)
+                                                                 vtable
+                                                                 #f
+                                                                 #f
+                                                                 err)))
+                  (when (zero? (unbox owner-box))
+                    (define name
+                      (string-append "org.mpris.MediaPlayer2."
+                                     (sanitize-id (hash-ref info 'identifier "glaze"))))
+                    (set-box! bus-name-box name)
+                    (set-box! owner-box (g_bus_own_name_on_connection conn name 0 #f #f #f #f #f))))
+                (lambda ()
+                  (when ctx
+                    (g_main_context_pop_thread_default ctx)))))
 
 (define (emit-properties! info)
   (define conn (unbox conn-box))

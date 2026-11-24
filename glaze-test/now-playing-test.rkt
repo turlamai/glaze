@@ -11,26 +11,10 @@
          rackunit
          racket/system
          racket/string
+         racket/port
          racket/file
          ffi/unsafe
          ffi/unsafe/atomic)
-
-;; GDBus dispatches method calls and name callbacks on the main context;
-;; a bare sleep loop never pumps it. Pump the default context so the
-;; round-trip below is real bus evidence on headless CI.
-(define glib-iterate
-  (with-handlers ([exn:fail? (lambda (_) #f)])
-    (get-ffi-obj 'g_main_context_iteration
-                 (ffi-lib "libglib-2.0" '("0" ""))
-                 (_fun _pointer _bool -> _bool))))
-(define (pump!)
-  (when glib-iterate
-    (with-handlers ([exn:fail? (lambda (_) (void))])
-      (glib-iterate #f #f))
-    ;; 9.0 can leave atomic mode set after an iteration that dispatched
-    ;; callbacks; drop it outside the foreign frame before allocating again.
-    (when (in-atomic-mode?)
-      (end-atomic))))
 
 ;; On headless Linux CI there is no session bus. Bootstrap a private one
 ;; before the first backend call so the MPRIS round-trip below is real bus
@@ -184,15 +168,39 @@
    (cond
      [(now-playing-supported?)
       (test-case "linux owns an MPRIS name and publishes properties over the bus"
-        (now-playing-set-command-handler! (lambda (cmd arg) (void)))
-        ;; Incoming GDBus dispatch under Racket FFI callbacks is unreliable
-        ;; (probabilistic on x64, absent on AArch64), and iterating a context
-        ;; that dispatches them corrupts the Racket scheduler (glaze#157).
-        ;; Outgoing D-Bus traffic needs no iteration: stand the backend pump
-        ;; down and assert publication from an external dbus-monitor capture.
-        ((dynamic-require 'glaze/private/main-context-registry 'set-external-pump!) #t)
-        (define (yield!)
-          (sleep 0.05))
+        (define received-box (box '()))
+        (now-playing-set-command-handler! (lambda (cmd arg)
+                                            (set-box! received-box (cons cmd (unbox received-box)))))
+        ;; glaze#157 regression: the backend registers its objects under the
+        ;; private context it pumps itself, so external Properties.Get and
+        ;; method calls are answered without any embedder pumping. Probes run
+        ;; as non-blocking subprocesses: a blocking `system` would stall the
+        ;; Racket thread that must dispatch the reply.
+        (define (probe . args)
+          (with-handlers ([exn:fail? (lambda (e) (format "probe error: ~a" (exn-message e)))])
+            (define exe (find-executable-path "dbus-send"))
+            (if exe
+                (let ()
+                  (define-values (p out _stdin err)
+                    (apply subprocess
+                           #f
+                           #f
+                           #f
+                           exe
+                           "--print-reply"
+                           (string-append "--dest=" (hash-ref os 'bus-name))
+                           "/org/mpris/MediaPlayer2"
+                           args))
+                  (define deadline (+ (current-inexact-milliseconds) 8000))
+                  (let loop ()
+                    (when (and (not (sync/timeout 0.05 p))
+                               (< (current-inexact-milliseconds) deadline))
+                      (loop)))
+                  (unless (sync/timeout 0 p)
+                    (subprocess-kill p #t))
+                  (subprocess-wait p)
+                  (string-append (port->string out) (port->string err)))
+                "probe error: dbus-send not found")))
         (now-playing-set! (canonical))
         (define os
           (let loop ([n 0])
@@ -217,15 +225,16 @@
         (check-equal? (hash-ref os 'playing) #t)
         (check-= (hash-ref os 'position) 3.0 0.01)
         (check-true (string-prefix? (hash-ref os 'bus-name) "org.mpris.MediaPlayer2."))
-        ;; Linux bus evidence (glaze#156): publication and incoming method
-        ;; dispatch observed from EXTERNAL processes. Properties.Get readback
-        ;; stays best-effort: GDBus's internal Get branch never reaches the
-        ;; vtable under Racket FFI (tracked upstream, glaze#157).
+        ;; glaze#156/#157 bus evidence from EXTERNAL processes: the emitted
+        ;; PropertiesChanged signal, a Properties.Get answered through the
+        ;; vtable, and an incoming Pause delivered to the host's handler.
         (define sig-file "/tmp/glaze-np-sig.txt")
         (system
          (format
           "dbus-monitor --session \"type='signal',interface='org.freedesktop.DBus.Properties'\" > ~a 2>&1 &"
           sig-file))
+        (define (yield!)
+          (sleep 0.05))
         (sleep 0.5)
         (now-playing-set! (canonical))
         (define (sig-out)
@@ -244,9 +253,30 @@
                  (string-length (sig-out)))
         (check-true (string-contains? (sig-out) "Metadata"))
         (check-true (string-contains? (sig-out) "Glaze Now Playing Test"))
-        (fprintf
-         (current-error-port)
-         "[now-playing-diag] incoming dispatch gap (glaze#157): control/Get readback not asserted\n")
+        (define get-out
+          (probe "org.freedesktop.DBus.Properties.Get"
+                 "string:org.mpris.MediaPlayer2.Player"
+                 "string:Metadata"))
+        (fprintf (current-error-port) "[now-playing-diag] external Get -> ~a\n" get-out)
+        (check-false (string-contains? get-out "NoReply"))
+        (check-false (string-contains? get-out "UnknownMethod"))
+        (check-true (string-contains? get-out "Glaze Now Playing Test"))
+        (define pause-out (probe "org.mpris.MediaPlayer2.Player.Pause"))
+        (fprintf (current-error-port) "[now-playing-diag] external Pause -> ~a\n" pause-out)
+        (define pause-deadline (+ (current-inexact-milliseconds) 3000))
+        (let loop ()
+          (when (and (not (member 'pause (unbox received-box)))
+                     (< (current-inexact-milliseconds) pause-deadline))
+            (yield!)
+            (loop)))
+        (fprintf (current-error-port)
+                 "[now-playing-diag] received commands -> ~s\n"
+                 (unbox received-box))
+        (check-not-false (member 'pause (unbox received-box)))
+        (fprintf (current-error-port)
+                 "[now-playing-diag] diag=~s\n"
+                 (with-handlers ([exn:fail? (lambda (e) (exn-message e))])
+                   ((dynamic-require 'glaze/now-playing/now-playing-linux 'diagnostics))))
         (now-playing-clear!)
         (define os2
           (let loop ([n 0])

@@ -35,7 +35,6 @@
          racket/path
          racket/string
          "../ffi-discovery.rkt"
-         "../private/main-context-registry.rkt"
          "../native-transport.rkt"
          "../tray/tray-protocol.rkt"
          "../private/id-allocator.rkt")
@@ -340,16 +339,16 @@
       (loop))))
 
 (define (pump-loop wv transport)
-  (set-external-pump! #t)
   (let loop ()
     (unless (unbox (lin:webview-closed?-box wv))
       ;; Non-blocking iteration of the shared default main context (the one
       ;; gtk_init installed); FALSE = don't block waiting for events.
       (g_main_context_iteration #f #f)
-      ;; Backend GDBus contexts are deliberately NOT iterated here: incoming
-      ;; dispatch under Racket FFI callbacks is unreliable and corrupts the
-      ;; scheduler (glaze#157). The backend pump stands down while this pump
-      ;; is live; publication (outgoing) needs no iteration.
+      ;; This loop only owns the default context. A backend that needs its
+      ;; own GLib main context (now-playing on Linux, glaze#157) registers
+      ;; its objects under that context and pumps it on its own thread;
+      ;; iterating it from here would dispatch the same callbacks from two
+      ;; Racket threads.
       ;; Racket 9.0 can leave atomic mode set after an iteration that
       ;; dispatched FFI callbacks; drop it outside the foreign frame so the
       ;; rest of the loop (and the scheduler) keeps working.
@@ -367,8 +366,7 @@
           (set-box! (lin:webview-normal-geometry-box wv) current)))
       ;; Mandatory scheduler yield — same reasoning as the macOS pump.
       (sleep 0.005)
-      (loop)))
-  (set-external-pump! #f))
+      (loop))))
 
 (define (open-webview url
                       #:title [title "Glaze"]

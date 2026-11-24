@@ -144,6 +144,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Linux Now Playing answers external D-Bus calls again (glaze#157). Two
+  independent faults, one for calls that never arrived and one for calls
+  that arrived and then crashed:
+  - `g_dbus_connection_register_object` dispatches its vtable on the
+    thread-default main context of the *registering* thread, but registration
+    ran under the global default context while the backend only pumped its
+    private connection context. Registration (and name ownership) now runs
+    under the backend's own context, and the backend pump no longer stands
+    down while a webview pump is live.
+  - The vtable callbacks were built with `cast` to `_fpointer`. On Racket
+    9.0/9.3 CS such a callback worked until the next garbage collection and
+    then dispatched into corrupt memory (`add1` given a box, or an invalid
+    memory reference); under GC pressure it failed on every run. They are now
+    built with `function-ptr`, like every other platform backend, and kept
+    alive by their module-level definitions.
+  A callback error is recorded and printed by the pump instead of escaping
+  the foreign frame. `diagnostics` reports `thread-default-now`, the Linux CI
+  test asserts an external `Properties.Get` reply and an incoming `Pause`
+  instead of skipping them, and the unused
+  `glaze/private/main-context-registry` is removed.
+
 - Windows `webview-capture!` no longer saves vertically mirrored PNGs
   (glaze#140). `GetDIBits` was asked for a top-down DIB (negative
   `biHeight`) while the BMP file was written with a positive height, which
