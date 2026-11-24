@@ -1,5 +1,12 @@
 #lang scribble/manual
 
+@(require racket/runtime-path)
+
+@;{Located relative to this source file, not the renderer's working directory:
+`raco setup` renders from the package directory while CI and `raco scribble`
+usually run from the repository root.}
+@(define-runtime-path architecture-image "../../docs/glaze-architecture.svg")
+
 @title[#:tag "glaze"]{Glaze}
 @author{TurLamAI}
 
@@ -9,7 +16,7 @@ Glaze builds desktop applications with a Racket backend and a Web frontend
 rendered inside a native OS window. Windows uses WebView2, macOS uses
 WKWebView, and Linux uses WebKitGTK.
 
-@image["docs/glaze-architecture.svg" #:scale 0.9]{
+@image[architecture-image #:scale 0.9]{
 The Glaze architecture: a Racket engine behind one native WebView window per
 application, with the typed JS bridge, capabilities, and platform sys
 integrations owned by the Racket side.}
