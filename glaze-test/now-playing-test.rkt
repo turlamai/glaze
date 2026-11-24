@@ -272,7 +272,7 @@
         (fprintf (current-error-port)
                  "[now-playing-diag] received commands -> ~s\n"
                  (unbox received-box))
-        (check-true (member 'pause (unbox received-box)))
+        (check-not-false (member 'pause (unbox received-box)))
         (fprintf (current-error-port)
                  "[now-playing-diag] diag=~s\n"
                  (with-handlers ([exn:fail? (lambda (e) (exn-message e))])

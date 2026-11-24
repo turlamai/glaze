@@ -103,6 +103,18 @@
 (defgio g_variant_builder_end (_fun _pointer -> _GVariant))
 (defgio g_variant_get_child_value (_fun _GVariant _int64 -> _GVariant))
 
+;; GDBusInterfaceVTable: method_call, get_property, set_property, padding[8].
+(define-cstruct _GDBusInterfaceVTable
+                ([method_call _fpointer] [get_property _fpointer]
+                                         [set_property _fpointer]
+                                         [pad0 _pointer]
+                                         [pad1 _pointer]
+                                         [pad2 _pointer]
+                                         [pad3 _pointer]
+                                         [pad4 _pointer]
+                                         [pad5 _pointer]
+                                         [pad6 _pointer]
+                                         [pad7 _pointer]))
 ;; GDBusNodeInfo { gint ref_count; gchar *path; GDBusInterfaceInfo **interfaces; ... }
 (define (node-interfaces node)
   (ptr-ref node _pointer 2))
@@ -153,10 +165,19 @@
 (define player-reg-box (box 0))
 (define err-box (box #f))
 (define get-cb-count (box 0))
-;; Notes from inside foreign callbacks, flushed to stderr by the pump thread
-;; after the foreign frame unwinds: writing to a port from a callback or from
-;; the handler that receives its re-raised exception runs in atomic mode and
-;; kills the thread with "attempt to deschedule".
+;; A callback must not let an exception escape: Racket re-raises it when the
+;; foreign call returns, which can leave the pump thread in atomic mode, and
+;; I/O from there kills the pump ("attempt to deschedule"). Callback errors
+;; are recorded here and printed by the pump after the foreign frame.
+;; Every C callback here is created with function-ptr and bound at module
+;; level on purpose — the same discipline as every other platform backend.
+;; Observed on Racket 9.0/9.3 CS (glaze#157): a callback built with
+;; `(cast proc (_fun ...) _fpointer)` worked until the next garbage
+;; collection and then dispatched into corrupt memory (`add1` given a box,
+;; or an invalid memory reference); under GC pressure it failed on every
+;; run. `cast` copies the raw address out of a temporary block, so nothing
+;; keeps the callback object itself alive. function-ptr returns that object,
+;; and these definitions hold it for the life of the process.
 (define cb-notes-box (box '()))
 (define (cb-note! msg)
   (with-handlers ([exn:fail? (lambda (_) (void))])
@@ -454,7 +475,6 @@
     (thunk)))
 
 (define (get-property conn sender path iface name err user)
-  (cb-note! "get")
   (set-box! get-cb-count (add1 (unbox get-cb-count)))
   (if (zero? (g_strcmp0 iface c-root-iface))
       (cond
@@ -483,12 +503,11 @@
         [else (g_variant_new_string "")])))
 
 (define get-property-cb
-  (cast (lambda (conn sender path iface name err user)
-          (cb-protect "get"
-                      (lambda () (get-property conn sender path iface name err user))
-                      (g_variant_new_string "")))
-        (_fun _pointer _pointer _pointer _pointer _pointer _pointer _pointer -> _pointer)
-        _fpointer))
+  (function-ptr (lambda (conn sender path iface name err user)
+                  (cb-protect "get"
+                              (lambda () (get-property conn sender path iface name err user))
+                              (g_variant_new_string "")))
+                (_fun _pointer _pointer _pointer _pointer _pointer _pointer _pointer -> _pointer)))
 
 (define (method-call conn sender path iface method parameters invocation user)
   (define midx
@@ -511,18 +530,17 @@
       (set-box! cmd-head (modulo (add1 i) 8)))))
 
 (define method-call-cb
-  (cast (lambda (conn sender path iface method parameters invocation user)
-          (cb-protect "method"
-                      (lambda ()
-                        (method-call conn sender path iface method parameters invocation user))
-                      (void)))
-        (_fun _pointer _pointer _pointer _pointer _pointer _pointer _pointer _pointer -> _void)
-        _fpointer))
+  (function-ptr
+   (lambda (conn sender path iface method parameters invocation user)
+     (cb-protect "method"
+                 (lambda () (method-call conn sender path iface method parameters invocation user))
+                 (void)))
+   (_fun _pointer _pointer _pointer _pointer _pointer _pointer _pointer _pointer -> _void)))
 
 (define set-property-cb
-  (cast (lambda (conn sender path iface name value err user) #f)
-        (_fun _pointer _pointer _pointer _pointer _pointer _pointer _pointer _pointer -> _bool)
-        _fpointer))
+  (function-ptr
+   (lambda (conn sender path iface name value err user) #f)
+   (_fun _pointer _pointer _pointer _pointer _pointer _pointer _pointer _pointer -> _bool)))
 
 (define (drain-commands!)
   (let loop ()
@@ -587,19 +605,7 @@
   (store-prop! 19 (g_variant_new_strv #f 0)))
 
 (define vtable
-  ;; GDBusInterfaceVTable { method_call, get_property, set_property, gpointer
-  ;; padding[8] } = 11 pointers. Deliberately NOT a GC-managed cstruct: its
-  ;; slots hold raw code addresses, and the collector scans pointer-typed
-  ;; cstruct fields as object references. Marking a code address as an object
-  ;; corrupted the heap the first time GDBus dispatched a callback (glaze#157:
-  ;; "add1" receiving a box on 9.3, invalid memory reference on 9.0). Raw
-  ;; memory is never scanned; one block per process, never freed. The
-  ;; "_fpointer" objects stay alive through the module-level definitions.
-  (let ([vt (malloc (* 11 (ctype-sizeof _pointer)) 'raw)])
-    (ptr-set! vt _fpointer 0 method-call-cb)
-    (ptr-set! vt _fpointer 1 get-property-cb)
-    (ptr-set! vt _fpointer 2 set-property-cb)
-    vt))
+  (make-GDBusInterfaceVTable method-call-cb get-property-cb set-property-cb #f #f #f #f #f #f #f #f))
 
 ;; ---- publication ---------------------------------------------------------
 
