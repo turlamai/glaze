@@ -10,6 +10,11 @@
 ;;   - On right-button-up, build an HMENU from the menu items, TrackPopupMenu,
 ;;     and dispatch the chosen id back to its Racket action via an
 ;;     id-allocator.
+;;   - Left-button-up / double-click report 'click / 'double-click to the
+;;     caller's on-event procedure (glaze#141).
+;;   - The window is a hidden top-level window (not HWND_MESSAGE) so it also
+;;     receives the broadcast TaskbarCreated message; after Explorer restarts
+;;     the icon is re-added (glaze#141).
 ;;   - A dedicated thread runs a GetMessage loop so the tray stays responsive
 ;;     without blocking the Racket main thread. The WindowProc runs on that
 ;;     same message-loop thread (Win32 requirement: the thread that created
@@ -52,7 +57,9 @@
          close
          supported?
          win:tray?
-         win:tray-state)
+         win:tray-state
+         ;; Diagnostic: the hidden window that owns the notify icon.
+         win:tray-hwnd)
 
 ;; ---- Win32 constants ----
 (define TRAY_CALLBACK_MSG 1024) ; WM_USER
@@ -60,9 +67,9 @@
 (define WM_COMMAND 273)
 (define WM_RBUTTONUP 517)
 (define WM_LBUTTONUP 514)
+(define WM_LBUTTONDBLCLK 515)
 (define WM_QUIT 18)
 (define PM_REMOVE 1)
-(define HWND_MESSAGE -3)
 (define WS_EX_TOOLWINDOW 128)
 (define IMAGE_ICON 1)
 (define LR_LOADFROMFILE 16)
@@ -110,12 +117,8 @@
                   ->
                   _pointer)))
 (define DestroyWindow (get-proc user32 "DestroyWindow" (_fun _pointer -> _bool)))
+(define RegisterWindowMessageW (get-proc user32 "RegisterWindowMessageW" (_fun _pointer -> _uint)))
 (define PostMessageW (get-proc user32 "PostMessageW" (_fun _pointer _uint _uintptr _intptr -> _bool)))
-(define PostQuitMessage (get-proc user32 "PostQuitMessage" (_fun _int -> _void)))
-(define GetMessageW
-  ;; #:blocking? #t tells the Racket scheduler this call may block in the OS,
-  ;; so it can run other Racket threads instead of stalling the whole runtime.
-  (get-proc user32 "GetMessageW" (_fun #:blocking? #t _pointer _pointer _uint _uint -> _int)))
 (define TranslateMessage (get-proc user32 "TranslateMessage" (_fun _pointer -> _bool)))
 (define DispatchMessageW (get-proc user32 "DispatchMessageW" (_fun _pointer -> _intptr)))
 (define PeekMessageW
@@ -177,7 +180,17 @@
 ;; Registry: hWnd -> tray-state, so the WindowProc (which only receives hWnd)
 ;; can find the Racket-side state. The WindowProc cpointer is also retained
 ;; here so GC never reclaims it (a reclaimed callback pointer = crash).
-(struct tray-state (hwnd icon-h allocator open?-box menu-box wndproc-cptr thread)
+(struct tray-state
+        (hwnd icon-h
+              allocator
+              open?-box
+              menu-box
+              wndproc-cptr
+              thread
+              tooltip-box ; current tooltip, for icon re-adds
+              on-event ; (symbol -> any), called for click events
+              taskbar-created-msg
+              pending-box) ; thunks queued by the WindowProc, run after it returns
   #:mutable
   #:transparent)
 
@@ -194,6 +207,9 @@
 ;; Win32 handle wrapped with the backend tag is what the public API carries.
 (struct win:tray (state) #:transparent)
 
+(define (win:tray-hwnd t)
+  (tray-state-hwnd (win:tray-state t)))
+
 (define (supported?)
   (and (eq? (system-type 'os) 'windows) #t))
 
@@ -209,14 +225,26 @@
        [(= lparam WM_RBUTTONUP)
         (handle-context-menu st)
         0]
-       [(= lparam WM_LBUTTONUP) 0]
+       [(= lparam WM_LBUTTONUP)
+        (enqueue! st (lambda () (fire-event! st 'click)))
+        0]
+       [(= lparam WM_LBUTTONDBLCLK)
+        (enqueue! st (lambda () (fire-event! st 'double-click)))
+        0]
        [else (DefWindowProcW hwnd msg wparam lparam)])]
+    ;; Explorer restarted: every notify icon is gone, so re-add ours.
+    [(and (tray-state-taskbar-created-msg st) (= msg (tray-state-taskbar-created-msg st)))
+     (re-add-icon! st)
+     0]
     [(= msg WM_COMMAND)
      (define menu-id (bitwise-and wparam #xFFFF))
      (handle-menu-id st menu-id)
      0]
     [(= msg WM_DESTROY)
-     (PostQuitMessage 0)
+     ;; No PostQuitMessage: Racket threads share one OS thread and therefore
+     ;; one message queue, so a thread-wide WM_QUIT would stop every other
+     ;; tray's loop. The loop watches open?-box instead.
+     (set-box! (tray-state-open?-box st) #f)
      0]
     [else (DefWindowProcW hwnd msg wparam lparam)]))
 
@@ -248,10 +276,43 @@
   (when (> chosen 0)
     (handle-menu-id st chosen)))
 
+;; ---- user code runs outside the WindowProc ----
+;; The WindowProc is a foreign callback entered from DispatchMessageW: Racket
+;; runs it in atomic mode, where blocking (channel-put, sync, a handler that
+;; waits) is an internal error. So the WindowProc only queues thunks; the
+;; message-loop thread runs them right after DispatchMessageW returns, in
+;; normal mode. Producer and consumer are the same thread, so a plain box is
+;; race-free.
+(define (enqueue! st thunk)
+  (set-box! (tray-state-pending-box st) (cons thunk (unbox (tray-state-pending-box st)))))
+
+(define (run-pending! st)
+  (define thunks (reverse (unbox (tray-state-pending-box st))))
+  (set-box! (tray-state-pending-box st) '())
+  (for ([thunk (in-list thunks)])
+    ;; A failing menu action or on-event handler must not kill the pump.
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (eprintf "[glaze-tray] handler failed: ~a\n" (exn-message e)))])
+      (thunk))))
+
 (define (handle-menu-id st menu-id)
   (define proc (id-allocator-lookup (tray-state-allocator st) menu-id))
   (when (procedure? proc)
-    (proc)))
+    (enqueue! st proc)))
+
+;; Report a click event to the caller's on-event procedure.
+(define (fire-event! st event)
+  (define on-event (tray-state-on-event st))
+  (when (procedure? on-event)
+    (on-event event)))
+
+;; Restore the notify icon after TaskbarCreated. The icon is absent after an
+;; Explorer restart (NIM_ADD succeeds) and still present when the message is
+;; replayed (NIM_ADD is refused, NIM_MODIFY refreshes it).
+(define (re-add-icon! st)
+  (define nid (make-nid-for st))
+  (unless (or (Shell_NotifyIconW NIM_ADD nid) (Shell_NotifyIconW NIM_MODIFY nid))
+    (eprintf "[glaze-tray] re-adding the icon after TaskbarCreated failed\n")))
 
 ;; Convert a Racket string to a UTF-16LE byte pointer (NUL-terminated).
 (define (string->utf16-ptr s)
@@ -291,7 +352,11 @@
                 (box #t) ; open?-box
                 items ; menu-box (mutable slot)
                 #f ; wndproc-cptr
-                #f)) ; thread
+                #f ; thread
+                (box tooltip) ; tooltip-box
+                on-event
+                #f ; taskbar-created-msg
+                (box '()))) ; pending-box
   (set-tray-state-menu-box! st items)
 
   ;; WindowProc closure + its cpointer, retained for the tray's lifetime.
@@ -305,90 +370,99 @@
   (define instance (GetModuleHandleW #f))
   (define class-name-ptr (string->utf16-ptr "GlazeTrayWindowClass"))
 
+  ;; Everything that must happen on the thread owning the window. Setup
+  ;; failures are surfaced to the caller through ready-ch; once the tray is
+  ;; up, a failing message loop is reported on stderr instead of hanging.
   (define (thunk)
-    (with-handlers ([exn:fail? (lambda (e)
-                                 ;; Worker died before signaling readiness: surface the
-                                 ;; error on the main thread instead of hanging forever.
-                                 (channel-put ready-ch (cons 'error e)))])
-      ;; Register window class (idempotent across trays in the same process).
-      (define wc (calloc-typed _WNDCLASSEXW _WNDCLASSEXW-pointer))
-      (set-WNDCLASSEXW-cbSize! wc (ctype-sizeof _WNDCLASSEXW))
-      (set-WNDCLASSEXW-lpfnWndProc! wc wndproc-cptr)
-      (set-WNDCLASSEXW-hInstance! wc instance)
-      (set-WNDCLASSEXW-lpszClassName! wc class-name-ptr)
-      (RegisterClassExW wc)
+    (define hwnd
+      (with-handlers ([exn:fail? (lambda (e) (channel-put ready-ch (cons 'error e)))])
+        ;; Register window class (idempotent across trays in the same process).
+        (define wc (calloc-typed _WNDCLASSEXW _WNDCLASSEXW-pointer))
+        (set-WNDCLASSEXW-cbSize! wc (ctype-sizeof _WNDCLASSEXW))
+        (set-WNDCLASSEXW-lpfnWndProc! wc wndproc-cptr)
+        (set-WNDCLASSEXW-hInstance! wc instance)
+        (set-WNDCLASSEXW-lpszClassName! wc class-name-ptr)
+        (RegisterClassExW wc)
 
-      ;; Message-only hidden window.
-      (define hwnd
-        (CreateWindowExW WS_EX_TOOLWINDOW
-                         class-name-ptr
-                         (string->utf16-ptr "Glaze")
-                         0
-                         0
-                         0
-                         0
-                         0
-                         HWND_MESSAGE
-                         #f
-                         instance
-                         #f))
-      (unless hwnd
-        (error 'make-tray "CreateWindowExW returned NULL"))
-      (set-tray-state-hwnd! st hwnd)
-      (registry-put! hwnd st)
+        ;; Hidden top-level window. It is never shown, and unlike a message-only
+        ;; window it receives the broadcast TaskbarCreated message.
+        (set-tray-state-taskbar-created-msg!
+         st
+         (RegisterWindowMessageW (string->utf16-ptr "TaskbarCreated")))
+        (define hwnd
+          (CreateWindowExW WS_EX_TOOLWINDOW
+                           class-name-ptr
+                           (string->utf16-ptr "Glaze")
+                           0 ; dwStyle
+                           0
+                           0
+                           0
+                           0 ; x, y, width, height (never shown)
+                           0 ; hWndParent: a top-level window (0, not HWND_MESSAGE)
+                           #f
+                           instance
+                           #f))
+        (unless hwnd
+          (error 'make-tray "CreateWindowExW returned NULL"))
+        (set-tray-state-hwnd! st hwnd)
+        (registry-put! hwnd st)
 
-      ;; Load icon (optional).
-      (define icon-h
-        (and
-         icon-path
-         (file-exists? icon-path)
-         (LoadImageW #f (string->utf16-ptr (path->string icon-path)) IMAGE_ICON 0 0 LR_LOADFROMFILE)))
-      (set-tray-state-icon-h! st icon-h)
+        ;; Load icon (optional).
+        (define icon-h
+          (and icon-path
+               (file-exists? icon-path)
+               (LoadImageW #f
+                           (string->utf16-ptr (path->string icon-path))
+                           IMAGE_ICON
+                           0
+                           0
+                           LR_LOADFROMFILE)))
+        (set-tray-state-icon-h! st icon-h)
 
-      ;; Add the notify icon.
-      (define nid (calloc-typed _NOTIFYICONDATAW _NOTIFYICONDATAW-pointer))
-      (set-NOTIFYICONDATAW-cbSize! nid (ctype-sizeof _NOTIFYICONDATAW))
-      (set-NOTIFYICONDATAW-hWnd! nid hwnd)
-      (set-NOTIFYICONDATAW-uID! nid 1)
-      (set-NOTIFYICONDATAW-uFlags! nid (bitwise-ior NIF_MESSAGE NIF_ICON NIF_TIP))
-      (set-NOTIFYICONDATAW-uCallbackMessage! nid TRAY_CALLBACK_MSG)
-      (set-NOTIFYICONDATAW-hIcon! nid icon-h)
-      (write-tip! nid tooltip)
-      (define added (Shell_NotifyIconW NIM_ADD nid))
-      (unless added
-        (error 'make-tray "Shell_NotifyIconW NIM_ADD failed"))
+        ;; Add the notify icon.
+        (define nid (make-nid-for st))
+        (unless (Shell_NotifyIconW NIM_ADD nid)
+          (error 'make-tray "Shell_NotifyIconW NIM_ADD failed"))
+        hwnd))
 
-      ;; Signal readiness, then pump messages until WM_QUIT. We POLL with
-      ;; PeekMessageW instead of blocking on GetMessageW because a blocking
-      ;; GetMessageW stalls the whole Racket scheduler (Racket's cooperative
-      ;; threads share one OS thread and don't preempt inside foreign calls,
-      ;; and #:blocking? turned out insufficient in practice here). Polling
-      ;; with a short Racket-side sleep keeps the tray responsive AND lets the
-      ;; rest of the app run.
-      (channel-put ready-ch #t)
+    (channel-put ready-ch #t)
+
+    ;; Pump this tray's window messages until WM_QUIT. We POLL with
+    ;; PeekMessageW instead of blocking on GetMessageW because a blocking
+    ;; GetMessageW stalls the whole Racket scheduler (Racket's cooperative
+    ;; threads share one OS thread and don't preempt inside foreign calls,
+    ;; and #:blocking? turned out insufficient in practice here). Polling with
+    ;; a short Racket-side sleep keeps the tray responsive AND lets the rest
+    ;; of the app run. The hwnd filter matters: the message queue is shared
+    ;; by every Racket thread, so an unfiltered peek would also steal other
+    ;; trays' messages (a stale WM_QUIT from a closed tray killed the next
+    ;; one's loop).
+    (define msg (calloc-typed _MSG _MSG-pointer))
+    (with-handlers
+        ([exn:fail? (lambda (e) (eprintf "[glaze-tray] message loop stopped: ~a\n" (exn-message e)))])
       (let loop ()
-        (define msg (malloc _MSG 'atomic))
-        (define got? (PeekMessageW msg #f 0 0 PM_REMOVE))
         (cond
-          [got?
+          [(not (unbox (tray-state-open?-box st))) (void)]
+          [(PeekMessageW msg hwnd 0 0 PM_REMOVE)
            (TranslateMessage msg)
            (DispatchMessageW msg)
-           ;; WM_QUIT arrives via PostMessageW in close(); a peeked WM_QUIT
-           ;; means we're done.
+           ;; Back in normal (non-atomic) mode: run what the WindowProc
+           ;; queued (menu actions and on-event handlers).
+           (run-pending! st)
+           ;; WM_QUIT arrives via PostMessageW in close().
            (unless (= (MSG-message msg) WM_QUIT)
              (loop))]
           [else
            (sleep 0.02)
-           (loop)]))
+           (loop)])))
 
-      ;; Cleanup on the loop thread.
-      (define nid-del (calloc-typed _NOTIFYICONDATAW _NOTIFYICONDATAW-pointer))
-      (set-NOTIFYICONDATAW-cbSize! nid-del (ctype-sizeof _NOTIFYICONDATAW))
-      (set-NOTIFYICONDATAW-hWnd! nid-del hwnd)
-      (set-NOTIFYICONDATAW-uID! nid-del 1)
-      (Shell_NotifyIconW NIM_DELETE nid-del)
-      (when hwnd
-        (DestroyWindow hwnd))))
+    ;; Cleanup on the loop thread.
+    (define nid-del (calloc-typed _NOTIFYICONDATAW _NOTIFYICONDATAW-pointer))
+    (set-NOTIFYICONDATAW-cbSize! nid-del (ctype-sizeof _NOTIFYICONDATAW))
+    (set-NOTIFYICONDATAW-hWnd! nid-del hwnd)
+    (set-NOTIFYICONDATAW-uID! nid-del 1)
+    (Shell_NotifyIconW NIM_DELETE nid-del)
+    (DestroyWindow hwnd))
 
   (define thd (thread thunk))
   (set-tray-state-thread! st thd)
@@ -400,8 +474,8 @@
 
 (define (set-tooltip! t tooltip)
   (define st (win:tray-state t))
+  (set-box! (tray-state-tooltip-box st) tooltip)
   (define nid (make-nid-for st))
-  (write-tip! nid tooltip)
   (Shell_NotifyIconW NIM_MODIFY nid))
 
 (define (set-icon! t icon-path)
@@ -433,4 +507,5 @@
   (set-NOTIFYICONDATAW-uFlags! nid (bitwise-ior NIF_MESSAGE NIF_ICON NIF_TIP))
   (set-NOTIFYICONDATAW-uCallbackMessage! nid TRAY_CALLBACK_MSG)
   (set-NOTIFYICONDATAW-hIcon! nid (tray-state-icon-h st))
+  (write-tip! nid (unbox (tray-state-tooltip-box st)))
   nid)

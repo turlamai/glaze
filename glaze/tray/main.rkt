@@ -3,14 +3,19 @@
 ;; Public tray API. Dispatches to a platform-specific backend based on
 ;; (system-type 'os):
 ;;   - 'windows  -> tray-windows.rkt  (Shell_NotifyIconW via ffi/unsafe)
-;;   - 'macosx   -> tray-macos.rkt    (NSStatusItem via ffi/unsafe/objc) [stub for now]
-;;   - 'unix     -> trayay-linux.rkt  (libayatana-appindicator via ffi/unsafe) [stub for now]
+;;   - 'macosx   -> tray-macos.rkt    (NSStatusItem via ffi/unsafe/objc)
+;;   - 'unix     -> tray-linux.rkt    (libayatana-appindicator via ffi/unsafe)
 ;;
 ;; Every backend exports the SAME procedure names (make-tray, set-tooltip!,
 ;; set-icon!, set-menu!, close, supported?) and performs its own platform /
 ;; library gating. If a backend's make-tray raises (native deps missing or not
 ;; implemented), the dispatcher catches it, warns, and retries against the stub
 ;; so callers always get a usable (possibly inert) handle.
+;;
+;; Click events: `make-tray #:on-event` receives 'click and 'double-click
+;; (Windows) or 'click (Linux AppIndicator "activate") on the tray's own
+;; message-loop thread; handlers must not block. A raising handler is logged
+;; and contained. On macOS the menu opens on click and no event is reported.
 
 (require "tray-protocol.rkt")
 

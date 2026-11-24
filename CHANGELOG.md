@@ -144,6 +144,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `make-tray #:on-event` now actually fires (glaze#141). The Windows backend
+  reports `'click` on left-button-up and `'double-click` on left-button
+  double-click; the Linux backend reports `'click` on the AppIndicator
+  `activate` signal. Handlers run on the tray's message-loop thread after
+  the WindowProc returns, never inside the foreign callback, and a raising
+  handler (menu action or event) is logged instead of killing the pump.
+  macOS still opens its menu on click and reports no event.
+
+- The Windows tray message loop no longer dies on its first message. It read
+  the peeked `MSG` through an accessor that rejected the untagged pointer,
+  and the error handler then blocked forever; the loop also peeked the
+  thread-wide queue, so one tray's `WM_QUIT` / `PostQuitMessage` stopped the
+  next tray created in the same process (all Racket threads share one OS
+  thread and one message queue). The loop now peeks with its own `hwnd`
+  filter, watches a per-tray open flag instead of `PostQuitMessage`, and
+  reports a stopped loop on stderr.
+
+- The Windows tray icon is re-added after Explorer restarts
+  (`TaskbarCreated`). The tray window is now a hidden top-level window;
+  message-only windows never receive broadcast messages.
+
 - Linux Now Playing answers external D-Bus calls again (glaze#157). Two
   independent faults, one for calls that never arrived and one for calls
   that arrived and then crashed:

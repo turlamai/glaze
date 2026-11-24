@@ -715,6 +715,21 @@ Glaze provides a cross-platform system tray:
 - **macOS** — `NSStatusItem` / `NSMenu`
 - **Linux** — `libayatana-appindicator` + `libgtk-3`
 
+```racket
+(require glaze)
+
+(define t
+  (make-tray
+   #:tooltip "My App"
+   #:menu (list (make-menu-item "Show" #:action show-window)
+                (menu-separator)
+                (make-menu-item "Quit"  #:action (lambda () (app-quit!))))
+   #:on-event (lambda (event)
+                (when (eq? event 'click) (show-window)))))
+```
+
+`#:on-event` receives `'click` (Windows, Linux) and `'double-click` (Windows) when the user left-clicks the icon; the menu is shown on right-click without reporting an event. Handlers run on the tray's message-loop thread and must not block; a raising handler is logged and contained. On macOS the menu opens on click and no event is reported. On Windows the icon is re-added automatically after Explorer restarts.
+
 The tray is an optional integration. If its backend is unavailable it may degrade to an inert stub; that is intentionally different from the mandatory main WebView.
 
 ## App Platform APIs
