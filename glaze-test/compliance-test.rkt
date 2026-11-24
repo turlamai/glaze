@@ -137,6 +137,35 @@
                         (hasheq 'name "dual" 'version "2.0" 'license '(Apache-2.0 OR MIT)))))
   (check-true (hash-ref ok-report 'ok))
   (check-equal? (hash-ref ok-report 'problems) '())
+  ;; A stock Racket installation: its natipkgs declare "(Apache-2.0 OR MIT)
+  ;; AND OpenSSL" with SPDX's deprecated identifier. The OpenSSL license is
+  ;; permissive, so the audit accepts it under both its identifiers, while an
+  ;; unknown identifier inside the same expression still fails closed.
+  (define natipkg-report
+    (audit-report (list (hasheq 'name
+                                "racket-x86_64-linux-natipkg-3"
+                                'version
+                                "9.3"
+                                'license
+                                '((Apache-2.0 OR MIT) AND OpenSSL)
+                                'scope
+                                'installation))))
+  (check-true (hash-ref natipkg-report 'ok))
+  (check-equal? (hash-ref natipkg-report 'problems) '())
+  (define openssl-report
+    (audit-report
+     (list (hasheq 'name "crypto-bindings" 'version "1.0" 'license '(MIT AND OpenSSL-standalone)))))
+  (check-true (hash-ref openssl-report 'ok))
+  (define unknown-in-report
+    (audit-report (list (hasheq 'name
+                                "mystery"
+                                'version
+                                "1.0"
+                                'license
+                                '((Apache-2.0 OR MIT) AND Proprietary-Terms)
+                                'scope
+                                'installation))))
+  (check-false (hash-ref unknown-in-report 'ok))
   (define bad-report
     (audit-report (list (hasheq 'name "root" 'version "1.0" 'license 'MIT)
                         (hasheq 'name "gpl" 'version "1.0" 'license 'GPL-3.0-only)

@@ -116,7 +116,14 @@
           "LGPL-2.1-only"
           "LGPL-2.1-or-later"
           "LGPL-3.0-only"
-          "LGPL-3.0-or-later"))
+          "LGPL-3.0-or-later"
+          ;; The OpenSSL license (Apache-1.1 style with an advertising
+          ;; clause; permissive, not copyleft). Racket's own natipkgs ship
+          ;; under "(Apache-2.0 OR MIT) AND OpenSSL", so a standard Racket
+          ;; installation fails the audit without it. "OpenSSL" is SPDX's
+          ;; deprecated identifier for the same license, kept as an alias.
+          "OpenSSL-standalone"
+          "OpenSSL"))
 
 (define rejected-licenses
   '("GPL-2.0-only" "GPL-2.0-or-later"
