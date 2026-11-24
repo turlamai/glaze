@@ -50,28 +50,36 @@
 ;; app would start and pass every headless check, then die at the first
 ;; window/notification with "collection not found". Builds always run on the
 ;; target platform, so keying on (system-type 'os) here is exact.
+;;
+;; The tray dispatcher falls back to the stub whenever the platform backend's
+;; make-tray raises (no indicator library, no session bus), so the stub is a
+;; runtime-reached module on every OS, not only the `[else]` arm: without it
+;; in the package that fallback is itself a "collection not found" and the
+;; app exits at startup.
 (define (platform-backend-modules)
   (define os (system-type 'os))
-  (list (case os
-          [(windows) 'glaze/webview/webview-windows]
-          [(macosx) 'glaze/webview/webview-macos]
-          [(unix) 'glaze/webview/webview-linux]
-          [else 'glaze/webview/webview-stub])
-        (case os
-          [(windows) 'glaze/sys/sys-windows]
-          [(macosx) 'glaze/sys/sys-macos]
-          [(unix) 'glaze/sys/sys-linux]
-          [else 'glaze/sys/sys-stub])
-        (case os
-          [(windows) 'glaze/tray/tray-windows]
-          [(macosx) 'glaze/tray/tray-macos]
-          [(unix) 'glaze/tray/tray-linux]
-          [else 'glaze/tray/tray-stub])
-        (case os
-          [(windows) 'glaze/now-playing/now-playing-stub]
-          [(macosx) 'glaze/now-playing/now-playing-macos]
-          [(unix) 'glaze/now-playing/now-playing-linux]
-          [else 'glaze/now-playing/now-playing-stub])))
+  (remove-duplicates (append (list (case os
+                                     [(windows) 'glaze/webview/webview-windows]
+                                     [(macosx) 'glaze/webview/webview-macos]
+                                     [(unix) 'glaze/webview/webview-linux]
+                                     [else 'glaze/webview/webview-stub])
+                                   (case os
+                                     [(windows) 'glaze/sys/sys-windows]
+                                     [(macosx) 'glaze/sys/sys-macos]
+                                     [(unix) 'glaze/sys/sys-linux]
+                                     [else 'glaze/sys/sys-stub])
+                                   (case os
+                                     [(windows) 'glaze/tray/tray-windows]
+                                     [(macosx) 'glaze/tray/tray-macos]
+                                     [(unix) 'glaze/tray/tray-linux]
+                                     [else 'glaze/tray/tray-stub])
+                                   (case os
+                                     [(windows) 'glaze/now-playing/now-playing-stub]
+                                     [(macosx) 'glaze/now-playing/now-playing-macos]
+                                     [(unix) 'glaze/now-playing/now-playing-linux]
+                                     [else 'glaze/now-playing/now-playing-stub])
+                                   ;; the dispatcher's fallback, reached on every OS
+                                   'glaze/tray/tray-stub))))
 
 ;; Build a Glaze project into a distributable.
 ;;

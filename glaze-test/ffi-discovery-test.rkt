@@ -34,11 +34,16 @@
 ;; the build test, not a shipped binary.
 (require glaze/build)
 (define backends (platform-backend-modules))
-(check-equal? (length backends) 4 "one backend each for webview, sys, tray, now-playing")
+(check-true (>= (length backends) 4) "one backend each for webview, sys, tray, now-playing")
 (check-true (andmap symbol? backends) "backend module paths are symbols")
 (for ([mod (in-list backends)])
   (check-true (string-prefix? (symbol->string mod) "glaze/")
               (format "~a lives in the glaze collection" mod)))
+;; The tray dispatcher falls back to the stub when the platform backend's
+;; make-tray raises; a package without the stub turns that fallback into a
+;; startup crash (relaypilot's packaged app exited at once on Linux).
+(check-not-false (memq 'glaze/tray/tray-stub backends)
+                 "the tray stub fallback is embedded on every platform")
 (check-true (case (system-type 'os)
               [(unix) (and (memq 'glaze/webview/webview-linux backends) #t)]
               [(windows) (and (memq 'glaze/webview/webview-windows backends) #t)]

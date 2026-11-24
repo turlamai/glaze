@@ -151,6 +151,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the WindowProc returns, never inside the foreign callback, and a raising
   handler (menu action or event) is logged instead of killing the pump.
   macOS still opens its menu on click and reports no event.
+- The Linux tray backend module can load again: `glaze/tray/tray-linux` used
+  `maybe-bind` before defining it, so it failed on every Linux host and the
+  dispatcher always fell back to the stub. Found by a packaged app on a
+  hosted Linux runner; the native indicator path itself is still not
+  exercised in CI.
+- A package keeps the tray stub fallback. `raco glaze build` embedded the
+  platform tray backend but not `glaze/tray/tray-stub`, which the dispatcher
+  loads whenever that backend's `make-tray` raises; in a packaged app the
+  fallback was a "collection not found" and the app exited at startup.
 
 - The Windows tray message loop no longer dies on its first message. It read
   the peeked `MSG` through an accessor that rejected the untagged pointer,
