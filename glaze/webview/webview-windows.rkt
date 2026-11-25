@@ -350,7 +350,10 @@
 ;; window class registered without icons gets the generic blank icon in the
 ;; title bar and Alt-Tab even though the executable carries the right one.
 (define LoadImageW
-  (get-ffi-obj "LoadImageW" user32 (_fun _pointer _pointer _uint _int _int _uint -> _pointer) (lambda () #f)))
+  (get-ffi-obj "LoadImageW"
+               user32
+               (_fun _pointer _pointer _uint _int _int _uint -> _pointer)
+               (lambda () #f)))
 (define IMAGE_ICON 1)
 (define LR_DEFAULTSIZE #x40)
 (define LR_SHARED #x8000)
@@ -862,18 +865,22 @@
       (set-WNDCLASSEXW-lpszClassName! wc class-name)
       ;; Class icons are shared (LR_SHARED), so Windows owns their lifetime.
       (define small-icon-size
-        (if GetSystemMetrics (GetSystemMetrics SM_CXSMICON) 16))
-      (define big-icon
-        (load-app-icon instance 0 0 (bitwise-ior LR_DEFAULTSIZE LR_SHARED)))
+        (if GetSystemMetrics
+            (GetSystemMetrics SM_CXSMICON)
+            16))
+      (define big-icon (load-app-icon instance 0 0 (bitwise-ior LR_DEFAULTSIZE LR_SHARED)))
       (define small-icon
         (load-app-icon instance
                        small-icon-size
-                       (if GetSystemMetrics (GetSystemMetrics SM_CYSMICON) 16)
+                       (if GetSystemMetrics
+                           (GetSystemMetrics SM_CYSMICON)
+                           16)
                        LR_SHARED))
       (set-WNDCLASSEXW-hIcon! wc big-icon)
       (set-WNDCLASSEXW-hIconSm! wc small-icon)
       (RegisterClassExW wc)
-      (unless big-icon (log "warning: no APPLICATION icon group in the executable; window uses the default icon"))
+      (unless big-icon
+        (log "warning: no APPLICATION icon group in the executable; window uses the default icon"))
 
       (define hwnd
         (CreateWindowExW 0

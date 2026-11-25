@@ -31,12 +31,12 @@
 
 ;; GLAZE_DEBUG=1 is the deliberate opt-out: without handles, the ports stay
 ;; real, so the runtime opens a console and the traces become visible.
-(check-equal? (call-with-headless-stdio
-               (lambda () (list (eq? (current-output-port) outside-out)
-                                (eq? (current-error-port) outside-err)
-                                (eq? (current-input-port) outside-in)))
-               #:stdio-attached? (lambda () #f)
-               #:debug? #t)
+(check-equal? (call-with-headless-stdio (lambda ()
+                                          (list (eq? (current-output-port) outside-out)
+                                                (eq? (current-error-port) outside-err)
+                                                (eq? (current-input-port) outside-in)))
+                                        #:stdio-attached? (lambda () #f)
+                                        #:debug? #t)
               '(#t #t #t)
               "GLAZE_DEBUG=1 keeps the real ports even without handles")
 (check-true (boolean? debug-trace-enabled?) "debug-trace-enabled? answers for the test process")
@@ -62,17 +62,17 @@
                        'returned))
            'returned
            "the thunk's value is returned")
-(check-exn exn:fail? (lambda () (headless (lambda () (error 'test "boom"))))
-             "exceptions cross the boundary")
+(check-exn exn:fail?
+           (lambda () (headless (lambda () (error 'test "boom"))))
+           "exceptions cross the boundary")
 (check-eq? (current-error-port) outside-err "error port restored after raise")
 
 ;; A thread spawned inside the guarded extent inherits the inert ports; one
 ;; spawned outside keeps the caller's.
 (define inherited (box 'pending))
-(void
- (headless (lambda ()
-             (thread (lambda ()
-                       (set-box! inherited (not (eq? (current-error-port) outside-err))))))))
+(void (headless (lambda ()
+                  (thread (lambda ()
+                            (set-box! inherited (not (eq? (current-error-port) outside-err))))))))
 (let loop ([n 0])
   (unless (or (not (eq? (unbox inherited) 'pending)) (>= n 50))
     (sleep 0.1)
@@ -80,8 +80,7 @@
 (check-true (eq? (unbox inherited) #t) "a child thread inherits headless stdio")
 
 (define outside-worker-result (box 'pending))
-(void (thread (lambda ()
-                (set-box! outside-worker-result (eq? (current-error-port) outside-err)))))
+(void (thread (lambda () (set-box! outside-worker-result (eq? (current-error-port) outside-err)))))
 (let loop ([n 0])
   (unless (or (not (eq? (unbox outside-worker-result) 'pending)) (>= n 50))
     (sleep 0.1)

@@ -294,172 +294,173 @@
                  #:on-ready [on-ready (lambda (wv url) (void))])
   (call-with-headless-stdio
    (lambda ()
-    (when (and authority (not (capability? authority)))
-      (raise-argument-error 'run-app "(or/c #f capability?)" authority))
-    (unless (memq transport '(http native))
-      (raise-argument-error 'run-app "(or/c 'http 'native)" transport))
-    (define native? (eq? transport 'native))
-    ;; The native transport has no listener to protect: the message handler is
-    ;; the trust boundary, so no token is minted and #:port is meaningless.
-    (when (and native? port)
-      (raise-arguments-error 'run-app "#:port is meaningless with #:transport 'native" "port" port))
-    (define state-path
-      (cond
-        [(not window-state-option) #f]
-        [(eq? window-state-option #t)
-         (unless (and (string? app-id) (not (string=? app-id "")))
-           (raise-arguments-error 'run-app
-                                  "#:app-id is required when #:window-state is #t"
-                                  "app-id"
-                                  app-id))
-         (default-window-state-path app-id)]
-        [(path-string? window-state-option) window-state-option]
-        [else (raise-argument-error 'run-app "(or/c #f #t path-string?)" window-state-option)]))
-    (define token
-      (cond
-        [native? #f]
-        [(string? api-token) api-token]
-        ;; A capability cannot work without a token: start-server would reject
-        ;; it, so #f under authority still mints one (historical contract).
-        [(or authority (eq? api-token #t)) (make-api-token)]
-        [else #f]))
-    ;; Native transport: dispatch threads live under the app custodian and the
-    ;; error reporter matches run-app's, so handler failures surface the same
-    ;; way on both transports. The transport and its parameters are recorded
-    ;; on the app so open-app-window can mint per-window identities.
-    (define app
-      (make-app #:app-id app-id #:event-bus event-bus #:quit-on-last-window? quit-on-last-window?))
-    (define native-transport-handle
-      (and native?
-           (parameterize ([current-custodian (glaze-app-custodian app)]
-                          [current-glaze-error-reporter (or on-error (current-glaze-error-reporter))]
-                          ;; Route handlers run on transport worker threads;
-                          ;; binding current-app here lets them open windows
-                          ;; (open-app-window) for the running app.
-                          [current-app app])
-             (define nt
-               (start-native-transport #:api api-routes
-                                       #:authority authority
-                                       #:events event-bus
-                                       #:public-dir public-dir))
-             (set-glaze-app-native-info! app (app-native api-routes public-dir authority event-bus nt))
-             nt)))
-    (define-values (actual-port raw-shutdown)
-      (if native?
-          (values #f void)
-          (if port
-              (start-server #:port port
-                            #:public-dir public-dir
-                            #:api api-routes
-                            #:events event-bus
-                            #:api-token token
-                            #:capability authority
-                            #:max-body-size max-body-size)
-              (start-server-on-free-port #:public-dir public-dir
-                                         #:api api-routes
-                                         #:events event-bus
-                                         #:api-token token
-                                         #:capability authority
-                                         #:max-body-size max-body-size))))
-    (define url
-      (if native?
-          "glaze://app/"
-          (format "http://127.0.0.1:~a/" actual-port)))
-    ;; Capability URL: the one-time ?glaze-token= bootstrap exchanges the token
-    ;; for an HttpOnly cookie and redirects to the clean URL. Without it the
-    ;; page would have no way to receive the token (api.js deliberately no
-    ;; longer hands it out); programmatic clients use the X-Glaze-Token header.
-    (define open-url
-      (if (and token (not native?))
-          (format "~a?glaze-token=~a" url token)
-          url))
-    ;; Once-only teardown: the semaphore serializes concurrent callers; the
-    ;; flag turns a second call (after the normal quit path) into a no-op
-    ;; instead of a second raw-shutdown / custodian kill.
-    (define (teardown)
-      (call-with-semaphore (glaze-app-once-sema app)
-                           (lambda ()
-                             (unless (unbox (glaze-app-shut-down?-box app))
-                               (set-box! (glaze-app-shut-down?-box app) #t)
-                               ;; keel's lifecycle: every exit goes through
-                               ;; stopping — startup and on-ready failures
-                               ;; included.
-                               (transition-app-to-stopping! app)
-                               ;; Release the single-instance claim before the
-                               ;; native teardown. A lingering WebView2/window
-                               ;; cleanup must not block the next launch (#124).
-                               (with-handlers ([exn:fail? (lambda (_) (void))])
-                                 (release-single-instance! (app-id app)))
-                               ;; Leftover windows (quit via app-quit! or a raising path) close
-                               ;; here, on the caller's thread — the thread run-app was called
-                               ;; on, which owns the native window calls.
-                               (define leftover
-                                 (call-with-semaphore (glaze-app-windows-sema app)
-                                                      (lambda ()
-                                                        (define wvs (unbox (glaze-app-windows-box app)))
-                                                        (set-box! (glaze-app-windows-box app) '())
-                                                        wvs)))
-                               (for ([wv (in-list leftover)])
-                                 (with-handlers ([exn:fail? (lambda (_) (void))])
-                                   (webview-close wv)))
-                               (raw-shutdown)
-                               (when native-transport-handle
-                                 (with-handlers ([exn:fail? (lambda (_) (void))])
-                                   (native-transport-shutdown! native-transport-handle)))
-                               (custodian-shutdown-all (glaze-app-custodian app))
-                               (unless (try-app-state-transition! app 'stopping 'stopped)
-                                 (error 'run-app
-                                        "application did not reach stopping before teardown"))))))
-    (parameterize ([current-api-token (or token "")]
-                   [current-glaze-error-reporter (or on-error (current-glaze-error-reporter))]
-                   [current-app app])
-      ;; Callbacks may fire on backend threads that never entered this
-      ;; parameterize; capture the reporter once so on-error applies to them.
-      (define reporter (current-glaze-error-reporter))
-      ;; The first window. open-app-window's on-close unregisters it and, per
-      ;; the quit policy, quits the app when the last window closes.
-      (define (make-on-close)
+     (when (and authority (not (capability? authority)))
+       (raise-argument-error 'run-app "(or/c #f capability?)" authority))
+     (unless (memq transport '(http native))
+       (raise-argument-error 'run-app "(or/c 'http 'native)" transport))
+     (define native? (eq? transport 'native))
+     ;; The native transport has no listener to protect: the message handler is
+     ;; the trust boundary, so no token is minted and #:port is meaningless.
+     (when (and native? port)
+       (raise-arguments-error 'run-app "#:port is meaningless with #:transport 'native" "port" port))
+     (define state-path
+       (cond
+         [(not window-state-option) #f]
+         [(eq? window-state-option #t)
+          (unless (and (string? app-id) (not (string=? app-id "")))
+            (raise-arguments-error 'run-app
+                                   "#:app-id is required when #:window-state is #t"
+                                   "app-id"
+                                   app-id))
+          (default-window-state-path app-id)]
+         [(path-string? window-state-option) window-state-option]
+         [else (raise-argument-error 'run-app "(or/c #f #t path-string?)" window-state-option)]))
+     (define token
+       (cond
+         [native? #f]
+         [(string? api-token) api-token]
+         ;; A capability cannot work without a token: start-server would reject
+         ;; it, so #f under authority still mints one (historical contract).
+         [(or authority (eq? api-token #t)) (make-api-token)]
+         [else #f]))
+     ;; Native transport: dispatch threads live under the app custodian and the
+     ;; error reporter matches run-app's, so handler failures surface the same
+     ;; way on both transports. The transport and its parameters are recorded
+     ;; on the app so open-app-window can mint per-window identities.
+     (define app
+       (make-app #:app-id app-id #:event-bus event-bus #:quit-on-last-window? quit-on-last-window?))
+     (define native-transport-handle
+       (and native?
+            (parameterize ([current-custodian (glaze-app-custodian app)]
+                           [current-glaze-error-reporter (or on-error (current-glaze-error-reporter))]
+                           ;; Route handlers run on transport worker threads;
+                           ;; binding current-app here lets them open windows
+                           ;; (open-app-window) for the running app.
+                           [current-app app])
+              (define nt
+                (start-native-transport #:api api-routes
+                                        #:authority authority
+                                        #:events event-bus
+                                        #:public-dir public-dir))
+              (set-glaze-app-native-info! app
+                                          (app-native api-routes public-dir authority event-bus nt))
+              nt)))
+     (define-values (actual-port raw-shutdown)
+       (if native?
+           (values #f void)
+           (if port
+               (start-server #:port port
+                             #:public-dir public-dir
+                             #:api api-routes
+                             #:events event-bus
+                             #:api-token token
+                             #:capability authority
+                             #:max-body-size max-body-size)
+               (start-server-on-free-port #:public-dir public-dir
+                                          #:api api-routes
+                                          #:events event-bus
+                                          #:api-token token
+                                          #:capability authority
+                                          #:max-body-size max-body-size))))
+     (define url
+       (if native?
+           "glaze://app/"
+           (format "http://127.0.0.1:~a/" actual-port)))
+     ;; Capability URL: the one-time ?glaze-token= bootstrap exchanges the token
+     ;; for an HttpOnly cookie and redirects to the clean URL. Without it the
+     ;; page would have no way to receive the token (api.js deliberately no
+     ;; longer hands it out); programmatic clients use the X-Glaze-Token header.
+     (define open-url
+       (if (and token (not native?))
+           (format "~a?glaze-token=~a" url token)
+           url))
+     ;; Once-only teardown: the semaphore serializes concurrent callers; the
+     ;; flag turns a second call (after the normal quit path) into a no-op
+     ;; instead of a second raw-shutdown / custodian kill.
+     (define (teardown)
+       (call-with-semaphore
+        (glaze-app-once-sema app)
         (lambda ()
-          ;; A user on-close hook that raises must never leave run-app blocked
-          ;; forever: report and finish the close.
-          (with-handlers ([exn:fail? (lambda (e) (reporter e "app:on-close"))])
-            (user-on-close))))
-      ;; Update checks are the backend's job over an Ed25519-signed feed
-      ;; (glaze/update's fetch-update-manifest path); run-app itself never
-      ;; polls an unsigned manifest. The 'update-available bus event remains
-      ;; the contract for hosts that run their own signed checker.
-      ;; If native GUI startup fails, never leave the local HTTP server
-      ;; behind. open-window's exception contains the platform-specific
-      ;; install/repair instructions; preserve it unchanged.
-      (define wv
-        (with-handlers ([exn:fail? (lambda (e)
-                                     (teardown)
-                                     (raise e))])
-          (open-app-window open-url
-                           #:title title
-                           #:width width
-                           #:height height
-                           #:window-state state-path
-                           #:native-transport native-transport-handle
-                           #:on-close (make-on-close))))
-      ;; The first close callback can race startup. Only the thread that still
-      ;; owns starting may enter ready and call on-ready; a concurrent quit has
-      ;; already moved the app to stopping and posted exit-sema.
-      (when (try-app-state-transition! app 'starting 'ready)
-        ;; #:on-ready runs before the event loop owns the window: an exception
-        ;; here must tear the window AND the server down, or both outlive
-        ;; run-app. open-app-window is main-thread land; on-ready is called on
-        ;; run-app's caller thread, the same one.
-        (with-handlers ([exn:fail? (lambda (e)
-                                     (teardown)
-                                     (raise e))])
-          (on-ready wv url))
-        ;; app-quit! is valid inside on-ready. In that case ready -> stopping
-        ;; already won and this conditional transition intentionally loses.
-        (try-app-state-transition! app 'ready 'running))
-      (sync (glaze-app-exit-sema app))
-      (teardown)
-      (values 'webview teardown)))))
+          (unless (unbox (glaze-app-shut-down?-box app))
+            (set-box! (glaze-app-shut-down?-box app) #t)
+            ;; keel's lifecycle: every exit goes through
+            ;; stopping — startup and on-ready failures
+            ;; included.
+            (transition-app-to-stopping! app)
+            ;; Release the single-instance claim before the
+            ;; native teardown. A lingering WebView2/window
+            ;; cleanup must not block the next launch (#124).
+            (with-handlers ([exn:fail? (lambda (_) (void))])
+              (release-single-instance! (app-id app)))
+            ;; Leftover windows (quit via app-quit! or a raising path) close
+            ;; here, on the caller's thread — the thread run-app was called
+            ;; on, which owns the native window calls.
+            (define leftover
+              (call-with-semaphore (glaze-app-windows-sema app)
+                                   (lambda ()
+                                     (define wvs (unbox (glaze-app-windows-box app)))
+                                     (set-box! (glaze-app-windows-box app) '())
+                                     wvs)))
+            (for ([wv (in-list leftover)])
+              (with-handlers ([exn:fail? (lambda (_) (void))])
+                (webview-close wv)))
+            (raw-shutdown)
+            (when native-transport-handle
+              (with-handlers ([exn:fail? (lambda (_) (void))])
+                (native-transport-shutdown! native-transport-handle)))
+            (custodian-shutdown-all (glaze-app-custodian app))
+            (unless (try-app-state-transition! app 'stopping 'stopped)
+              (error 'run-app "application did not reach stopping before teardown"))))))
+     (parameterize ([current-api-token (or token "")]
+                    [current-glaze-error-reporter (or on-error (current-glaze-error-reporter))]
+                    [current-app app])
+       ;; Callbacks may fire on backend threads that never entered this
+       ;; parameterize; capture the reporter once so on-error applies to them.
+       (define reporter (current-glaze-error-reporter))
+       ;; The first window. open-app-window's on-close unregisters it and, per
+       ;; the quit policy, quits the app when the last window closes.
+       (define (make-on-close)
+         (lambda ()
+           ;; A user on-close hook that raises must never leave run-app blocked
+           ;; forever: report and finish the close.
+           (with-handlers ([exn:fail? (lambda (e) (reporter e "app:on-close"))])
+             (user-on-close))))
+       ;; Update checks are the backend's job over an Ed25519-signed feed
+       ;; (glaze/update's fetch-update-manifest path); run-app itself never
+       ;; polls an unsigned manifest. The 'update-available bus event remains
+       ;; the contract for hosts that run their own signed checker.
+       ;; If native GUI startup fails, never leave the local HTTP server
+       ;; behind. open-window's exception contains the platform-specific
+       ;; install/repair instructions; preserve it unchanged.
+       (define wv
+         (with-handlers ([exn:fail? (lambda (e)
+                                      (teardown)
+                                      (raise e))])
+           (open-app-window open-url
+                            #:title title
+                            #:width width
+                            #:height height
+                            #:window-state state-path
+                            #:native-transport native-transport-handle
+                            #:on-close (make-on-close))))
+       ;; The first close callback can race startup. Only the thread that still
+       ;; owns starting may enter ready and call on-ready; a concurrent quit has
+       ;; already moved the app to stopping and posted exit-sema.
+       (when (try-app-state-transition! app 'starting 'ready)
+         ;; #:on-ready runs before the event loop owns the window: an exception
+         ;; here must tear the window AND the server down, or both outlive
+         ;; run-app. open-app-window is main-thread land; on-ready is called on
+         ;; run-app's caller thread, the same one.
+         (with-handlers ([exn:fail? (lambda (e)
+                                      (teardown)
+                                      (raise e))])
+           (on-ready wv url))
+         ;; app-quit! is valid inside on-ready. In that case ready -> stopping
+         ;; already won and this conditional transition intentionally loses.
+         (try-app-state-transition! app 'ready 'running))
+       (sync (glaze-app-exit-sema app))
+       (teardown)
+       (values 'webview teardown)))))
 
 (module+ test
   (require rackunit)

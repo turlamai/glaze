@@ -84,8 +84,8 @@
 (define (windows-window-class-has-icon? wv)
   (define GetClassLongPtrW
     (get-ffi-obj "GetClassLongPtrW" (ffi-lib "user32") (_fun _pointer _int -> _intptr)))
-  (define hwnd ((dynamic-require 'glaze/webview/webview-windows 'win:webview-hwnd)
-               (webview-handle wv)))
+  (define hwnd
+    ((dynamic-require 'glaze/webview/webview-windows 'win:webview-hwnd) (webview-handle wv)))
   (define big (and hwnd (GetClassLongPtrW hwnd -14)))
   (define small (and hwnd (GetClassLongPtrW hwnd -34)))
   (log (format "window class icons: big=0x~x small=0x~x" big small))
@@ -141,7 +141,8 @@
 (check! "resource load: page 1 title commits" title1-ok?)
 (check! "resource load: page 1 url" (equal? (webview-url wv) (format "http://127.0.0.1:~a/" port)))
 (when (eq? (system-type 'os) 'windows)
-  (check! "window icon: window class carries the executable's icon" (windows-window-class-has-icon? wv)))
+  (check! "window icon: window class carries the executable's icon"
+          (windows-window-class-has-icon? wv)))
 
 (define geometry-ready? (wait-until (lambda () (webview-window-state wv)) 10))
 (check! "window geometry is observable" geometry-ready?)
