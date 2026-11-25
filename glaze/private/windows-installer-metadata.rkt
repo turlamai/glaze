@@ -11,6 +11,7 @@
 (provide stable-upgrade-code
          windows-wxs
          windows-nsis
+         check-upgrade-code
          text->rtf
          project-license-text
          default-license-notice
@@ -35,6 +36,38 @@
                '(("&" . "&amp;") ("<" . "&lt;") (">" . "&gt;") ("'" . "&apos;") ("\"" . "&quot;")))])
     (string-replace result (car replacement) (cdr replacement))))
 
+;; Products of another installer family are located by their UpgradeCode: a
+;; GUID in the braced or the bare form, case-insensitive. The MSI always
+;; stores the braced upper-case form, which is what Windows Installer
+;; compares, so anything else must be normalized rather than copied.
+(define upgrade-code-pattern #px"^(?:\\{([0-9A-Fa-f-]{36})\\}|([0-9A-Fa-f-]{36}))$")
+(define upgrade-code-hex-pattern
+  #px"^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$")
+
+(define (check-upgrade-code who code)
+  (define match (and (string? code) (regexp-match upgrade-code-pattern code)))
+  (define hex (and match (or (cadr match) (caddr match))))
+  (unless (and hex (regexp-match? upgrade-code-hex-pattern hex))
+    (raise-argument-error who "upgrade-code-string?" code))
+  (format "{~a}" (string-upcase hex)))
+
+;; `Upgrade` rows for products from another installer family, typically the
+;; previous packaging stack, whose UpgradeCode was derived from a different
+;; identifier. FindRelatedProducts puts their product codes into one property
+;; per family; MajorUpgrade already schedules RemoveExistingProducts, which
+;; then uninstalls them before this package's own files land. Without the rows
+;; the two products coexist in Programs and Features and share one directory
+;; with mixed files (glaze#173, seen with Taskly 0.2.13 -> 0.1.0).
+(define (replace-upgrade-xml replace-upgrade-codes)
+  (apply
+   string-append
+   (for/list ([code (in-list replace-upgrade-codes)]
+              [index (in-naturals 1)])
+     (format
+      "    <Upgrade Id='~a'>~n      <UpgradeVersion Minimum='0.0.0' IncludeMinimum='yes' Property='GLAZE_REPLACED_PRODUCT_~a' />~n    </Upgrade>~n"
+      code
+      index))))
+
 ;; Minimal WiX v4 source referencing the dist directory contents. The shorter
 ;; UI keeps the license, progress and finish pages without a redundant install-
 ;; directory choice. The exit page offers launching the app through the
@@ -48,8 +81,12 @@
                      #:license-rtf [license-rtf #f]
                      #:banner-bmp [banner-bmp #f]
                      #:dialog-bmp [dialog-bmp #f]
-                     #:icon-ico [icon-ico #f])
+                     #:icon-ico [icon-ico #f]
+                     #:replace-upgrade-codes [replace-upgrade-codes '()])
   (define dist (xml-escape (path->string dist-dir)))
+  (define replaced
+    (replace-upgrade-xml (for/list ([code (in-list replace-upgrade-codes)])
+                           (check-upgrade-code 'windows-wxs code))))
   (define (wix-variable id path)
     (if path
         (format "    <WixVariable Id='~a' Value='~a' />\n" id (xml-escape (path->string path)))
@@ -66,7 +103,7 @@
 <Wix xmlns='http://wixtoolset.org/schemas/v4/wxs' xmlns:ui='http://wixtoolset.org/schemas/v4/wxs/ui'>
   <Package Name='~a' Manufacturer='~a' Version='~a' UpgradeCode='~a' Scope='perMachine'>
     <MajorUpgrade DowngradeErrorMessage='A newer version is already installed.' />
-    <MediaTemplate EmbedCab='yes' />
+~a    <MediaTemplate EmbedCab='yes' />
     <Feature Id='Main'>
       <ComponentGroupRef Id='ProductComponents' />
       <ComponentGroupRef Id='ShortcutComponents' />
@@ -107,6 +144,7 @@ WXEOF
    (xml-escape publisher)
    (xml-escape version)
    (stable-upgrade-code identifier)
+   replaced
    (wix-variable "WixUILicenseRtf" license-rtf)
    (wix-variable "WixUIBannerBmp" banner-bmp)
    (wix-variable "WixUIDialogBmp" dialog-bmp)

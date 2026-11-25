@@ -28,6 +28,7 @@
          "private/linux-package.rkt"
          "private/macos-bundle.rkt"
          "private/windows-installer.rkt"
+         (only-in "private/windows-installer-metadata.rkt" check-upgrade-code)
          "private/win32-arch.rkt")
 
 (provide build-app
@@ -129,6 +130,12 @@
 ;;                  renders into RTF automatically
 ;;   #:installer-banner / #:installer-dialog — Windows only: .bmp artwork
 ;;                  for the MSI wizard (493x58 and 493x312)
+;;   #:replace-upgrade-codes — Windows MSI only: UpgradeCode GUIDs of products
+;;                  from another installer family (the previous packaging
+;;                  stack, which derived its code from a different
+;;                  identifier). Installing this package uninstalls them
+;;                  first, so the two do not coexist in Programs and
+;;                  Features with mixed files in one directory.
 ;;
 ;; Returns the path to the produced distribution directory.
 (define (build-app #:entry [entry "main.rkt"]
@@ -149,11 +156,14 @@
                    #:dmg-background [dmg-background #f]
                    #:installer-license [installer-license #f]
                    #:installer-banner [installer-banner #f]
-                   #:installer-dialog [installer-dialog #f])
+                   #:installer-dialog [installer-dialog #f]
+                   #:replace-upgrade-codes [replace-upgrade-codes '()])
   (define entry-path
     (if (path? entry)
         entry
         (string->path entry)))
+  (for ([code (in-list replace-upgrade-codes)])
+    (check-upgrade-code 'build-app code))
   (define out-dir-path
     (if (path? out-dir)
         out-dir
@@ -310,7 +320,8 @@
                         (asset-path installer-license 'installer-license)
                         (asset-path installer-banner 'installer-banner)
                         (asset-path installer-dialog 'installer-dialog)
-                        icon-path)
+                        icon-path
+                        replace-upgrade-codes)
         #f))
 
   ;; An explicitly requested installer that silently degrades to nothing is
@@ -348,7 +359,8 @@
                         installer-license
                         installer-banner
                         installer-dialog
-                        icon-path)
+                        icon-path
+                        replace-upgrade-codes)
   (case os
     [(windows)
      (make-windows-installer out-dir
@@ -360,7 +372,9 @@
                              #:license-rtf installer-license
                              #:banner-bmp installer-banner
                              #:dialog-bmp installer-dialog
-                             #:icon-ico icon)]
+                             #:icon-ico icon
+                             ;; MSI only; the NSIS fallback has no related-product table.
+                             #:replace-upgrade-codes replace-upgrade-codes)]
     [(macosx) (make-macos-installer out-dir app-name (or version "0.0.0") dmg-background)]
     [else
      (make-linux-installer
