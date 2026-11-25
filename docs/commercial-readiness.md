@@ -37,3 +37,7 @@ For each gate use PASS, FAIL, NOT RUN or NOT APPLICABLE (with reason), exact com
 The existing family compatibility workflow tests Keel on Linux, not downstream product releases. Add an opt-in candidate-testing workflow in each product or a controlled dispatcher using immutable Glaze revisions. Run core tests and native verification on pull requests; run installation and upgrade qualification on release candidates. Do not execute arbitrary downstream code with release credentials. Maintain a consumer matrix and block supported release claims when required evidence is missing.
 
 Glaze owns reusable mechanics and diagnostics; products own branding, business workflows, user-data migration, licensing policies and signing identities. Avoid copying framework fixes into every consumer. Do not publish a new tag solely to close this audit.
+
+## Native appearance
+
+Track #176: system/light/dark appearance must synchronize native chrome and WebView on supported platforms, including runtime changes, startup flash, high contrast, multiple windows and packaged verification. Record OS limitations explicitly. The Windows backend currently lacks DWM theme handling in static inspection; runtime reproduction is still required.
