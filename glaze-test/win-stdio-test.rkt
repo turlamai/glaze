@@ -19,7 +19,10 @@
   (call-with-headless-stdio thunk #:stdio-attached? (lambda () #f)))
 
 ;; The test process has real handles (pipes or a console): the predicate
-;; classifies it as attached and the thunk runs with the caller's ports.
+;; classifies it as attached and the thunk runs with the caller's ports. This
+;; must hold on every OS: outside Windows there are no Win32 handles to ask
+;; about and the answer is #t by definition — a #f there would silence every
+;; terminal-launched app (caught by the Linux ARM64 job on glaze#174).
 (check-true (procedure? stdio-attached?))
 (check-true (stdio-attached?) "a test runner has attached stdio")
 (check-eq? (call-with-headless-stdio (lambda () (current-error-port)))
