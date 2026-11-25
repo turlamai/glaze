@@ -1,4 +1,4 @@
-/* site-kit v1.0.3 — generated from github.com/turlamai/site-kit; do not edit per-site. */
+/* site-kit v1.0.4 — generated from github.com/turlamai/site-kit; do not edit per-site. */
 /* ============================================================
    site-kit family.css — jrtx.site family design system
    Single source of truth: github.com/turlamai/site-kit
@@ -248,8 +248,12 @@ html[data-theme="dark"] .kit-kicker { color: var(--kit-accent); }
     border-left: 1px solid var(--kit-border);
 }
 
-@media (max-width: 760px) {
+/* Nav links fold below 860px: the full desktop nav (brand + links + actions)
+   does not fit tablet widths, and 760px left a gap where wide navs overflowed. */
+@media (max-width: 860px) {
     .kit-nav-links { display: none; }
+}
+@media (max-width: 760px) {
     .kit-nav-actions { margin-left: auto; padding-left: 0; border-left: none; }
 }
 
@@ -513,6 +517,9 @@ html[data-theme="dark"] .kit-hero .kit-eyebrow { color: var(--kit-accent); }
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 18px;
 }
+/* Grid items shrink below their content's min width; wide code blocks
+   inside cards scroll instead of stretching the track. */
+.kit-grid > * { min-width: 0; }
 .kit-grid--3 { grid-template-columns: repeat(3, 1fr); }
 .kit-grid--2 { grid-template-columns: repeat(2, 1fr); }
 @media (max-width: 960px) {
