@@ -20,6 +20,7 @@ cancelled and unrun jobs are not passes.
 | Schema contract | `raco glaze schema check --json` | a protocol, route, command, named-type, error or ordering break against the committed `glaze-schema.json` |
 | Native acceptance | `raco glaze verify` | the real system WebView never loads, the URL differs, or screenshot capture fails |
 | Packaged launch | `raco glaze measure startup --seconds 3` | the packaged artifact exits inside the survival window |
+| Packaged launch, no console (Windows) | `scripts/windows-console-smoke.ps1 -Exe <app.exe>` | the app launched the way Explorer launches it (no standard handles) opens a console window, or exits inside the survival window |
 | Size budget | `raco glaze measure size --budget budgets.json` | an artifact exceeds its first matching glob budget |
 | Installer shape | `raco glaze build --installer ...` plus platform validation | the toolchain was silently absent, MSI upgrade identity changed, or expected package contents are missing |
 | Updates | the application's own N→N+1 scenario | a signature or hash is rejected incorrectly, or install/rollback is not exercised |

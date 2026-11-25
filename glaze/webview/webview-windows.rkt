@@ -51,6 +51,7 @@
          "../native-transport.rkt"
          "../tray/tray-protocol.rkt"
          "../private/id-allocator.rkt"
+         "../private/win-stdio.rkt"
          "../private/win32-arch.rkt"
          "../private/windows-capture.rkt")
 
@@ -70,7 +71,8 @@
          focus!
          set-menu!
          closed?
-         win:webview?)
+         win:webview?
+         win:webview-hwnd)
 
 (define-runtime-path here ".")
 (define loader-path (build-path here ".." "native" (webview2-loader-subdir) "WebView2Loader"))
@@ -113,8 +115,19 @@
 (define IID-WebResourceHandler
   (bytes #x4C #xB7 #x00 #xAB #xF1 #x15 #x46 #x46 #x80 #xE8 #xE7 #x63 #x41 #xD2 #x5D #x71))
 
+;; Error-path diagnostics: unconditional, rare, and the only thing a terminal
+;; run or a log sink sees by default.
 (define (log fmt . args)
   (apply fprintf (current-error-port) (string-append "[glaze-win-webview] " fmt "\n") args))
+
+;; Hot-path chatter (one line per resource request and per bridge message).
+;; Opt-in with GLAZE_DEBUG=1 (the switch is defined in private/win-stdio):
+;; printed unconditionally it was the first stdio write of every packaged
+;; app, which on Windows made the Racket runtime open a console window and
+;; then flood it (glaze#173).
+(define (trace fmt . args)
+  (when debug-trace-enabled?
+    (apply fprintf (current-error-port) (string-append "[glaze-win-webview] " fmt "\n") args)))
 
 ;; UTF-16 helper (Racket has no string->bytes/utf-16).
 (define conv (bytes-open-converter "platform-UTF-8" "platform-UTF-16"))
@@ -332,6 +345,31 @@
                     (lambda () #f))))
 (define RegisterClassExW
   (get-ffi-obj "RegisterClassExW" user32 (_fun _pointer -> _ushort) (lambda () #f)))
+;; Window icon. `raco exe --ico` stores the application icon as the module's
+;; icon group named "APPLICATION" (the name GRacket.exe's own icon has). A
+;; window class registered without icons gets the generic blank icon in the
+;; title bar and Alt-Tab even though the executable carries the right one.
+(define LoadImageW
+  (get-ffi-obj "LoadImageW"
+               user32
+               (_fun _pointer _pointer _uint _int _int _uint -> _pointer)
+               (lambda () #f)))
+(define IMAGE_ICON 1)
+(define LR_DEFAULTSIZE #x40)
+(define LR_SHARED #x8000)
+(define SM_CXSMICON 49)
+(define SM_CYSMICON 50)
+(define app-icon-group (wstr "APPLICATION"))
+
+;; Loads an icon from the executable's resources: the "APPLICATION" group
+;; first, then the first integer-identified group. #f when neither exists or
+;; the FFI entry is unavailable; the caller then registers a class without an
+;; icon, which is the pre-fix behavior.
+(define (load-app-icon module cx cy flags)
+  (and LoadImageW
+       module
+       (or (LoadImageW module app-icon-group IMAGE_ICON cx cy flags)
+           (LoadImageW module (cast 1 _intptr _pointer) IMAGE_ICON cx cy flags))))
 (define CreateWindowExW
   (get-ffi-obj "CreateWindowExW"
                user32
@@ -410,7 +448,15 @@
 (define CW_USEDEFAULT -2147483648)
 (define SW_SHOW 5)
 (define PM_REMOVE 1)
-(define class-name #"GlazeWebView")
+;; RegisterClassExW/CreateWindowExW read this as UTF-16; a byte string would
+;; register the ASCII bytes as UTF-16 code units (a mojibake name that
+;; FindWindow and every inspection tool cannot match).
+(define class-name (wstr "GlazeWebView"))
+
+;; The HWND of the host window: #f until init creates it and after close.
+;; Backend surface (Windows only), for checks that inspect the native window.
+(define (win:webview-hwnd wv)
+  (unbox (win:webview-hwnd-box wv)))
 
 (struct win:webview
         (hwnd-box [controller-box #:mutable]
@@ -553,12 +599,12 @@
   (and (= hr S_OK) req ((cwv-getter 3) req))) ; get_Uri
 
 (define (win-scheme-serve! wiring args)
-  (log "scheme: enter")
+  (trace "scheme: enter")
   (define transport (native-wiring-transport wiring))
   (define env (native-wiring-env wiring))
-  (log "scheme: wiring ok, env=~s" (and env #t))
+  (trace "scheme: wiring ok, env=~s" (and env #t))
   (define (respond! mime data)
-    (log "scheme: respond mime=~a len=~a" (bytes->string/latin-1 mime) (bytes-length data))
+    (trace "scheme: respond mime=~a len=~a" (bytes->string/latin-1 mime) (bytes-length data))
     (define stream (and SHCreateMemStream (SHCreateMemStream data (bytes-length data))))
     (define make-resp
       (cast (vtfn env 4)
@@ -588,7 +634,7 @@
                                ((current-glaze-error-reporter) e "glz1:scheme")
                                (respond-status! 404))])
     (define url (win-scheme-url args))
-    (log "scheme: url=~s" url)
+    (trace "scheme: url=~s" url)
     (define segments (native-scheme-segments url))
     (cond
       [(not segments) (respond-status! 404)]
@@ -613,18 +659,18 @@
            (respond-status! 404))])))
 
 (define (win-handle-message! wiring args)
-  (log "message: enter")
+  (trace "message: enter")
   (define transport (native-wiring-transport wiring))
   (define fn
     (cast (vtfn args 5) ; TryGetWebMessageAsString
           _fpointer
           (_fun _pointer (p : (_ptr o _pointer)) -> (r : _int32) -> (values r p))))
   (define-values (hr p) (fn args))
-  (log "message: hr=0x~x" (bitwise-and hr #xffffffff))
+  (trace "message: hr=0x~x" (bitwise-and hr #xffffffff))
   (when (= hr S_OK)
     (define text (wstr->string p))
     (when (string? text)
-      (log "message: envelope received")
+      (trace "message: envelope received")
       ;; WebView2 invokes this on a COM/FFI callback stack. Enqueuing via
       ;; async-channel-put may yield inside Racket atomic mode and abort the
       ;; process; stash here and forward from the full Racket pump thread.
@@ -650,7 +696,7 @@
         (with-handlers ([exn:fail? (lambda (e) (log "deliver: EXN ~a" (exn-message e)))])
           (define post (cast (vtfn cwv 32) _fpointer (_fun _pointer _pointer -> _int32)))
           (define hr (post cwv (wstr (native-delivery-json (cdr v)))))
-          (log "deliver: post hr=0x~x" (bitwise-and hr #xffffffff))))
+          (trace "deliver: post hr=0x~x" (bitwise-and hr #xffffffff))))
       (loop))))
 
 (define (open-webview url
@@ -725,7 +771,7 @@
                   ;; event handlers must be in place BEFORE the first
                   ;; navigation, so the page never touches a TCP port.
                   (when native-transport
-                    (log "native: registering handlers")
+                    (trace "native: registering handlers")
                     (define wiring (native-wiring native-transport (unbox env-box)))
                     ;; AddScriptToExecuteOnDocumentCreated(script,
                     ;; handler) — the completion handler is a third [in]
@@ -741,7 +787,7 @@
                       (make-com-event-handler IID-WebResourceHandler
                                               (lambda (_sender args)
                                                 (win-scheme-serve! wiring args))))
-                    (log "native: script+filter done")
+                    (trace "native: script+filter done")
                     (define add-wrr
                       (cast (vtfn cwv 55)
                             _fpointer
@@ -752,9 +798,9 @@
                                   (r : _int32)
                                   ->
                                   (values r t))))
-                    (log "native: wrr added")
+                    (trace "native: wrr added")
                     (add-wrr cwv wrr-handler)
-                    (log "native: wmr registering")
+                    (trace "native: wmr registering")
                     (define wmr-handler
                       (make-com-event-handler IID-WebMessageHandler
                                               (lambda (_sender args)
@@ -777,7 +823,7 @@
                                                                               js)))))
                   (define nav (cast (vtfn cwv 5) _fpointer (_fun _pointer _pointer -> _int32)))
                   (define nav-hr (nav cwv url-ptr))
-                  (log "Navigate hr=0x~x" (bitwise-and nav-hr #xffffffff))
+                  (trace "Navigate hr=0x~x" (bitwise-and nav-hr #xffffffff))
                   (when devtools?
                     (define od (cast (vtfn cwv 51) _fpointer (_fun _pointer -> _int32)))
                     (od cwv))
@@ -817,7 +863,24 @@
       (set-WNDCLASSEXW-lpfnWndProc! wc wndproc-cptr)
       (set-WNDCLASSEXW-hInstance! wc instance)
       (set-WNDCLASSEXW-lpszClassName! wc class-name)
+      ;; Class icons are shared (LR_SHARED), so Windows owns their lifetime.
+      (define small-icon-size
+        (if GetSystemMetrics
+            (GetSystemMetrics SM_CXSMICON)
+            16))
+      (define big-icon (load-app-icon instance 0 0 (bitwise-ior LR_DEFAULTSIZE LR_SHARED)))
+      (define small-icon
+        (load-app-icon instance
+                       small-icon-size
+                       (if GetSystemMetrics
+                           (GetSystemMetrics SM_CYSMICON)
+                           16)
+                       LR_SHARED))
+      (set-WNDCLASSEXW-hIcon! wc big-icon)
+      (set-WNDCLASSEXW-hIconSm! wc small-icon)
       (RegisterClassExW wc)
+      (unless big-icon
+        (log "warning: no APPLICATION icon group in the executable; window uses the default icon"))
 
       (define hwnd
         (CreateWindowExW 0

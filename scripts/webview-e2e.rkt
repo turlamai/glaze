@@ -33,6 +33,9 @@
 ;;                           while the full-authority window passes
 ;;   deterministic teardown— shutdown! returns promptly, is idempotent,
 ;;                           and freezes the stats
+;;   window icon           — Windows: the window class carries an icon (the
+;;                           executable's), so the title bar, Alt-Tab and the
+;;                           taskbar do not show the blank default
 ;;
 ;;   racket scripts/webview-e2e.rkt          (macOS / Windows)
 ;;   xvfb-run -a racket scripts/webview-e2e.rkt   (Linux)
@@ -41,6 +44,7 @@
          racket/list
          racket/string
          racket/tcp
+         ffi/unsafe
          glaze/api
          glaze/api-macros
          glaze/app
@@ -70,6 +74,22 @@
       [else
        (sleep 0.25)
        (loop)])))
+
+;; Windows only. Every host executable carries an "APPLICATION" icon group —
+;; Racket.exe's own, or the app's when built with --icon — so a GlazeWebView
+;; window class whose icon is null is a regression, not an environment limit.
+;; WM_GETICON alone would not do: it returns 0 until a window sets its own
+;; icon, while the title bar falls back to the class icon, which is what is
+;; inspected here (GCLP_HICON, GCLP_HICONSM).
+(define (windows-window-class-has-icon? wv)
+  (define GetClassLongPtrW
+    (get-ffi-obj "GetClassLongPtrW" (ffi-lib "user32") (_fun _pointer _int -> _intptr)))
+  (define hwnd
+    ((dynamic-require 'glaze/webview/webview-windows 'win:webview-hwnd) (webview-handle wv)))
+  (define big (and hwnd (GetClassLongPtrW hwnd -14)))
+  (define small (and hwnd (GetClassLongPtrW hwnd -34)))
+  (log (format "window class icons: big=0x~x small=0x~x" big small))
+  (and (exact-positive-integer? big) (exact-positive-integer? small)))
 
 ;; ---- window: open, resource load, capture, close, navigation policy ----
 
@@ -120,6 +140,9 @@
   (log (format "timeout: title=~s url=~s" (webview-title wv) (webview-url wv))))
 (check! "resource load: page 1 title commits" title1-ok?)
 (check! "resource load: page 1 url" (equal? (webview-url wv) (format "http://127.0.0.1:~a/" port)))
+(when (eq? (system-type 'os) 'windows)
+  (check! "window icon: window class carries the executable's icon"
+          (windows-window-class-has-icon? wv)))
 
 (define geometry-ready? (wait-until (lambda () (webview-window-state wv)) 10))
 (check! "window geometry is observable" geometry-ready?)
