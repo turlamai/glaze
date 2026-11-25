@@ -144,6 +144,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Windows packaged apps no longer open with a console window and now show
+  their own window icon (glaze#173). Two defects, both invisible to a
+  shell-launched CI run: (1) a GUI process started from Explorer has no
+  standard handles, and the first stdio use made the Racket runtime call
+  `AllocConsole()`; the WebView backend then wrote one stderr line per
+  resource request and per bridge message, so every install opened with a
+  console window flooding `[glaze-win-webview]` output. `run-app` now runs
+  with sink ports when no standard handles are attached (`glaze/private/
+  win-stdio.rkt`; threads created inside inherit them), and the 13 hot-path
+  lines are opt-in through `GLAZE_DEBUG=1` — error-path logs stay
+  unconditional. (2) `do-init` registered `GlazeWebView` with null
+  `hIcon`/`hIconSm`, so the title bar, Alt-Tab and the taskbar showed the
+  blank default although the executable carried the right icon; the class
+  now loads the executable's `APPLICATION` icon group for both sizes and
+  warns once when the group is absent. The class name was a byte string
+  handed to the `W` entry points, which registered a mojibake name that
+  `FindWindow` could not match; it is UTF-16 now. Windows backend surface:
+  `win:webview-hwnd` exposes the host HWND for checks. Regression checks:
+  `scripts/webview-e2e.rkt` asserts the class icons on Windows;
+  `scripts/windows-console-smoke.ps1` launches the packaged sample app
+  through ShellExecute in `ci.yml` and fails on a `conhost`/`OpenConsole`
+  child, with a `GLAZE_DEBUG=1` control run that must see one.
+
 - `make-tray #:on-event` now actually fires (glaze#141). The Windows backend
   reports `'click` on left-button-up and `'double-click` on left-button
   double-click; the Linux backend reports `'click` on the AppIndicator

@@ -17,6 +17,7 @@ Glaze 自身的流水线在 `.github/workflows/ci.yml`；应用不应复制该�
 | Schema 契约 | `raco glaze schema check --json` | 相对已提交的 `glaze-schema.json` 出现协议、路由、命令、命名类型、错误或顺序破坏 |
 | 原生验收 | `raco glaze verify` | 真实系统 WebView 未加载、URL 不符或截图失败 |
 | 打包启动 | `raco glaze measure startup --seconds 3` | 打包产物在存活窗口内退出 |
+| 打包启动，无控制台（Windows） | `scripts/windows-console-smoke.ps1 -Exe <app.exe>` | 按资源管理器的方式启动（无标准句柄）时弹出了控制台窗口，或在存活窗口内退出 |
 | 体积预算 | `raco glaze measure size --budget budgets.json` | 任一产物超过其首个匹配 glob 的上限 |
 | 安装器形态 | `raco glaze build --installer ...` 加平台自身校验 | 工具链被静默跳过、MSI 升级标识变化或包内容缺失 |
 | 更新 | 应用自己的 N→N+1 场景 | 签名/哈希被错误拒绝，或未验证安装与回滚 |

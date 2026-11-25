@@ -336,6 +336,23 @@ jobs:
             grep -q 'usr/lib/sampleapp' "$RUNNER_TEMP/rpm-files.txt"
           fi
 
+      # glaze#173: from Explorer a packaged app gets no standard handles; the
+      # first stdio use then makes the Racket runtime open a console window. A
+      # shell-launched runner inherits handles and cannot reproduce it, so the
+      # launch goes through ShellExecute. The control run (GLAZE_DEBUG=1) must
+      # open a console, which proves the detector works on the runner image.
+      - name: Launch the packaged app without a console (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/windows-console-smoke.ps1 -Exe sampleapp/dist/sampleapp.exe
+
+      - name: Control run: debug traces do open a console (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          GLAZE_DEBUG: '1'
+        run: ./scripts/windows-console-smoke.ps1 -Exe sampleapp/dist/sampleapp.exe -Seconds 10 -ExpectConsole
+
       - name: Install, upgrade and remove the Linux packages
         if: runner.os == 'Linux'
         shell: bash
