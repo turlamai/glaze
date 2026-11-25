@@ -10,6 +10,7 @@
 
 (provide parse-build-opts
          parse-installer-assets
+         parse-replace-upgrade-codes
          build-command)
 
 ;; Parse the rest args for `build`. Recognized flags:
@@ -34,6 +35,9 @@
 ;;   --installer-license <p>      Windows: .rtf for the MSI license page
 ;;   --installer-banner <p>       Windows: 493x58 .bmp wizard banner
 ;;   --installer-dialog <p>       Windows: 493x312 .bmp wizard dialog
+;;   --replace-upgrade-code <g>   Windows MSI: UpgradeCode of a product from
+;;                                 another installer family; installing this
+;;                                 package uninstalls it first (repeatable)
 (define (parse-build-opts rest)
   ;; Extract installer identity separately so the established positional
   ;; parser below stays backward compatible and these options can appear in
@@ -46,13 +50,14 @@
       (match args
         [(list* "--publisher" value more) (extract more value identifier kept)]
         [(list* "--identifier" value more) (extract more publisher value kept)]
-        ;; The installer asset flags parse separately (parse-installer-assets);
-        ;; swallow them and their values here so the positional loop below
-        ;; never sees them.
+        ;; The installer asset flags parse separately (parse-installer-assets,
+        ;; parse-replace-upgrade-codes); swallow them and their values here so
+        ;; the positional loop below never sees them.
         [(list* "--dmg-background" _ more) (extract more publisher identifier kept)]
         [(list* "--installer-license" _ more) (extract more publisher identifier kept)]
         [(list* "--installer-banner" _ more) (extract more publisher identifier kept)]
         [(list* "--installer-dialog" _ more) (extract more publisher identifier kept)]
+        [(list* "--replace-upgrade-code" _ more) (extract more publisher identifier kept)]
         [(cons value more) (extract more publisher identifier (cons value kept))]
         ['() (values publisher identifier (reverse kept))])))
   (let loop ([args filtered-rest]
@@ -314,6 +319,15 @@
       [(cons _ more) (extract more bg license banner dialog)]
       ['() (values bg license banner dialog)])))
 
+;; Repeatable: every occurrence is kept, in command-line order.
+(define (parse-replace-upgrade-codes rest)
+  (let extract ([args rest]
+                [codes '()])
+    (match args
+      [(list* "--replace-upgrade-code" value more) (extract more (cons value codes))]
+      [(cons _ more) (extract more codes)]
+      ['() (reverse codes)])))
+
 (define (build-command rest)
   (define-values (name
                   version
@@ -333,6 +347,7 @@
     (parse-build-opts rest))
   (define-values (dmg-background installer-license installer-banner installer-dialog)
     (parse-installer-assets rest))
+  (define replace-upgrade-codes (parse-replace-upgrade-codes rest))
   (define schema-state (hash-ref (project-schema-status) 'status))
   (unless (equal? schema-state "ready")
     (printf "Warning: project schema is ~a; run `raco glaze schema write` before release.\n"
@@ -357,5 +372,6 @@
                #:dmg-background dmg-background
                #:installer-license installer-license
                #:installer-banner installer-banner
-               #:installer-dialog installer-dialog))
+               #:installer-dialog installer-dialog
+               #:replace-upgrade-codes replace-upgrade-codes))
   (printf "Done. Distribution in: ~a\n" dist-path))

@@ -551,6 +551,13 @@ jobs:
             }
           }
 
+      # glaze#173: a new-family MSI must be able to take over a product the
+      # previous packaging stack installed under another UpgradeCode.
+      - name: MSI takes over a product from another installer family
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/windows-installer-replace-smoke.ps1 -ProjectDir sampleapp
+
       - name: Install NSIS
         if: runner.os == 'Windows'
         shell: pwsh

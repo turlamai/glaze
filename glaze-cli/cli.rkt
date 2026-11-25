@@ -74,7 +74,10 @@
   (displayln "                       144dpi); switches to the drag-to-install layout")
   (displayln "  --installer-license <p>  Windows: .rtf for the MSI wizard license page")
   (displayln "  --installer-banner <p>   Windows: 493x58 .bmp wizard banner artwork")
-  (displayln "  --installer-dialog <p>   Windows: 493x312 .bmp wizard dialog artwork"))
+  (displayln "  --installer-dialog <p>   Windows: 493x312 .bmp wizard dialog artwork")
+  (displayln "  --replace-upgrade-code <g> Windows MSI: UpgradeCode of a product from")
+  (displayln "                          another installer family; installing this")
+  (displayln "                          package uninstalls it first (repeatable)"))
 
 ;; Dispatch CLI commands
 (define args (vector->list (current-command-line-arguments)))

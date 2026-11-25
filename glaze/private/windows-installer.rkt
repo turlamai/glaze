@@ -29,7 +29,8 @@
                                 #:license-rtf [license-rtf #f]
                                 #:banner-bmp [banner-bmp #f]
                                 #:dialog-bmp [dialog-bmp #f]
-                                #:icon-ico [icon-ico #f])
+                                #:icon-ico [icon-ico #f]
+                                #:replace-upgrade-codes [replace-upgrade-codes '()])
   (define dist (path->complete-path out-dir))
   (cond
     [(find-tool "wix.exe" "wix")
@@ -70,7 +71,8 @@
                                                                     #:license-rtf license-path
                                                                     #:banner-bmp banner-bmp
                                                                     #:dialog-bmp dialog-bmp
-                                                                    #:icon-ico icon-ico)
+                                                                    #:icon-ico icon-ico
+                                                                    #:replace-upgrade-codes replace-upgrade-codes)
                                                        out))
                                             #:exists 'replace))
                    (lambda ()

@@ -12,6 +12,15 @@ Scribble manual (`raco docs glaze`) and summarized in the
 - Keep `--identifier` stable for the life of the product. Glaze derives the
   MSI `UpgradeCode` and NSIS uninstall identity from it; a change makes the new
   installer a different product.
+- Take over a product from another installer family explicitly. When earlier
+  releases shipped under a different `UpgradeCode` (another identifier, or the
+  previous packaging stack), pass it with `--replace-upgrade-code <guid>`
+  (repeatable). Without it the new MSI does not see the old product: both stay
+  listed in Installed apps and share one install directory with mixed files.
+  The legacy product is uninstalled before the new files are written, whatever
+  its version, so the takeover also works when the new stack restarted version
+  numbering below the old one. MSI only; the NSIS fallback has no
+  related-product table.
 - Increase `--version` monotonically. The `ProductCode` rotates per version, and
   clients compare SemVer, not build numbers.
 - Keep `application_id` in the update manifest equal to the installed

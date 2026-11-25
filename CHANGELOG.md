@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `raco glaze build --replace-upgrade-code <guid>` (repeatable; `build-app
+  #:replace-upgrade-codes`, glaze#173): the Windows MSI takes over a product
+  from another installer family, typically the previous packaging stack,
+  whose `UpgradeCode` was derived from a different identifier. Each code
+  becomes an `Upgrade` row with no version ceiling, so the takeover also
+  works when the new stack restarted version numbering below the old one;
+  `MajorUpgrade`'s `RemoveExistingProducts` uninstalls the legacy product
+  before the new files land. Codes are normalized to the braced upper-case
+  form; a malformed one is a contract error. Without the flag the two
+  products coexist in Installed apps and share one directory with mixed
+  files (seen with Taskly 0.2.13 -> 0.1.0). MSI only. Lifecycle check:
+  `scripts/windows-installer-replace-smoke.ps1` in the package job builds a
+  legacy MSI with a higher version and a marker file, installs it, installs
+  the new package, and asserts the legacy product is gone.
+
 - Host-owned OS Now Playing capability (glaze#153): new reviewed layer
   `glaze/now-playing` (also re-exported by `glaze/services`) with
   `now-playing-supported?`, `now-playing-set!`, `now-playing-clear!`,

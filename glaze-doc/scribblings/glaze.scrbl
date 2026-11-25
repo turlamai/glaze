@@ -1489,6 +1489,11 @@ the built application still requires its native WebView.
 The publisher is written to native installer metadata. Keep the identifier
 stable across releases: it deterministically defines the WiX UpgradeCode and
 the NSIS Add/Remove Programs identity.
+
+@tt{--replace-upgrade-code} @scheme{<guid>} (repeatable, Windows MSI only) names the
+UpgradeCode of a product from another installer family, typically the previous
+packaging stack. Installing the MSI uninstalls that product first; without
+the flag the two coexist and share one install directory.
 }
 
 @section{CLI Commands}
