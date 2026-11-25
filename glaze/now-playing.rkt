@@ -45,22 +45,27 @@
 (define backend-procs #f)
 (define (load-backend!)
   (unless backend-procs
-    (define tbl (make-hash))
     ;; A native backend binds its FFI objects at module top level, so a host
     ;; whose system libraries lack a symbol fails on the first require (the
     ;; package builder's glib predates g_bus_get_sync). Fall back to the
     ;; inert stub there, exactly like a platform without a backend, instead
     ;; of leaving every dispatch to return #f.
-    (define mod
-      (with-handlers ([exn:fail? (lambda (_) 'glaze/now-playing/now-playing-stub)])
-        (define mod (backend-module-path))
-        (dynamic-require mod #f)
-        mod))
-    (for ([name (in-list '(supported? publish! os-info set-handler!))])
-      (hash-set! tbl
-                 name
-                 (with-handlers ([exn:fail? (lambda (_) #f)])
-                   (dynamic-require mod name))))
+    ;; Probe the exports, not just the module: once a module has failed to
+    ;; instantiate at run time, `(dynamic-require mod #f)` returns quietly on
+    ;; the next attempt, and only the per-export lookup raises again.
+    (define (load-exports mod)
+      (define tbl (make-hash))
+      (for ([name (in-list '(supported? publish! os-info set-handler!))])
+        (hash-set! tbl
+                   name
+                   (with-handlers ([exn:fail? (lambda (_) #f)])
+                     (dynamic-require mod name))))
+      (if (for/and ([proc (in-hash-values tbl)])
+            proc)
+          tbl
+          #f))
+    (define tbl
+      (or (load-exports (backend-module-path)) (load-exports 'glaze/now-playing/now-playing-stub)))
     (set! backend-procs tbl))
   backend-procs)
 
