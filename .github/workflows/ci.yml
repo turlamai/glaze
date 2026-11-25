@@ -346,7 +346,7 @@ jobs:
         shell: pwsh
         run: ./scripts/windows-console-smoke.ps1 -Exe sampleapp/dist/sampleapp.exe
 
-      - name: Control run: debug traces do open a console (Windows)
+      - name: "Control run: debug traces do open a console (Windows)"
         if: runner.os == 'Windows'
         shell: pwsh
         env:
