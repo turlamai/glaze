@@ -128,8 +128,9 @@
                              (if method-mismatch? 'method-not-allowed 'unknown-command)
                              (format "no route matches ~a ~a" (or method-sym 'GET) path)
                              'null)]
+       [(and authority (not (route-permission (first match))))
+        (glz1-error-envelope id 'capability-denied "API route has no declared permission" 'null)]
        [(and authority
-             (route-permission (first match))
              (not (capability-has-permission? authority (route-permission (first match)))))
         (glz1-error-envelope id 'capability-denied "capability denied API route" 'null)]
        [else
