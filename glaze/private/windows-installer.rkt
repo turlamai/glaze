@@ -60,46 +60,46 @@
          [(x86_64 amd64) "x64"]
          [(aarch64 arm64) "arm64"]
          [else "x86"]))
-     (dynamic-wind (lambda ()
-                     (call-with-output-file wxs-path
-                                            (lambda (out)
-                                              (display (windows-wxs app-name
-                                                                    dist
-                                                                    version
-                                                                    publisher
-                                                                    identifier
-                                                                    #:license-rtf license-path
-                                                                    #:banner-bmp banner-bmp
-                                                                    #:dialog-bmp dialog-bmp
-                                                                    #:icon-ico icon-ico
-                                                                    #:replace-upgrade-codes replace-upgrade-codes)
-                                                       out))
-                                            #:exists 'replace))
-                   (lambda ()
-                     (define wix
-                       (or (find-executable-path "wix.exe" #f) (find-executable-path "wix" #f)))
-                     (ensure-wix-extensions! wix)
-                     (if (run wix
-                              "build"
-                              "-arch"
-                              wix-arch
-                              "-ext"
-                              "WixToolset.UI.wixext"
-                              "-ext"
-                              "WixToolset.Util.wixext"
-                              "-o"
-                              (path->string temp-msi)
-                              (path->string wxs-path))
-                         (begin
-                           ;; The system temp directory and the project can be
-                           ;; on different Windows volumes (for example C: and
-                           ;; D: on GitHub runners), where rename cannot work.
-                           (copy-file temp-msi msi-path #t)
-                           msi-path)
-                         (error 'build-app "WiX build failed; see output above")))
-                   (lambda ()
-                     (when (directory-exists? wix-temp)
-                       (delete-directory/files wix-temp))))]
+     (dynamic-wind
+      (lambda ()
+        (call-with-output-file wxs-path
+                               (lambda (out)
+                                 (display (windows-wxs app-name
+                                                       dist
+                                                       version
+                                                       publisher
+                                                       identifier
+                                                       #:license-rtf license-path
+                                                       #:banner-bmp banner-bmp
+                                                       #:dialog-bmp dialog-bmp
+                                                       #:icon-ico icon-ico
+                                                       #:replace-upgrade-codes replace-upgrade-codes)
+                                          out))
+                               #:exists 'replace))
+      (lambda ()
+        (define wix (or (find-executable-path "wix.exe" #f) (find-executable-path "wix" #f)))
+        (ensure-wix-extensions! wix)
+        (if (run wix
+                 "build"
+                 "-arch"
+                 wix-arch
+                 "-ext"
+                 "WixToolset.UI.wixext"
+                 "-ext"
+                 "WixToolset.Util.wixext"
+                 "-o"
+                 (path->string temp-msi)
+                 (path->string wxs-path))
+            (begin
+              ;; The system temp directory and the project can be
+              ;; on different Windows volumes (for example C: and
+              ;; D: on GitHub runners), where rename cannot work.
+              (copy-file temp-msi msi-path #t)
+              msi-path)
+            (error 'build-app "WiX build failed; see output above")))
+      (lambda ()
+        (when (directory-exists? wix-temp)
+          (delete-directory/files wix-temp))))]
     [(find-tool "makensis")
      (define nsis-path (make-temporary-file "glaze-installer-~a.nsi"))
      (define setup-exe (build-path dist (string-append app-name "-setup.exe")))

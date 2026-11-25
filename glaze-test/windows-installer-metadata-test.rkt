@@ -97,25 +97,34 @@
                  #:replace-upgrade-codes (list legacy "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0")))
   (check-true (string-contains? wxs "<Upgrade Id='{D828976E-2BC4-5296-A277-674B7AE6F9A7}'>")
               "each configured UpgradeCode becomes its own Upgrade element")
-  (check-true (string-contains? wxs
-                                "<UpgradeVersion Minimum='0.0.0' IncludeMinimum='yes' Property='GLAZE_REPLACED_PRODUCT_1' />")
-              "any version of the other family is detected: the new stack may have restarted numbering below it")
+  (check-true
+   (string-contains?
+    wxs
+    "<UpgradeVersion Minimum='0.0.0' IncludeMinimum='yes' Property='GLAZE_REPLACED_PRODUCT_1' />")
+   "any version of the other family is detected: the new stack may have restarted numbering below it")
   (check-true (string-contains? wxs "Property='GLAZE_REPLACED_PRODUCT_2' />")
               "the property is per family so each list element is kept")
-  (check-true (string-contains? wxs "<Upgrade Id='{0F1E2D3C-4B5A-6978-8796-A5B4C3D2E1F0}'>")
-              "a bare or lower-case GUID is normalized to the braced upper-case form Windows Installer compares")
-  (check-false (string-contains? wxs "0f1e2d3c")
-               "the input spelling must not leak into the package")
+  (check-true
+   (string-contains? wxs "<Upgrade Id='{0F1E2D3C-4B5A-6978-8796-A5B4C3D2E1F0}'>")
+   "a bare or lower-case GUID is normalized to the braced upper-case form Windows Installer compares")
+  (check-false (string-contains? wxs "0f1e2d3c") "the input spelling must not leak into the package")
   (check-true (string-contains? wxs "<MajorUpgrade ")
               "the package's own family still upgrades through MajorUpgrade")
-  (check-exn exn:fail:contract? (lambda () (windows-wxs "Demo" (string->path "C:/dist") "1.2.3" "Acme" "com.acme.demo"
-                                                        #:replace-upgrade-codes '("not-a-guid")))
+  (check-exn exn:fail:contract?
+             (lambda ()
+               (windows-wxs "Demo"
+                            (string->path "C:/dist")
+                            "1.2.3"
+                            "Acme"
+                            "com.acme.demo"
+                            #:replace-upgrade-codes '("not-a-guid")))
              "a malformed UpgradeCode is a contract error, not a silent skip"))
 
 (test-case "the replace-upgrade-code parser keeps every occurrence in order"
-  (check-equal? (parse-replace-upgrade-codes '("--installer" "--replace-upgrade-code" "{A}" "--version" "1"
-                                               "--replace-upgrade-code" "{B}"))
-                '("{A}" "{B}"))
+  (check-equal?
+   (parse-replace-upgrade-codes
+    '("--installer" "--replace-upgrade-code" "{A}" "--version" "1" "--replace-upgrade-code" "{B}"))
+   '("{A}" "{B}"))
   (check-equal? (parse-replace-upgrade-codes '("--installer")) '()))
 
 (test-case "configured wizard assets ride in through WixVariables"

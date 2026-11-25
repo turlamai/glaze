@@ -59,12 +59,14 @@
 ;; the two products coexist in Programs and Features and share one directory
 ;; with mixed files (glaze#173, seen with Taskly 0.2.13 -> 0.1.0).
 (define (replace-upgrade-xml replace-upgrade-codes)
-  (apply string-append
-         (for/list ([code (in-list replace-upgrade-codes)] [index (in-naturals 1)])
-           (format
-            "    <Upgrade Id='~a'>~n      <UpgradeVersion Minimum='0.0.0' IncludeMinimum='yes' Property='GLAZE_REPLACED_PRODUCT_~a' />~n    </Upgrade>~n"
-            code
-            index))))
+  (apply
+   string-append
+   (for/list ([code (in-list replace-upgrade-codes)]
+              [index (in-naturals 1)])
+     (format
+      "    <Upgrade Id='~a'>~n      <UpgradeVersion Minimum='0.0.0' IncludeMinimum='yes' Property='GLAZE_REPLACED_PRODUCT_~a' />~n    </Upgrade>~n"
+      code
+      index))))
 
 ;; Minimal WiX v4 source referencing the dist directory contents. The shorter
 ;; UI keeps the license, progress and finish pages without a redundant install-
