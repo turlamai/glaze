@@ -160,6 +160,24 @@
                       'ok)
             "a route inside the capability succeeds")
 
+(define unclassified-response
+  (dispatch-bridge (hasheq 'glz 1 'id "unclassified" 'path "api/ping")
+                   routes
+                   authority
+                   table
+                   route->js-name))
+(check-false (hash-ref unclassified-response 'ok))
+(check-equal? (hash-ref (hash-ref unclassified-response 'error) 'code) "capability-denied")
+(check-equal? (hash-ref (hash-ref unclassified-response 'error) 'message)
+              "API route has no declared permission")
+(check-true
+ (hash-ref (dispatch-bridge (hasheq 'glz 1 'id "open-route" 'path "api/ping")
+                            routes
+                            #f
+                            table
+                            route->js-name)
+           'ok))
+
 ;; op-routed hello over the shared dispatch
 (define hello-resp
   (dispatch-bridge (hasheq 'glz 1 'op "hello" 'id "h1") routes #f table route->js-name))
