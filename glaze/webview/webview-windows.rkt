@@ -463,6 +463,8 @@
 (define WM_DESTROY 2)
 (define WM_CLOSE 16)
 (define WM_SIZE 5)
+(define WM_SETTINGCHANGE #x001A)
+(define WM_THEMECHANGED #x031A)
 (define WM_QUIT 18)
 (define WM_COMMAND 273)
 (define WS_OVERLAPPEDWINDOW #x00CF0000)
@@ -530,6 +532,10 @@
                      (when wv
                        (resize-controller! wv hwnd))
                      0]
+                    [(or (= msg WM_SETTINGCHANGE) (= msg WM_THEMECHANGED))
+                     (when (hash-ref wndprocs (cast hwnd _pointer _uintptr) #f)
+                       (apply-system-titlebar-theme! hwnd))
+                     (DefWindowProcW hwnd msg w l)]
                     [(= msg WM_COMMAND)
                      ;; Menu bar selection: LOWORD(wParam) is the menu id.
                      (define id (bitwise-and w #xFFFF))
