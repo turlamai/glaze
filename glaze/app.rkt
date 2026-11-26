@@ -50,6 +50,8 @@
          app-id
          app-state
          app-quit!
+         app-windows
+         app-window-count
          open-app-window)
 
 ;; Random 32-hex-char capability token (racket/random's CSPRNG).
@@ -171,6 +173,18 @@
     (raise-argument-error 'app-quit! "glaze-app?" app))
   (when (transition-app-to-stopping! app)
     (semaphore-post (glaze-app-exit-sema app))))
+
+;; Snapshot the tracked windows under the same lock as registration. The
+;; snapshot is useful to resident applications deciding whether to restore
+;; a window or open a new one; it does not transfer ownership of handles.
+(define (app-windows [app (current-app)])
+  (unless (glaze-app? app)
+    (raise-argument-error 'app-windows "glaze-app?" app))
+  (call-with-semaphore (glaze-app-windows-sema app)
+                       (lambda () (unbox (glaze-app-windows-box app)))))
+
+(define (app-window-count [app (current-app)])
+  (length (app-windows app)))
 
 (define (register-window! app wv)
   (call-with-semaphore
