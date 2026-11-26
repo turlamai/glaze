@@ -73,7 +73,7 @@
 
 (define (tray-supported?)
   (with-handlers ([exn:fail? (lambda (e) #f)])
-    ((ref 'supported? (load-backend!)))))
+    (and (not (eq? (detected-backend) 'stub)) ((ref 'supported? (load-backend!))))))
 
 ;; Dispatch by the handle's backend, never by another tray's failure.
 (define (current-table t)
@@ -117,3 +117,31 @@
   ((ref 'set-menu! (current-table t)) (tray-handle t) items))
 (define (tray-close t)
   ((ref 'close (current-table t)) (tray-handle t)))
+
+(module+ test
+  (require rackunit)
+  ;; Inject a native backend without opening a desktop window. A stub handle
+  ;; must not change which table owns an already-created native handle.
+  (define calls (box '()))
+  (define saved backend-procs)
+  (dynamic-wind
+    void
+    (lambda ()
+      (set! backend-procs
+            (hash 'set-tooltip!
+                  (lambda (handle tooltip)
+                    (set-box! calls (cons (list handle tooltip) (unbox calls))))
+                  'close
+                  (lambda (handle)
+                    (set-box! calls (cons handle (unbox calls))))))
+      (define native (tray 'windows 'native-handle))
+      (define fallback
+        (tray 'stub ((ref 'make-tray (load-stub-procs)) #:icon #f #:tooltip "stub" #:menu '())))
+      (tray-set-tooltip! native "before")
+      (tray-set-tooltip! fallback "ignored")
+      (tray-close fallback)
+      (tray-set-tooltip! native "after")
+      (tray-close native)
+      (check-equal? (reverse (unbox calls))
+                    '((native-handle "before") (native-handle "after") native-handle)))
+    (lambda () (set! backend-procs saved))))
