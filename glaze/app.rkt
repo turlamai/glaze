@@ -488,4 +488,21 @@
   (check-false (try-app-state-transition! test-app 'ready 'running))
   (check-equal? (app-state test-app) 'stopping)
   (check-true (try-app-state-transition! test-app 'stopping 'stopped))
-  (check-exn exn:fail? (lambda () (try-app-state-transition! test-app 'stopped 'running))))
+  (check-exn exn:fail? (lambda () (try-app-state-transition! test-app 'stopped 'running)))
+
+  ;; Resident apps can distinguish an empty window set from an app exit.
+  (define resident
+    (make-app #:app-id "resident-test" #:event-bus #f #:quit-on-last-window? #f))
+  (check-equal? (app-windows resident) '())
+  (check-equal? (app-window-count resident) 0)
+  (register-window! resident 'first)
+  (define snapshot (app-windows resident))
+  (register-window! resident 'second)
+  (check-equal? snapshot '(first))
+  (check-equal? (app-window-count resident) 2)
+  (check-false (unregister-window! resident 'first))
+  (check-true (unregister-window! resident 'second))
+  (check-equal? (app-window-count resident) 0)
+  (parameterize ([current-app resident])
+    (check-equal? (app-windows) '()))
+  (custodian-shutdown-all (glaze-app-custodian resident)))
