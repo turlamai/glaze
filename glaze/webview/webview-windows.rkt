@@ -80,6 +80,27 @@
 (define user32 (ffi-lib "user32"))
 (define kernel32 (ffi-lib "kernel32"))
 (define ole32 (ffi-lib "ole32"))
+
+;; Opt in to system-controlled non-client dark mode. Windows 11 documents
+;; attribute 20 as following the system setting, not forcing a dark caption.
+;; Older systems may reject the attribute; leave their default frame intact.
+(define dwmapi
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (ffi-lib "dwmapi")))
+(define DwmSetWindowAttribute
+  (and dwmapi
+       (get-ffi-obj "DwmSetWindowAttribute"
+                    dwmapi
+                    (_fun _pointer _uint32 _pointer _uint32 -> _int32)
+                    (lambda () #f))))
+(define DWMWA_USE_IMMERSIVE_DARK_MODE 20)
+
+(define (apply-system-titlebar-theme! hwnd)
+  (when (and hwnd DwmSetWindowAttribute)
+    (define enabled (malloc _int32 'atomic))
+    (ptr-set! enabled _int32 1)
+    (DwmSetWindowAttribute hwnd DWMWA_USE_IMMERSIVE_DARK_MODE enabled (ctype-sizeof _int32)))
+  (void))
 (define loader
   (or (with-handlers ([exn:fail? (lambda (e) #f)])
         (ffi-lib loader-path))
@@ -442,6 +463,8 @@
 (define WM_DESTROY 2)
 (define WM_CLOSE 16)
 (define WM_SIZE 5)
+(define WM_SETTINGCHANGE #x001A)
+(define WM_THEMECHANGED #x031A)
 (define WM_QUIT 18)
 (define WM_COMMAND 273)
 (define WS_OVERLAPPEDWINDOW #x00CF0000)
@@ -509,6 +532,10 @@
                      (when wv
                        (resize-controller! wv hwnd))
                      0]
+                    [(or (= msg WM_SETTINGCHANGE) (= msg WM_THEMECHANGED))
+                     (when (hash-ref wndprocs (cast hwnd _pointer _uintptr) #f)
+                       (apply-system-titlebar-theme! hwnd))
+                     (DefWindowProcW hwnd msg w l)]
                     [(= msg WM_COMMAND)
                      ;; Menu bar selection: LOWORD(wParam) is the menu id.
                      (define id (bitwise-and w #xFFFF))
@@ -897,6 +924,7 @@
                          #f))
       (set-box! (win:webview-hwnd-box wv) hwnd)
       (hash-set! wndprocs (cast hwnd _pointer _uintptr) wv)
+      (apply-system-titlebar-theme! hwnd)
       (ShowWindow hwnd SW_SHOW)
 
       (define data-folder (wstr (path->string (new-webview2-data-folder))))
