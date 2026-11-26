@@ -47,16 +47,16 @@
 ;; Cached proc table for the active backend: name symbol -> procedure. We load
 ;; lazily on first use so requiring glaze/tray on a host platform never drags
 ;; in another platform's backend (which could fail at require time).
-(define backend-procs #f)
+(define backend-procs (box #f))
 
 (define (load-backend!)
-  (unless backend-procs
+  (unless (unbox backend-procs)
     (define mod (backend-module-path))
     (define table
       (for/hash ([name (in-list '(make-tray set-tooltip! set-icon! set-menu! close supported?))])
         (values name (dynamic-require mod name))))
-    (set! backend-procs table))
-  backend-procs)
+    (set-box! backend-procs table))
+  (unbox backend-procs))
 
 ;; Load the stub's procs under a separate table, used for fallback.
 (define (load-stub-procs)
@@ -123,11 +123,11 @@
   ;; Inject a native backend without opening a desktop window. A stub handle
   ;; must not change which table owns an already-created native handle.
   (define calls (box '()))
-  (define saved backend-procs)
+  (define saved (unbox backend-procs))
   (dynamic-wind
     void
     (lambda ()
-      (set! backend-procs
+      (set-box! backend-procs
             (hash 'set-tooltip!
                   (lambda (handle tooltip)
                     (set-box! calls (cons (list handle tooltip) (unbox calls))))
@@ -144,4 +144,4 @@
       (tray-close native)
       (check-equal? (reverse (unbox calls))
                     '((native-handle "before") (native-handle "after") native-handle)))
-    (lambda () (set! backend-procs saved))))
+    (lambda () (set-box! backend-procs saved))))
