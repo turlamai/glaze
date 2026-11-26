@@ -47,15 +47,16 @@
 ;; Cached proc table for the active backend: name symbol -> procedure. We load
 ;; lazily on first use so requiring glaze/tray on a host platform never drags
 ;; in another platform's backend (which could fail at require time).
-(define backend-procs #f)
+(define backend-procs (box #f))
 
 (define (load-backend!)
-  (unless backend-procs
-    (set! backend-procs (make-hash))
+  (unless (unbox backend-procs)
     (define mod (backend-module-path))
-    (for ([name (in-list '(make-tray set-tooltip! set-icon! set-menu! close supported?))])
-      (hash-set! backend-procs name (dynamic-require mod name))))
-  backend-procs)
+    (define table
+      (for/hash ([name (in-list '(make-tray set-tooltip! set-icon! set-menu! close supported?))])
+        (values name (dynamic-require mod name))))
+    (set-box! backend-procs table))
+  (unbox backend-procs))
 
 ;; Load the stub's procs under a separate table, used for fallback.
 (define (load-stub-procs)
@@ -72,14 +73,11 @@
 
 (define (tray-supported?)
   (with-handlers ([exn:fail? (lambda (e) #f)])
-    ((ref 'supported? (load-backend!)))))
+    (and (not (eq? (detected-backend) 'stub)) ((ref 'supported? (load-backend!))))))
 
-;; Track whether we have fallen back to the stub so subsequent mutators also
-;; use the stub procs (per-process: a host with no native backend stays inert).
-(define using-stub? (box #f))
-
-(define (current-table)
-  (if (unbox using-stub?)
+;; Dispatch by the handle's backend, never by another tray's failure.
+(define (current-table t)
+  (if (eq? (tray-backend t) 'stub)
       (load-stub-procs)
       (load-backend!)))
 
@@ -91,7 +89,6 @@
                                (fprintf (current-error-port)
                                         "[glaze] tray backend unavailable (~a); using no-op stub.\n"
                                         (exn-message e))
-                               (set-box! using-stub? #t)
                                (define tbl (load-stub-procs))
                                (tray 'stub
                                      ((ref 'make-tray tbl) #:icon icon-path
@@ -113,10 +110,37 @@
     [else 'stub]))
 
 (define (tray-set-tooltip! t tooltip)
-  ((ref 'set-tooltip! (current-table)) (tray-handle t) tooltip))
+  ((ref 'set-tooltip! (current-table t)) (tray-handle t) tooltip))
 (define (tray-set-icon! t icon-path)
-  ((ref 'set-icon! (current-table)) (tray-handle t) icon-path))
+  ((ref 'set-icon! (current-table t)) (tray-handle t) icon-path))
 (define (tray-set-menu! t items)
-  ((ref 'set-menu! (current-table)) (tray-handle t) items))
+  ((ref 'set-menu! (current-table t)) (tray-handle t) items))
 (define (tray-close t)
-  ((ref 'close (current-table)) (tray-handle t)))
+  ((ref 'close (current-table t)) (tray-handle t)))
+
+(module+ test
+  (require rackunit)
+  ;; Inject a native backend without opening a desktop window. A stub handle
+  ;; must not change which table owns an already-created native handle.
+  (define calls (box '()))
+  (define saved (unbox backend-procs))
+  (dynamic-wind void
+                (lambda ()
+                  (set-box! backend-procs
+                            (hash 'set-tooltip!
+                                  (lambda (handle tooltip)
+                                    (set-box! calls (cons (list handle tooltip) (unbox calls))))
+                                  'close
+                                  (lambda (handle) (set-box! calls (cons handle (unbox calls))))))
+                  (define native (tray 'windows 'native-handle))
+                  (define fallback
+                    (tray 'stub
+                          ((ref 'make-tray (load-stub-procs)) #:icon #f #:tooltip "stub" #:menu '())))
+                  (tray-set-tooltip! native "before")
+                  (tray-set-tooltip! fallback "ignored")
+                  (tray-close fallback)
+                  (tray-set-tooltip! native "after")
+                  (tray-close native)
+                  (check-equal? (reverse (unbox calls))
+                                '((native-handle "before") (native-handle "after") native-handle)))
+                (lambda () (set-box! backend-procs saved))))
