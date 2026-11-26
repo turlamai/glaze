@@ -51,10 +51,11 @@
 
 (define (load-backend!)
   (unless backend-procs
-    (set! backend-procs (make-hash))
     (define mod (backend-module-path))
-    (for ([name (in-list '(make-tray set-tooltip! set-icon! set-menu! close supported?))])
-      (hash-set! backend-procs name (dynamic-require mod name))))
+    (define table
+      (for/hash ([name (in-list '(make-tray set-tooltip! set-icon! set-menu! close supported?))])
+        (values name (dynamic-require mod name))))
+    (set! backend-procs table))
   backend-procs)
 
 ;; Load the stub's procs under a separate table, used for fallback.
@@ -74,12 +75,9 @@
   (with-handlers ([exn:fail? (lambda (e) #f)])
     ((ref 'supported? (load-backend!)))))
 
-;; Track whether we have fallen back to the stub so subsequent mutators also
-;; use the stub procs (per-process: a host with no native backend stays inert).
-(define using-stub? (box #f))
-
-(define (current-table)
-  (if (unbox using-stub?)
+;; Dispatch by the handle's backend, never by another tray's failure.
+(define (current-table t)
+  (if (eq? (tray-backend t) 'stub)
       (load-stub-procs)
       (load-backend!)))
 
@@ -91,7 +89,6 @@
                                (fprintf (current-error-port)
                                         "[glaze] tray backend unavailable (~a); using no-op stub.\n"
                                         (exn-message e))
-                               (set-box! using-stub? #t)
                                (define tbl (load-stub-procs))
                                (tray 'stub
                                      ((ref 'make-tray tbl) #:icon icon-path
@@ -113,10 +110,10 @@
     [else 'stub]))
 
 (define (tray-set-tooltip! t tooltip)
-  ((ref 'set-tooltip! (current-table)) (tray-handle t) tooltip))
+  ((ref 'set-tooltip! (current-table t)) (tray-handle t) tooltip))
 (define (tray-set-icon! t icon-path)
-  ((ref 'set-icon! (current-table)) (tray-handle t) icon-path))
+  ((ref 'set-icon! (current-table t)) (tray-handle t) icon-path))
 (define (tray-set-menu! t items)
-  ((ref 'set-menu! (current-table)) (tray-handle t) items))
+  ((ref 'set-menu! (current-table t)) (tray-handle t) items))
 (define (tray-close t)
-  ((ref 'close (current-table)) (tray-handle t)))
+  ((ref 'close (current-table t)) (tray-handle t)))
