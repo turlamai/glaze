@@ -124,24 +124,23 @@
   ;; must not change which table owns an already-created native handle.
   (define calls (box '()))
   (define saved (unbox backend-procs))
-  (dynamic-wind
-    void
-    (lambda ()
-      (set-box! backend-procs
-            (hash 'set-tooltip!
-                  (lambda (handle tooltip)
-                    (set-box! calls (cons (list handle tooltip) (unbox calls))))
-                  'close
-                  (lambda (handle)
-                    (set-box! calls (cons handle (unbox calls))))))
-      (define native (tray 'windows 'native-handle))
-      (define fallback
-        (tray 'stub ((ref 'make-tray (load-stub-procs)) #:icon #f #:tooltip "stub" #:menu '())))
-      (tray-set-tooltip! native "before")
-      (tray-set-tooltip! fallback "ignored")
-      (tray-close fallback)
-      (tray-set-tooltip! native "after")
-      (tray-close native)
-      (check-equal? (reverse (unbox calls))
-                    '((native-handle "before") (native-handle "after") native-handle)))
-    (lambda () (set-box! backend-procs saved))))
+  (dynamic-wind void
+                (lambda ()
+                  (set-box! backend-procs
+                            (hash 'set-tooltip!
+                                  (lambda (handle tooltip)
+                                    (set-box! calls (cons (list handle tooltip) (unbox calls))))
+                                  'close
+                                  (lambda (handle) (set-box! calls (cons handle (unbox calls))))))
+                  (define native (tray 'windows 'native-handle))
+                  (define fallback
+                    (tray 'stub
+                          ((ref 'make-tray (load-stub-procs)) #:icon #f #:tooltip "stub" #:menu '())))
+                  (tray-set-tooltip! native "before")
+                  (tray-set-tooltip! fallback "ignored")
+                  (tray-close fallback)
+                  (tray-set-tooltip! native "after")
+                  (tray-close native)
+                  (check-equal? (reverse (unbox calls))
+                                '((native-handle "before") (native-handle "after") native-handle)))
+                (lambda () (set-box! backend-procs saved))))
