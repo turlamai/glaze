@@ -230,6 +230,12 @@
                                  #:public-dir (app-native-public-dir info)))]
       [(glaze-app-native-info app) (app-native-default-transport (glaze-app-native-info app))]
       [else #f]))
+  ;; A backend may close the window before open-window returns its handle.
+  ;; Serialize publication and close so an already-closed handle is never
+  ;; registered and the callback never reads an uninitialized binding.
+  (define publication-lock (make-semaphore 1))
+  (define published-window #f)
+  (define closed? #f)
   (define wv
     (open-window url
                  #:title title
@@ -240,10 +246,22 @@
                  #:on-close (lambda ()
                               (with-handlers ([exn:fail? (lambda (e) (reporter e "app:on-close"))])
                                 (user-on-close))
-                              (define last? (unregister-window! app wv))
+                              (define last?
+                                (call-with-semaphore
+                                 publication-lock
+                                 (lambda ()
+                                   (cond
+                                     [closed? #f]
+                                     [else
+                                      (set! closed? #t)
+                                      (unregister-window! app published-window)]))))
                               (when (and last? (glaze-app-quit-on-last-window? app))
                                 (app-quit! app)))))
-  (register-window! app wv)
+  (call-with-semaphore publication-lock
+                       (lambda ()
+                         (unless closed?
+                           (set! published-window wv)
+                           (register-window! app wv))))
   wv)
 
 (define max-port-attempts 50)
