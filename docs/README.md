@@ -18,6 +18,7 @@ This directory has one owner for each durable decision. New documents must link 
 - [CI contract](ci.md) / [简体中文](ci.zh-CN.md): the minimum gates an application must prove on each platform, runner requirements, and the evidence to record.
 - [Diagnostics](diagnostics.md): symptom-to-cause troubleshooting for startup, schema, verification, packaging and update failures.
 - [Product acceptance](product-acceptance.md): the scenario record and evidence levels that define when a packaged application is done.
+- [Commercial readiness](commercial-readiness.md): framework and downstream application qualification checklist.
 - [OS Now Playing](now-playing.md) / [简体中文](now-playing.zh-CN.md): host-owned publication to the OS Now Playing surface, platform backends, and the readback evidence contract.
 - [Production signing](production-signing.md): trust domains, certificate and notary prerequisites, key handling in CI, and the verification checklist.
 - [Releasing and updating applications](release-and-updates.md): release identity, update channels, staged rollout, signed manifests, rollback and the N→N+1 evidence per installation shape.
