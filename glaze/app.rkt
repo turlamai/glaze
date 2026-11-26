@@ -180,8 +180,7 @@
 (define (app-windows [app (current-app)])
   (unless (glaze-app? app)
     (raise-argument-error 'app-windows "glaze-app?" app))
-  (call-with-semaphore (glaze-app-windows-sema app)
-                       (lambda () (unbox (glaze-app-windows-box app)))))
+  (call-with-semaphore (glaze-app-windows-sema app) (lambda () (unbox (glaze-app-windows-box app)))))
 
 (define (app-window-count [app (current-app)])
   (length (app-windows app)))
@@ -491,8 +490,7 @@
   (check-exn exn:fail? (lambda () (try-app-state-transition! test-app 'stopped 'running)))
 
   ;; Resident apps can distinguish an empty window set from an app exit.
-  (define resident
-    (make-app #:app-id "resident-test" #:event-bus #f #:quit-on-last-window? #f))
+  (define resident (make-app #:app-id "resident-test" #:event-bus #f #:quit-on-last-window? #f))
   (check-equal? (app-windows resident) '())
   (check-equal? (app-window-count resident) 0)
   (register-window! resident 'first)
