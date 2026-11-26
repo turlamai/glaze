@@ -1,13 +1,12 @@
 #lang racket/base
 
-;; Cross-platform system tray demo: icon in the menu bar / notification area
-;; with a working menu and click events. Quit from the tray menu.
-;;
+;; Cross-platform system tray demo. Quit from the tray menu.
 ;; Run: racket examples/tray-demo.rkt
 
 (require glaze)
 
 (define clicks (box 0))
+(define quit-ready (make-semaphore 0))
 
 (define t
   (make-tray
@@ -16,17 +15,20 @@
    #:menu
    (list (make-menu-item "About" #:action (lambda () (displayln "[tray] Glaze tray demo")))
          (menu-separator)
-         (make-menu-item "Update tooltip" #:action (lambda () (tray-set-tooltip! t "updated!")))
-         (menu-separator)
-         (make-menu-item "Quit" #:action (lambda () (exit 0))))
-   ;; 'click / 'double-click on the icon itself (not the menu).
+         (make-menu-item "Quit" #:action (lambda () (semaphore-post quit-ready))))
    #:on-event (lambda (event)
                 (set-box! clicks (add1 (unbox clicks)))
-                (displayln "[tray] event: " event)
-                (tray-set-tooltip! t (format "Glaze Tray Demo · ~a click(s)" (unbox clicks))))))
+                (printf "[tray] event: ~a (~a clicks)\n" event (unbox clicks)))))
 
-(displayln "[tray] icon is live — left-click it, or use the tray menu to quit")
-;; Keep the process alive for the tray; the Quit menu item exits.
-(let loop ()
-  (sleep 1)
-  (loop))
+;; A stub has no visible menu, so waiting for Quit would strand the process.
+;; Close native resources on the owning thread, not inside a tray callback.
+(dynamic-wind void
+              (lambda ()
+                (cond
+                  [(eq? (tray-backend t) 'stub)
+                   (displayln "[tray] Native tray unavailable; exiting." (current-error-port))]
+                  [else
+                   (displayln "[tray] icon is live; use the tray menu to quit")
+                   (sync quit-ready)
+                   (void)]))
+              (lambda () (tray-close t)))
