@@ -16,6 +16,8 @@
                         app-id
                         app-quit!
                         app-state
+                        app-window-count
+                        app-windows
                         bus-broadcast!
                         bus-subscribe!
                         cache-dir
