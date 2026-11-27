@@ -32,7 +32,7 @@
          "browser.rkt"
          "assets.rkt"
          "build.rkt"
-         "app.rkt"
+         (except-in "app.rkt" app-windows app-window-count)
          (except-in "dialogs.rkt" default-dialog-backend)
          "deeplink.rkt"
          "autolaunch.rkt"
