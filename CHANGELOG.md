@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- Security: verify signed update payload bytes and expected key ID before parsing manifest JSON; keep the unverified inspection API and v1 wire format unchanged.
+
 ### Added
 
 - `raco glaze build --replace-upgrade-code <guid>` (repeatable; `build-app
