@@ -171,12 +171,9 @@
 (check-equal? (hash-ref (hash-ref unclassified-response 'error) 'message)
               "API route has no declared permission")
 (check-true
- (hash-ref (dispatch-bridge (hasheq 'glz 1 'id "open-route" 'path "api/ping")
-                            routes
-                            #f
-                            table
-                            route->js-name)
-           'ok))
+ (hash-ref
+  (dispatch-bridge (hasheq 'glz 1 'id "open-route" 'path "api/ping") routes #f table route->js-name)
+  'ok))
 
 ;; op-routed hello over the shared dispatch
 (define hello-resp
