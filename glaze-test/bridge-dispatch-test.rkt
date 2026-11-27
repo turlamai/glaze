@@ -113,7 +113,9 @@
   (define calls 0)
   (define scoped-routes
     (list (GET "api/item/:id"
-               (lambda (_req id) (set! calls (add1 calls)) id)
+               (lambda (_req id)
+                 (set! calls (add1 calls))
+                 id)
                #:permission 'items:read
                #:resource (lambda (_req id) id))))
   (define cap
