@@ -30,6 +30,8 @@
          app-quit!
          app-id
          app-state
+         app-windows
+         app-window-count
          current-app
          open-app-window
          ;; ---- HTTP API surface ----
