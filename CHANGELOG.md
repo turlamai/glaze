@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- Reuse Keel 0.4 SemVer precedence (new minimum dependency); correct non-decimal prerelease identifier ordering, preserve Glaze update channels and the signed JSON format.
+
 - Security: verify signed update payload bytes and expected key ID before parsing manifest JSON; keep the unverified inspection API and v1 wire format unchanged.
 
 ### Added
