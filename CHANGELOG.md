@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Stable `glaze/core` and `glaze/app` window snapshot queries
+  `app-windows` and `app-window-count` for resident and multi-window apps.
+  Queries synchronize with the window registry without extending the legacy
+  `glaze` facade. A snapshot does not guarantee future window liveness.
+
 - `raco glaze build --replace-upgrade-code <guid>` (repeatable; `build-app
   #:replace-upgrade-codes`, glaze#173): the Windows MSI takes over a product
   from another installer family, typically the previous packaging stack,
