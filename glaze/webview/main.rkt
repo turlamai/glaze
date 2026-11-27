@@ -128,26 +128,25 @@
         table)))
 
 (define (load-backend!)
-  (cached-backend-table!
-   backend-procs
-   (lambda ()
-     (define mod (backend-module-path))
-     (resolve-backend-table '(open-webview supported?
-                                        close
-                                        navigate
-                                        title
-                                        url
-                                        capture!
-                                        set-title!
-                                        set-size!
-                                        set-fullscreen!
-                                        geometry
-                                        set-geometry!
-                                        screen-area
-                                        focus!
-                                        set-menu!
-                                        closed?)
-                            (lambda (name) (dynamic-require mod name))))))
+  (cached-backend-table! backend-procs
+                         (lambda ()
+                           (define mod (backend-module-path))
+                           (resolve-backend-table '(open-webview supported?
+                                                                 close
+                                                                 navigate
+                                                                 title
+                                                                 url
+                                                                 capture!
+                                                                 set-title!
+                                                                 set-size!
+                                                                 set-fullscreen!
+                                                                 geometry
+                                                                 set-geometry!
+                                                                 screen-area
+                                                                 focus!
+                                                                 set-menu!
+                                                                 closed?)
+                                                  (lambda (name) (dynamic-require mod name))))))
 
 (define (ref name)
   (hash-ref (load-backend!) name))
@@ -406,14 +405,13 @@
   (define cache (box #f))
   (check-exn exn:fail?
              (lambda ()
-               (cached-backend-table!
-                cache
-                (lambda ()
-                  (resolve-backend-table '(first second)
-                                         (lambda (name)
-                                           (if (eq? name 'second)
-                                               (error 'backend "missing export")
-                                               void)))))))
+               (cached-backend-table! cache
+                                      (lambda ()
+                                        (resolve-backend-table '(first second)
+                                                               (lambda (name)
+                                                                 (if (eq? name 'second)
+                                                                     (error 'backend "missing export")
+                                                                     void)))))))
   (check-false (unbox cache))
   (define table
     (cached-backend-table! cache (lambda () (resolve-backend-table '(first second) values))))
