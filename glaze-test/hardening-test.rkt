@@ -111,22 +111,21 @@
    void
    (lambda ()
      (call-with-output-file (build-path dir "index.html")
-       (lambda (out) (display "<html>test</html>" out)))
+                            (lambda (out) (display "<html>test</html>" out)))
      (define-values (_port stop)
        (start-server #:port 18995
                      #:public-dir dir
                      #:content-security-policy policy
                      #:content-security-policy-report-only report))
-     (dynamic-wind
-      void
-      (lambda ()
-        (for ([path (in-list '("/" "/missing-page"))])
-          (define-values (status headers _body) (call path))
-          (check-true (string-contains? status "200"))
-          (check-true (has-header? headers "content-security-policy" policy))
-          (check-true (has-header? headers "content-security-policy-report-only" report))
-          (check-true (has-header? headers "x-content-type-options" "nosniff"))))
-      stop))
+     (dynamic-wind void
+                   (lambda ()
+                     (for ([path (in-list '("/" "/missing-page"))])
+                       (define-values (status headers _body) (call path))
+                       (check-true (string-contains? status "200"))
+                       (check-true (has-header? headers "content-security-policy" policy))
+                       (check-true (has-header? headers "content-security-policy-report-only" report))
+                       (check-true (has-header? headers "x-content-type-options" "nosniff"))))
+                   stop))
    (lambda () (delete-directory/files dir))))
 
 (test-case "invalid CSP configuration fails before listener startup"
@@ -134,13 +133,11 @@
     (check-exn exn:fail:contract?
                (lambda () (start-server #:port 18995 #:content-security-policy policy)))
     (check-exn exn:fail:contract?
-               (lambda ()
-                 (start-server #:port 18995 #:content-security-policy-report-only policy)))))
+               (lambda () (start-server #:port 18995 #:content-security-policy-report-only policy)))))
 
 (test-case "run-app rejects unsupported native CSP before starting a window"
   (check-exn #rx"CSP options currently require"
-             (lambda ()
-               (run-app #:transport 'native #:content-security-policy "default-src 'self'")))
+             (lambda () (run-app #:transport 'native #:content-security-policy "default-src 'self'")))
   (check-exn #rx"CSP options currently require"
              (lambda ()
                (run-app #:transport 'native
