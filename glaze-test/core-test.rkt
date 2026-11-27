@@ -18,6 +18,8 @@
               'app-quit!
               'app-id
               'app-state
+              'app-window-count
+              'app-windows
               'current-app
               'open-app-window
               'GET
