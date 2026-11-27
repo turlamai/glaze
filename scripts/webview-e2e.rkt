@@ -439,18 +439,20 @@
 (define pw-denied (box #f))
 (define pw-sema (make-semaphore 0))
 (define pw-routes
-  (list (GET "api/ping" (lambda (_req) (hasheq 'pong #t)))
+  (list (GET "api/ping" #:permission 'ping:read (lambda (_req) (hasheq 'pong #t)))
         (GET "api/secret" #:permission 'secret:read (lambda (_req) (hasheq 'classified #t)))
         (POST "api/report-denied"
+              #:permission 'report:write
               (lambda (req)
                 (set-box! pw-denied (request-json-body req))
                 (semaphore-post pw-sema)
                 (hasheq 'saved #t)))
         (POST "api/open-second-window"
+              #:permission 'window:open
               (lambda (_req)
                 (open-app-window "glaze://app/restricted.html"
                                  #:title "restricted"
-                                 #:capability (make-capability "pw-limited" '(other:thing)))
+                                 #:capability (make-capability "pw-limited" '(report:write)))
                 (hasheq 'opened #t)))))
 (define pw-thread
   (thread (lambda ()
@@ -462,7 +464,7 @@
                        #:api pw-routes
                        #:transport 'native
                        #:api-token #f
-                       #:capability (make-capability "pw-full" '(secret:read other:thing))
+                       #:capability (make-capability "pw-full" '(secret:read ping:read window:open report:write))
                        #:title "per-window"
                        #:on-ready (lambda (_wv _u)
                                     (thread (lambda ()

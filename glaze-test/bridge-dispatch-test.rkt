@@ -108,3 +108,27 @@
   (check-true (hash-ref hello 'ok))
   (check-equal? (hash-ref (hash-ref hello 'value) 'glz) 1)
   (check-equal? (error-code (dispatch 42)) "bad-envelope"))
+
+(test-case "resource scopes fail closed before bridge handlers run"
+  (define calls 0)
+  (define scoped-routes
+    (list (GET "api/item/:id"
+               (lambda (_req id)
+                 (set! calls (add1 calls))
+                 id)
+               #:permission 'items:read
+               #:resource (lambda (_req id) id))))
+  (define cap
+    (make-capability "reader"
+                     (list (scoped-permission 'items:read
+                                              (lambda (resource) (equal? resource "safe"))))))
+  (define (invoke id)
+    (dispatch-bridge (hasheq 'glz 1 'id id 'path (string-append "api/item/" id))
+                     scoped-routes
+                     cap
+                     (make-request-table)
+                     route->js-name))
+  (check-equal? (error-code (invoke "unsafe")) "capability-denied")
+  (check-equal? calls 0)
+  (check-equal? (hash-ref (invoke "safe") 'value) "safe")
+  (check-equal? calls 1))

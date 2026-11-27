@@ -128,9 +128,9 @@
                              (if method-mismatch? 'method-not-allowed 'unknown-command)
                              (format "no route matches ~a ~a" (or method-sym 'GET) path)
                              'null)]
-       [(and authority
-             (route-permission (first match))
-             (not (capability-has-permission? authority (route-permission (first match)))))
+       [(and authority (not (route-permission (first match))))
+        (glz1-error-envelope id 'capability-denied "API route has no declared permission" 'null)]
+       [(and authority (not (capability-has-permission? authority (route-permission (first match)))))
         (glz1-error-envelope id 'capability-denied "capability denied API route" 'null)]
        [else
         (define route (first match))
@@ -184,11 +184,20 @@
                                        authority
                                        (lambda (permission resource)
                                          (capability-authorized? authority permission resource)))])
-                        (apply (route-handler route)
-                               (make-handler-request (or method-sym (route-method route))
-                                                     path
-                                                     (string->bytes/utf-8 (jsexpr->string args)))
-                               captured)))
+                        (define req
+                          (make-handler-request (or method-sym (route-method route))
+                                                path
+                                                (string->bytes/utf-8 (jsexpr->string args))))
+                        (when authority
+                          (unless (with-handlers ([exn:fail? (lambda (_) #f)])
+                                    (define resource-proc (route-resource route))
+                                    (define resource
+                                      (and resource-proc (apply resource-proc req captured)))
+                                    (capability-authorized? authority
+                                                            (route-permission route)
+                                                            resource))
+                            (raise-bridge-error 'capability-denied "capability denied API route")))
+                        (apply (route-handler route) req captured)))
                     ;; Typed contract: a handler result violating its
                     ;; declared type is a server bug — full detail to the
                     ;; error reporter, typed internal error to the page.
