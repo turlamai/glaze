@@ -15,10 +15,8 @@
 
 (test-case "CSP rejects invalid response header values in either mode"
   (for ([invalid (in-list (list "" " " "x\r\ny" "x\ty" "x\u007fy" "x\u0080y" 42 #t))])
-    (check-exn exn:fail:contract?
-               (lambda () (content-security-policy-headers 'test invalid #f)))
-    (check-exn exn:fail:contract?
-               (lambda () (content-security-policy-headers 'test #f invalid)))))
+    (check-exn exn:fail:contract? (lambda () (content-security-policy-headers 'test invalid #f)))
+    (check-exn exn:fail:contract? (lambda () (content-security-policy-headers 'test #f invalid)))))
 
 (test-case "CSP takes an immutable snapshot of caller-owned strings"
   (define input (string-copy "script-src 'none'"))
