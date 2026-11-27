@@ -331,7 +331,8 @@
                          #:api pw-routes
                          #:transport 'native
                          #:api-token #f
-                         #:capability (make-capability "pw-full" '(secret:read ping:read window:open report:write))
+                         #:capability
+                         (make-capability "pw-full" '(secret:read ping:read window:open report:write))
                          #:title "per-window"
                          #:on-ready (lambda (wv u)
                                       (thread (lambda ()
