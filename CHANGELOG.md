@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Optional enforced and report-only CSP headers on HTTP static resources
+  via `start-server`; reject empty/control-character header values before
+  binding the listener. Native transport and run-app integration are pending.
+
 - `raco glaze build --replace-upgrade-code <guid>` (repeatable; `build-app
   #:replace-upgrade-codes`, glaze#173): the Windows MSI takes over a product
   from another installer family, typically the previous packaging stack,
