@@ -58,8 +58,9 @@ Report-only is not enforcement; receiving violation reports requires an
 application-owned reporting endpoint and browser support.
 
 These options cover static responses, including SPA fallback, not arbitrary
-application API responses. Native scheme responses and run-app keyword
-forwarding are not yet supported in this initial implementation.
+application API responses. The same options are accepted by `run-app` with the HTTP transport.
+Native scheme responses are not yet supported: `run-app` rejects either
+option with `#:transport 'native` rather than ignoring the policy.
 
 CSP does not grant or revoke Glaze route permissions. Injected script running
 in a privileged page can use that page's existing authority. Prefer rendering
