@@ -18,6 +18,14 @@ Glaze is pre-1.0, but public growth is deliberate rather than accidental. The AP
 
 The export snapshot prevents accidental widening, but it does not convert low-level names already exposed by a pre-1.0 aggregation module into good permanent API. The 1.0 curation gate will explicitly classify each reviewed-layer export as stable, relocated to a narrower expert module, or internalized behind `glaze/private`.
 
+The stable `glaze/core` lifecycle API includes `app-windows` and
+`app-window-count` (also defined by `glaze/app`). They take an optional
+application handle, defaulting to `current-app`, and read the registered
+window set under its lifecycle lock. The list is a point-in-time snapshot,
+not a guarantee that a window remains open; zero windows does not imply
+that a tray-resident application has stopped. These compatible additions
+are intentionally not exported by the legacy `glaze` facade.
+
 Application command schemas form a second compatibility surface. Typed route
 names, parameter names/order/types/requiredness, result types, declared error
 codes, record fields/order/types, enum cases/order, and the GLZ1 version are

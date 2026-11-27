@@ -150,6 +150,15 @@ Bound by @racket[run-app] for the duration of the application; readable in
 }
 @defproc[(app-state [app glaze-app? (current-app)]) symbol?]{The lifecycle state.}
 @defproc[(app-id [app glaze-app? (current-app)]) string?]{The application identity (#:app-id or generated).}
+@defproc[(app-windows [app glaze-app? (current-app)]) (listof webview?)]{
+Returns a synchronized snapshot of the application's registered windows.
+The list does not change when the registry is updated, but a returned
+window may subsequently close. Also available from @racketmodname[glaze/core].
+}
+@defproc[(app-window-count [app glaze-app? (current-app)]) exact-nonnegative-integer?]{
+Returns the size of the current window snapshot. Zero does not mean that
+a tray-resident app has quit. Also available from @racketmodname[glaze/core].
+}
 @defproc[(app-quit! [app glaze-app? (current-app)]) void?]{
 Quits the app: transitions to @racket['stopping], closes leftover windows,
 stops the server, and reaps the app custodian.
