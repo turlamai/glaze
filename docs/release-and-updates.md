@@ -182,3 +182,7 @@ by a local-CA test only on hosts with OpenSSL 3, not by the package job.
 - Do not treat a missing certificate, absent installer toolchain or unsigned
   artifact as a successful release.
 - Do not let a failed update delete the only backup of user data.
+
+### Legacy signed manifest trust boundary
+
+The schema-1 verifier checks the expected key ID and Ed25519 signature over the exact original payload bytes before parsing the manifest JSON. `read-signed-update-manifest` remains an unverified inspection API; use `verify-signed-update-manifest` before acting on any feed. This change does not migrate feeds to Keel's optional binary format or change the existing signing keys.
