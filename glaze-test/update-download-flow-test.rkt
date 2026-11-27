@@ -156,8 +156,11 @@
      (define (startup-error reason)
        (subprocess-kill proc #t)
        (subprocess-wait proc)
-       (error 'update-download-flow "TLS server ~a (port ~a): ~a"
-              reason port (port->string proc-err)))
+       (error 'update-download-flow
+              "TLS server ~a (port ~a): ~a"
+              reason
+              port
+              (port->string proc-err)))
      (let loop ([tries 150])
        (unless (eq? (subprocess-status proc) 'running)
          (startup-error "exited before readiness"))
