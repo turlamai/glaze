@@ -97,6 +97,46 @@
 
 (shutdown)
 
+;; ---- HTTP content security policy ----
+(test-case "opt-in CSP headers cover static and SPA fallback responses"
+  (define dir (make-temporary-file "glaze-csp-~a" 'directory))
+  (define policy "default-src 'self'; object-src 'none'")
+  (define report "script-src 'self'")
+  (define (has-header? headers name value)
+    (for/or ([h (in-list headers)])
+      (define s (bytes->string/latin-1 h))
+      (and (string-prefix? (string-downcase s) (string-append name ":"))
+           (string=? (string-trim (substring s (add1 (string-length name)))) value))))
+  (dynamic-wind
+   void
+   (lambda ()
+     (call-with-output-file (build-path dir "index.html")
+       (lambda (out) (display "<html>test</html>" out)))
+     (define-values (_port stop)
+       (start-server #:port 18995
+                     #:public-dir dir
+                     #:content-security-policy policy
+                     #:content-security-policy-report-only report))
+     (dynamic-wind
+      void
+      (lambda ()
+        (for ([path (in-list '("/" "/missing-page"))])
+          (define-values (status headers _body) (call path))
+          (check-true (string-contains? status "200"))
+          (check-true (has-header? headers "content-security-policy" policy))
+          (check-true (has-header? headers "content-security-policy-report-only" report))
+          (check-true (has-header? headers "x-content-type-options" "nosniff"))))
+      stop))
+   (lambda () (delete-directory/files dir))))
+
+(test-case "invalid CSP configuration fails before listener startup"
+  (for ([policy (in-list (list "" "   " "default-src 'self'\r\nX-Injected: yes" 42))])
+    (check-exn exn:fail:contract?
+               (lambda () (start-server #:port 18995 #:content-security-policy policy)))
+    (check-exn exn:fail:contract?
+               (lambda ()
+                 (start-server #:port 18995 #:content-security-policy-report-only policy)))))
+
 ;; ---- update checking ----
 (check-true (newer-version? "1.10.0" "1.9.2") "numeric not lexicographic")
 (check-false (newer-version? "1.0.0" "1.0.0") "equal is not newer")
