@@ -194,19 +194,6 @@
                                    (remq wv (unbox (glaze-app-windows-box app))))
                          (null? (unbox (glaze-app-windows-box app))))))
 
-
-(define (register-window! app wv)
-  (call-with-semaphore
-   (glaze-app-windows-sema app)
-   (lambda () (set-box! (glaze-app-windows-box app) (cons wv (unbox (glaze-app-windows-box app)))))))
-
-(define (unregister-window! app wv)
-  (call-with-semaphore (glaze-app-windows-sema app)
-                       (lambda ()
-                         (set-box! (glaze-app-windows-box app)
-                                   (remq wv (unbox (glaze-app-windows-box app))))
-                         (null? (unbox (glaze-app-windows-box app))))))
-
 ;; Return publication and close procedures sharing one per-window lock.
 ;; The close procedure returns true only for the first close of the last
 ;; registered window (including a close before publication).
