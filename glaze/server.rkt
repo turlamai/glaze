@@ -38,6 +38,7 @@
          "events.rkt"
          "private/bridge-dispatch.rkt"
          "private/http-security.rkt"
+         "private/content-security-policy.rkt"
          "private/native-client.rkt"
          "private/native-resources.rkt"
          (only-in keel schema-command-result)
@@ -80,8 +81,8 @@
                       #:content-security-policy [csp #f]
                       #:content-security-policy-report-only [csp-report-only #f])
   (define csp-headers
-    (append (policy-header #"Content-Security-Policy" csp)
-            (policy-header #"Content-Security-Policy-Report-Only" csp-report-only)))
+    (for/list ([entry (in-list (content-security-policy-headers 'start-server csp csp-report-only))])
+      (header (string->bytes/utf-8 (car entry)) (string->bytes/utf-8 (cdr entry)))))
   (when (and event-bus (not (event-bus? event-bus)))
     (raise-argument-error 'start-server "event-bus?" event-bus))
   (when (and api-token (not (string? api-token)))
@@ -626,18 +627,6 @@
     (cond
       [(response? result) result]
       [else (api-response result)])))
-
-;; Header values must be printable ASCII, with no control characters or
-;; line breaks. Reject malformed configuration before binding the listener.
-(define (policy-header name policy)
-  (cond
-    [(not policy) '()]
-    [(and (string? policy)
-          (not (string=? (string-trim policy) ""))
-          (for/and ([ch (in-string policy)])
-            (<= 32 (char->integer ch) 126)))
-     (list (header name (string->bytes/utf-8 policy)))]
-    [else (raise-argument-error 'start-server "(or/c #f nonempty-printable-ASCII-policy)" policy)]))
 
 (define (serve-static-file dir req csp-headers)
   (define uri-path (url-path (request-uri req)))
