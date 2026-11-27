@@ -111,6 +111,32 @@
                                                  public-key
                                                  #:key-id "wrong-key")))
 
+     ;; Malformed, unauthenticated payloads must fail at the trust boundary,
+     ;; not inside the manifest JSON parser. Preserve the public reader's
+     ;; original inspection behavior and four return values.
+     (define-values (inspected raw kid signature)
+       (read-signed-update-manifest (open-input-bytes signed-bytes)))
+     (check-equal? inspected manifest)
+     (check-equal? raw (update-manifest->payload-bytes manifest))
+     (check-equal? kid "release-2026")
+     (check-true (string? signature))
+     (define original-wrapper (read-json (open-input-bytes signed-bytes)))
+     (define malformed-wrapper
+       (hash-set original-wrapper 'payload (bytes->string/utf-8 (base64-encode #"not JSON" #""))))
+     (define malformed-output (open-output-bytes))
+     (write-json malformed-wrapper malformed-output)
+     (define malformed-bytes (get-output-bytes malformed-output))
+     (check-exn #rx"signature verification failed"
+                (lambda ()
+                  (verify-signed-update-manifest (open-input-bytes malformed-bytes) public-key)))
+     (check-exn #rx"unexpected key"
+                (lambda ()
+                  (verify-signed-update-manifest (open-input-bytes malformed-bytes)
+                                                 public-key
+                                                 #:key-id "wrong-key")))
+     (check-exn exn:fail?
+                (lambda () (read-signed-update-manifest (open-input-bytes malformed-bytes))))
+
      ;; A modified payload remains valid JSON but cannot retain the signature.
      (define wrapper (read-json (open-input-bytes signed-bytes)))
      (define payload (base64-decode (string->bytes/utf-8 (hash-ref wrapper 'payload))))

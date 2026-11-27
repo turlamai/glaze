@@ -359,7 +359,7 @@
               output)
   (newline output))
 
-(define (read-signed-update-manifest input)
+(define (read-signed-update-wrapper input)
   (define value (read-json input))
   (unless (hash? value)
     (raise-argument-error 'read-signed-update-manifest "JSON object" value))
@@ -381,13 +381,17 @@
   (define payload
     (base64-string->bytes 'read-signed-update-manifest
                           (required value 'payload string? "base64 string")))
-  (values (payload-bytes->update-manifest payload)
-          payload
+  (values payload
           (required signature 'key_id string? "string")
           (required signature 'value string? "base64 string")))
 
+;; The public reader remains an explicitly unverified inspection API.
+(define (read-signed-update-manifest input)
+  (define-values (payload key-id signature) (read-signed-update-wrapper input))
+  (values (payload-bytes->update-manifest payload) payload key-id signature))
+
 (define (verify-signed-update-manifest input public-key #:key-id [expected-key-id #f])
-  (define-values (manifest payload key-id signature) (read-signed-update-manifest input))
+  (define-values (payload key-id signature) (read-signed-update-wrapper input))
   (when (and expected-key-id (not (string=? expected-key-id key-id)))
     (raise-arguments-error 'verify-signed-update-manifest
                            "manifest was signed by an unexpected key"
@@ -397,7 +401,7 @@
                            key-id))
   (unless (verify-bytes payload #:public-key public-key #:signature signature)
     (error 'verify-signed-update-manifest "Ed25519 manifest signature verification failed"))
-  manifest)
+  (payload-bytes->update-manifest payload))
 
 ;; --------------------------------------------------------------------------
 ;; Selection, bounded download, verification, and rollback orchestration
