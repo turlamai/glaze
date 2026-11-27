@@ -95,9 +95,12 @@
   (parameterize ([current-directory work])
     (run! (find-executable-path "tar" #f) "-czf" "app.tar.gz" "-C" "v2" "."))
 
-  ;; Random high port so repeated local runs do not collide with a
-  ;; TIME_WAIT listener.
-  (define port (+ 18000 (random 20000)))
+  ;; Ask the OS for an available port instead of guessing one that may
+  ;; already be occupied by another CI process. Release it before OpenSSL
+  ;; binds; the small intervening bind race is still possible.
+  (define listener (tcp-listen 0 4 #t "127.0.0.1"))
+  (define-values (_host port _remote-host _remote-port) (tcp-addresses listener #t))
+  (tcp-close listener)
 
   (define private-key (build-path work "private.pem"))
   (define public-key (build-path work "public.pem"))
@@ -150,15 +153,24 @@
   (dynamic-wind
    void
    (lambda ()
-     (let loop ([tries 50])
+     (define (startup-error reason)
+       (subprocess-kill proc #t)
+       (subprocess-wait proc)
+       (error 'update-download-flow
+              "TLS server ~a (port ~a): ~a"
+              reason
+              port
+              (port->string proc-err)))
+     (let loop ([tries 150])
+       (unless (eq? (subprocess-status proc) 'running)
+         (startup-error "exited before readiness"))
        (unless (with-handlers ([exn:fail? (lambda (_) #f)])
                  (define-values (in out) (tcp-connect "127.0.0.1" port))
                  (close-input-port in)
                  (close-output-port out)
                  #t)
          (when (zero? tries)
-           (subprocess-kill proc #t)
-           (error 'update-download-flow "TLS server did not start"))
+           (startup-error "did not start"))
          (sleep 0.1)
          (loop (sub1 tries))))
 
@@ -200,6 +212,9 @@
    (lambda ()
      (with-handlers ([exn:fail? void])
        (subprocess-kill proc #t)
-       (subprocess-wait proc)))))
+       (subprocess-wait proc))
+     (close-input-port proc-in)
+     (close-output-port proc-out)
+     (close-input-port proc-err))))
 
 (dynamic-wind void main cleanup!)

@@ -184,6 +184,28 @@
                                    (remq wv (unbox (glaze-app-windows-box app))))
                          (null? (unbox (glaze-app-windows-box app))))))
 
+;; Return publication and close procedures sharing one per-window lock.
+;; The close procedure returns true only for the first close of the last
+;; registered window (including a close before publication).
+(define (make-window-registration app)
+  (define lock (make-semaphore 1))
+  (define published-window #f)
+  (define closed? #f)
+  (values (lambda (wv)
+            (call-with-semaphore lock
+                                 (lambda ()
+                                   (unless closed?
+                                     (set! published-window wv)
+                                     (register-window! app wv)))))
+          (lambda ()
+            (call-with-semaphore lock
+                                 (lambda ()
+                                   (cond
+                                     [closed? #f]
+                                     [else
+                                      (set! closed? #t)
+                                      (unregister-window! app published-window)]))))))
+
 ;; Open a window attached to the running app. Same window options as
 ;; open-window; the app tracks the handle so the quit policy (quit on last
 ;; window close vs tray-resident) can decide what a close means.
@@ -230,6 +252,8 @@
                                  #:public-dir (app-native-public-dir info)))]
       [(glaze-app-native-info app) (app-native-default-transport (glaze-app-native-info app))]
       [else #f]))
+  ;; Native close may run before open-window returns its handle.
+  (define-values (publish! close!) (make-window-registration app))
   (define wv
     (open-window url
                  #:title title
@@ -240,10 +264,9 @@
                  #:on-close (lambda ()
                               (with-handlers ([exn:fail? (lambda (e) (reporter e "app:on-close"))])
                                 (user-on-close))
-                              (define last? (unregister-window! app wv))
-                              (when (and last? (glaze-app-quit-on-last-window? app))
+                              (when (and (close!) (glaze-app-quit-on-last-window? app))
                                 (app-quit! app)))))
-  (register-window! app wv)
+  (publish! wv)
   wv)
 
 (define max-port-attempts 50)
@@ -474,4 +497,24 @@
   (check-false (try-app-state-transition! test-app 'ready 'running))
   (check-equal? (app-state test-app) 'stopping)
   (check-true (try-app-state-transition! test-app 'stopping 'stopped))
-  (check-exn exn:fail? (lambda () (try-app-state-transition! test-app 'stopped 'running))))
+  (check-exn exn:fail? (lambda () (try-app-state-transition! test-app 'stopped 'running)))
+
+  ;; Simulate backend close before returning a handle without a native GUI.
+  (define resident (make-app #:app-id "registration-test" #:event-bus #f #:quit-on-last-window? #f))
+  (define-values (publish-early! close-early!) (make-window-registration resident))
+  (check-true (close-early!))
+  (publish-early! 'early)
+  (check-equal? (unbox (glaze-app-windows-box resident)) '())
+  (check-false (close-early!))
+
+  ;; Closing a registered window must leave other windows intact.
+  (define-values (publish-a! close-a!) (make-window-registration resident))
+  (define-values (publish-b! close-b!) (make-window-registration resident))
+  (publish-a! 'a)
+  (publish-b! 'b)
+  (check-false (close-a!))
+  (check-equal? (unbox (glaze-app-windows-box resident)) '(b))
+  (check-false (close-a!))
+  (check-true (close-b!))
+  (check-equal? (unbox (glaze-app-windows-box resident)) '())
+  (check-false (close-b!)))
