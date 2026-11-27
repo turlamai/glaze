@@ -3,7 +3,9 @@
 ;; Runtime authority for the WebView -> Racket bridge.  A capability grants
 ;; named permissions; scoped permissions additionally inspect the resource a
 ;; route wants to use.  The server enables this model explicitly, preserving
-;; the open-route behavior of existing Glaze applications.
+;; the open-route behavior of existing Glaze applications without an authority.
+;; When authority is configured, HTTP and GLZ1 deny unclassified routes,
+;; missing grants, and resources outside the grant before invoking handlers.
 
 (require racket/list
          racket/path

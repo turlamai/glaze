@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- Reuse Keel 0.4 SemVer precedence (new minimum dependency); correct non-decimal prerelease identifier ordering, preserve Glaze update channels and the signed JSON format.
+
 - Security: verify signed update payload bytes and expected key ID before parsing manifest JSON; keep the unverified inspection API and v1 wire format unchanged.
 
 ### Added
@@ -15,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   via `start-server`; reject empty/control-character header values before
   binding the listener. `run-app` forwards both options for HTTP and rejects
   them with native transport until native enforcement is implemented.
+
+- Stable `glaze/core` and `glaze/app` window snapshot queries
+  `app-windows` and `app-window-count` for resident and multi-window apps.
+  Queries synchronize with the window registry without extending the legacy
+  `glaze` facade. A snapshot does not guarantee future window liveness.
 
 - `raco glaze build --replace-upgrade-code <guid>` (repeatable; `build-app
   #:replace-upgrade-codes`, glaze#173): the Windows MSI takes over a product

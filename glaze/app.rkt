@@ -50,6 +50,8 @@
          app-id
          app-state
          app-quit!
+         app-windows
+         app-window-count
          open-app-window)
 
 ;; Random 32-hex-char capability token (racket/random's CSPRNG).
@@ -171,6 +173,14 @@
     (raise-argument-error 'app-quit! "glaze-app?" app))
   (when (transition-app-to-stopping! app)
     (semaphore-post (glaze-app-exit-sema app))))
+
+(define (app-windows [app (current-app)])
+  (unless (glaze-app? app)
+    (raise-argument-error 'app-windows "glaze-app?" app))
+  (call-with-semaphore (glaze-app-windows-sema app) (lambda () (unbox (glaze-app-windows-box app)))))
+
+(define (app-window-count [app (current-app)])
+  (length (app-windows app)))
 
 (define (register-window! app wv)
   (call-with-semaphore
@@ -534,4 +544,21 @@
   (check-false (close-a!))
   (check-true (close-b!))
   (check-equal? (unbox (glaze-app-windows-box resident)) '())
-  (check-false (close-b!)))
+  (check-false (close-b!))
+
+  ;; Resident apps can distinguish an empty window set from an app exit.
+  (define snapshot-app
+    (make-app #:app-id "snapshot-app-test" #:event-bus #f #:quit-on-last-window? #f))
+  (check-equal? (app-windows snapshot-app) '())
+  (check-equal? (app-window-count snapshot-app) 0)
+  (register-window! snapshot-app 'first)
+  (define snapshot (app-windows snapshot-app))
+  (register-window! snapshot-app 'second)
+  (check-equal? snapshot '(first))
+  (check-equal? (app-window-count snapshot-app) 2)
+  (check-false (unregister-window! snapshot-app 'first))
+  (check-true (unregister-window! snapshot-app 'second))
+  (check-equal? (app-window-count snapshot-app) 0)
+  (parameterize ([current-app snapshot-app])
+    (check-equal? (app-windows) '()))
+  (custodian-shutdown-all (glaze-app-custodian snapshot-app)))
