@@ -130,8 +130,7 @@
                              'null)]
        [(and authority (not (route-permission (first match))))
         (glz1-error-envelope id 'capability-denied "API route has no declared permission" 'null)]
-       [(and authority
-             (not (capability-has-permission? authority (route-permission (first match)))))
+       [(and authority (not (capability-has-permission? authority (route-permission (first match)))))
         (glz1-error-envelope id 'capability-denied "capability denied API route" 'null)]
        [else
         (define route (first match))
