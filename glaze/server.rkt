@@ -76,7 +76,12 @@
                       #:api-token [api-token #f]
                       #:capability [authority #f]
                       #:serve-api-client? [serve-client? #t]
-                      #:max-body-size [max-body-size default-max-body-size])
+                      #:max-body-size [max-body-size default-max-body-size]
+                      #:content-security-policy [csp #f]
+                      #:content-security-policy-report-only [csp-report-only #f])
+  (define csp-headers
+    (append (policy-header #"Content-Security-Policy" csp)
+            (policy-header #"Content-Security-Policy-Report-Only" csp-report-only)))
   (when (and event-bus (not (event-bus? event-bus)))
     (raise-argument-error 'start-server "event-bus?" event-bus))
   (when (and api-token (not (string? api-token)))
@@ -103,7 +108,8 @@
                      serve-client?
                      api-token
                      authority
-                     max-body-size))
+                     max-body-size
+                     csp-headers))
   (define shutdown-server (serve #:dispatch dispatcher #:port port #:listen-ip "127.0.0.1"))
   ;; `serve` accepts the port synchronously but the accepting loop runs in a
   ;; background thread; if that thread dies (e.g. bind race), callers saw
@@ -183,7 +189,8 @@
                          serve-client?
                          api-token
                          authority
-                         max-body-size)
+                         max-body-size
+                         csp-headers)
   (lambda (conn req)
     (define matched-api (find-api-match api-routes req))
     (define events-request? (and event-bus (sse-request? req)))
@@ -217,7 +224,7 @@
         [(and serve-client? (api-client-request? req))
          (api-client-response api-routes api-token authority)]
         [(and serve-client? (api-declarations-request? req)) (api-declarations-response api-routes)]
-        [(directory-exists? public-dir) (serve-static-file public-dir req)]
+        [(directory-exists? public-dir) (serve-static-file public-dir req csp-headers)]
         [else (make-404-response)]))
     (output-response conn resp)))
 
@@ -620,7 +627,19 @@
       [(response? result) result]
       [else (api-response result)])))
 
-(define (serve-static-file dir req)
+;; Header values must be printable ASCII, with no control characters or
+;; line breaks. Reject malformed configuration before binding the listener.
+(define (policy-header name policy)
+  (cond
+    [(not policy) '()]
+    [(and (string? policy)
+          (not (string=? (string-trim policy) ""))
+          (for/and ([ch (in-string policy)])
+            (<= 32 (char->integer ch) 126)))
+     (list (header name (string->bytes/utf-8 policy)))]
+    [else (raise-argument-error 'start-server "(or/c #f nonempty-printable-ASCII-policy)" policy)]))
+
+(define (serve-static-file dir req csp-headers)
   (define uri-path (url-path (request-uri req)))
   (define segments (filter (lambda (s) (not (equal? s ""))) (map path/param-path uri-path)))
   ;; The serving rules (lexical guard, symlink containment, SPA fallback,
@@ -636,7 +655,7 @@
                      #"OK"
                      (current-seconds)
                      mime
-                     (list (header #"X-Content-Type-Options" #"nosniff"))
+                     (cons (header #"X-Content-Type-Options" #"nosniff") csp-headers)
                      (list data))
       (make-404-response)))
 
