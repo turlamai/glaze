@@ -113,29 +113,40 @@
     [(unix) 'glaze/webview/webview-linux]
     [else 'glaze/webview/webview-stub]))
 
-(define backend-procs #f)
+;; Publish only a fully resolved backend. A failed load must leave the
+;; cache empty so a later probe can retry instead of using a partial table.
+(define backend-procs (box #f))
+
+(define (resolve-backend-table names resolve)
+  (for/hash ([name (in-list names)])
+    (values name (resolve name))))
+
+(define (cached-backend-table! cache load)
+  (or (unbox cache)
+      (let ([table (load)])
+        (set-box! cache table)
+        table)))
 
 (define (load-backend!)
-  (unless backend-procs
-    (set! backend-procs (make-hash))
-    (define mod (backend-module-path))
-    (for ([name (in-list '(open-webview supported?
-                                        close
-                                        navigate
-                                        title
-                                        url
-                                        capture!
-                                        set-title!
-                                        set-size!
-                                        set-fullscreen!
-                                        geometry
-                                        set-geometry!
-                                        screen-area
-                                        focus!
-                                        set-menu!
-                                        closed?))])
-      (hash-set! backend-procs name (dynamic-require mod name))))
-  backend-procs)
+  (cached-backend-table! backend-procs
+                         (lambda ()
+                           (define mod (backend-module-path))
+                           (resolve-backend-table '(open-webview supported?
+                                                                 close
+                                                                 navigate
+                                                                 title
+                                                                 url
+                                                                 capture!
+                                                                 set-title!
+                                                                 set-size!
+                                                                 set-fullscreen!
+                                                                 geometry
+                                                                 set-geometry!
+                                                                 screen-area
+                                                                 focus!
+                                                                 set-menu!
+                                                                 closed?)
+                                                  (lambda (name) (dynamic-require mod name))))))
 
 (define (ref name)
   (hash-ref (load-backend!) name))
@@ -388,3 +399,21 @@
       [else
        (sleep 0.05)
        (loop)])))
+
+(module+ test
+  (require rackunit)
+  (define cache (box #f))
+  (check-exn exn:fail?
+             (lambda ()
+               (cached-backend-table! cache
+                                      (lambda ()
+                                        (resolve-backend-table '(first second)
+                                                               (lambda (name)
+                                                                 (if (eq? name 'second)
+                                                                     (error 'backend "missing export")
+                                                                     void)))))))
+  (check-false (unbox cache))
+  (define table
+    (cached-backend-table! cache (lambda () (resolve-backend-table '(first second) values))))
+  (check-equal? (hash-ref table 'second) 'second)
+  (check-eq? table (cached-backend-table! cache (lambda () (error 'backend "unexpected reload")))))
