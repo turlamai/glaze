@@ -333,7 +333,8 @@
      (when (and native? (or csp csp-report-only))
        (raise-arguments-error 'run-app
                               "CSP options currently require #:transport 'http"
-                              "transport" transport))
+                              "transport"
+                              transport))
      ;; The native transport has no listener to protect: the message handler is
      ;; the trust boundary, so no token is minted and #:port is meaningless.
      (when (and native? port)
