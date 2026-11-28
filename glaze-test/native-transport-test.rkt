@@ -635,7 +635,7 @@
              (lambda () (start-native-transport #:api '() #:content-security-policy "x\r\ny")))
   (define policy (string-copy "script-src 'none'"))
   (cond
-    [(eq? (system-type 'os) 'windows)
+    [(memq (system-type 'os) '(windows macosx))
      (define transport
        (start-native-transport #:api '()
                                #:content-security-policy policy
@@ -649,5 +649,5 @@
                         ("Content-Security-Policy-Report-Only" . "default-src 'self'"))))
       (lambda () (native-transport-shutdown! transport)))]
     [else
-     (check-exn #rx"native CSP is currently supported only on Windows"
+     (check-exn #rx"native CSP is currently supported only on Windows and macOS"
                 (lambda () (start-native-transport #:api '() #:content-security-policy policy)))]))
