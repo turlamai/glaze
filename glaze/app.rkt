@@ -356,9 +356,9 @@
        (raise-argument-error 'run-app "(or/c 'http 'native)" transport))
      (define native? (eq? transport 'native))
      ;; Never silently drop a requested security policy on unsupported hosts.
-     (when (and native? (or csp csp-report-only) (not (eq? (system-type 'os) 'windows)))
+     (when (and native? (or csp csp-report-only) (not (memq (system-type 'os) '(windows macosx))))
        (raise-arguments-error 'run-app
-                              "native CSP is currently supported only on Windows"
+                              "native CSP is currently supported only on Windows and macOS"
                               "platform"
                               (system-type 'os)))
      ;; The native transport has no listener to protect: the message handler is
