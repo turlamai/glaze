@@ -41,6 +41,7 @@
 
 (provide open-webview
          supported?
+         native-csp-supported?
          close
          navigate
          title
