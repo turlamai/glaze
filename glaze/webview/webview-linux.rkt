@@ -37,7 +37,8 @@
          "../ffi-discovery.rkt"
          "../native-transport.rkt"
          "../tray/tray-protocol.rkt"
-         "../private/id-allocator.rkt")
+         "../private/id-allocator.rkt"
+         "../private/png.rkt")
 
 (provide open-webview
          supported?
@@ -550,7 +551,7 @@
     (and (non-empty-string? u) u)))
 
 ;; Window capture via GDK: gdk_pixbuf_get_from_window on the window's
-;; GdkWindow, then gdk_pixbuf_savev to PNG ("png" handler ships with GTK).
+;; GdkWindow, copy pixels, then encode PNG outside GLib.
 (define gdk-pixbuf-lib (try-ffi-lib "gdk_pixbuf-2.0" '("0")))
 (define gtk_widget_get_window
   (maybe-bind gtk-lib "gtk_widget_get_window" (_fun _pointer -> _pointer)))
@@ -567,46 +568,58 @@
   (and gtk-lib (get-ffi-obj "gdk_window_get_width" gtk-lib (_fun _pointer -> _int) (lambda () #f))))
 (define gdk_window_get_height
   (and gtk-lib (get-ffi-obj "gdk_window_get_height" gtk-lib (_fun _pointer -> _int) (lambda () #f))))
-(define gdk_pixbuf_savev
-  (and gdk-pixbuf-lib
-       (get-ffi-obj "gdk_pixbuf_savev"
-                    gdk-pixbuf-lib
-                    (_fun _pointer _string _string _pointer _pointer _pointer -> _bool)
-                    (lambda () #f))))
+(define pixbuf-width (maybe-bind gdk-pixbuf-lib "gdk_pixbuf_get_width" (_fun _pointer -> _int)))
+(define pixbuf-height (maybe-bind gdk-pixbuf-lib "gdk_pixbuf_get_height" (_fun _pointer -> _int)))
+(define pixbuf-stride (maybe-bind gdk-pixbuf-lib "gdk_pixbuf_get_rowstride" (_fun _pointer -> _int)))
+(define pixbuf-channels (maybe-bind gdk-pixbuf-lib "gdk_pixbuf_get_n_channels" (_fun _pointer -> _int)))
+(define pixbuf-depth (maybe-bind gdk-pixbuf-lib "gdk_pixbuf_get_bits_per_sample" (_fun _pointer -> _int)))
+(define pixbuf-pixels (maybe-bind gdk-pixbuf-lib "gdk_pixbuf_get_pixels" (_fun _pointer -> _pointer)))
+(define capture-unref (maybe-bind gobject-lib "g_object_unref" (_fun _pointer -> _void)))
 
 (define (capture! wv [dest #f])
   (and (not (unbox (lin:webview-closed?-box wv)))
-       gtk_widget_get_window
-       gdk_pixbuf_get_from_window
-       gdk_pixbuf_savev
-       (let ()
-         (define gdkwin (gtk_widget_get_window (lin:webview-window wv)))
-         (unless gdkwin
-           (fprintf (current-error-port) "[glaze-linux-webview] capture: window not realized\n"))
+       gtk_widget_get_window gdk_pixbuf_get_from_window
+       gdk_window_get_width gdk_window_get_height
+       pixbuf-width pixbuf-height pixbuf-stride pixbuf-channels pixbuf-depth pixbuf-pixels capture-unref
+       (let ([gdkwin (gtk_widget_get_window (lin:webview-window wv))])
          (and gdkwin
-              (let ()
-                (define pixbuf
-                  (gdk_pixbuf_get_from_window gdkwin
-                                              0
-                                              0
-                                              (gdk_window_get_width gdkwin)
-                                              (gdk_window_get_height gdkwin)))
-                (unless pixbuf
-                  (fprintf (current-error-port)
-                           "[glaze-linux-webview] capture: get_from_window returned NULL\n"))
+              (let ([pixbuf (gdk_pixbuf_get_from_window gdkwin 0 0
+                                                       (gdk_window_get_width gdkwin)
+                                                       (gdk_window_get_height gdkwin))])
                 (and pixbuf
-                     (let ()
-                       (define path
-                         (if dest
-                             (if (string? dest)
-                                 (string->path dest)
-                                 dest)
-                             (make-temporary-file "glaze-capture-~a.png")))
-                       (define ok? (gdk_pixbuf_savev pixbuf (path->string path) "png" #f #f #f))
-                       (unless ok?
-                         (fprintf (current-error-port)
-                                  "[glaze-linux-webview] capture: savev failed\n"))
-                       (and ok? path))))))))
+                     (let ([snapshot
+                            (dynamic-wind
+                             void
+                             (lambda ()
+                               (define width (pixbuf-width pixbuf))
+                               (define height (pixbuf-height pixbuf))
+                               (define stride (pixbuf-stride pixbuf))
+                               (define channels (pixbuf-channels pixbuf))
+                               (define source (pixbuf-pixels pixbuf))
+                               (and source
+                                    (= (pixbuf-depth pixbuf) 8)
+                                    (positive? width) (positive? height)
+                                    (memv channels '(3 4))
+                                    (>= stride (* width channels))
+                                    (let* ([size (+ (* (sub1 height) stride) (* width channels))]
+                                           [pixels (make-bytes size)])
+                                      (memcpy pixels source size)
+                                      (list width height stride channels pixels))))
+                             (lambda () (capture-unref pixbuf)))])
+                       (and snapshot
+                            (let ()
+                              (define path (if dest
+                                               (if (string? dest) (string->path dest) dest)
+                                               (make-temporary-file "glaze-capture-~a.png")))
+                              (define png
+                                (rgb-png-bytes (list-ref snapshot 0) (list-ref snapshot 1)
+                                               (list-ref snapshot 4)
+                                               #:stride (list-ref snapshot 2)
+                                               #:channels (list-ref snapshot 3)))
+                              (call-with-output-file path
+                                (lambda (out) (write-bytes png out))
+                                #:exists 'truncate/replace)
+                              path)))))))))
 
 ;; ---- window controls ----
 (define gtk_window_fullscreen (maybe-bind gtk-lib "gtk_window_fullscreen" (_fun _pointer -> _void)))

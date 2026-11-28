@@ -118,7 +118,8 @@
           (second doc))))
    #:exists 'replace))
 
-(define-values (port stop) (start-server #:port 18970 #:public-dir dir))
+(define capture-bus (make-event-bus))
+(define-values (port stop) (start-server #:port 18970 #:public-dir dir #:events capture-bus))
 (printf "[e2e] server up on ~a, backend-supported?=~a\n" port (webview-supported?))
 
 (define closed? (box #f))
@@ -175,6 +176,34 @@
 (check! "capture: composited page pixels" (and shot #t))
 (when shot
   (log (format "capture: ~a (~a bytes)" shot (file-size shot))))
+
+;; Keep a real HTTP SSE response writer alive while taking a capture.
+(when (eq? (system-type 'os) 'unix)
+  (define-values (sse-in sse-out) (tcp-connect "127.0.0.1" port))
+  (dynamic-wind
+   void
+   (lambda ()
+     (fprintf sse-out "GET /glaze/events HTTP/1.1\r\nHost: 127.0.0.1:~a\r\nConnection: keep-alive\r\n\r\n" port)
+     (flush-output sse-out)
+     (define status (sync/timeout 10 (read-line-evt sse-in 'any)))
+     (check! "capture SSE: stream connected" (and (string? status) (string-contains? status "200")))
+     (when (and (string? status) (string-contains? status "200"))
+       (sleep 1)
+       (define capture (webview-capture! wv))
+       (check! "capture SSE: screenshot while stream open" (and capture (file-exists? capture)))
+       (when (and capture (file-exists? capture)) (delete-file capture))
+       (bus-broadcast! capture-bus 'capture-probe "alive")
+       (define received?
+         (let loop ([deadline (+ (current-inexact-milliseconds) 10000)])
+           (define remaining (/ (- deadline (current-inexact-milliseconds)) 1000.0))
+           (and (positive? remaining)
+                (let ([line (sync/timeout remaining (read-line-evt sse-in 'any))])
+                  (and (string? line)
+                       (or (string-contains? line "capture-probe") (loop deadline)))))))
+       (check! "capture SSE: writer remains alive after screenshot" received?)))
+   (lambda ()
+     (close-input-port sse-in)
+     (close-output-port sse-out))))
 
 (webview-navigate wv (format "http://127.0.0.1:~a/p2.html" port))
 (define title2-ok? (wait-until (lambda () (equal? (webview-title wv) "E2E Two"))))
