@@ -233,24 +233,51 @@
   (define nsurl (scheme-task-url task))
   (and nsurl (tell #:type _string (tell #:type _id nsurl absoluteString) UTF8String)))
 
-(define (respond-scheme-data! task mime data)
-  ;; NSURLResponse wants a bare media type (no "; charset=" parameters) and
-  ;; a separate text encoding — the same split as an HTTP Content-Type
-  ;; header into its two halves.
+(define (respond-scheme-data! task mime data [csp-headers '()])
   (define mime-str (bytes->string/latin-1 mime))
   (define bare-mime (car (regexp-split #rx";" mime-str)))
   (define resp
-    (tell (tell NSURLResponse alloc)
-          initWithURL:
-          #:type _id
-          (scheme-task-url task)
-          MIMEType:
-          (->nsstring bare-mime)
-          expectedContentLength:
-          #:type _intptr
-          (bytes-length data)
-          textEncodingName:
-          (->nsstring "utf-8")))
+    (cond
+      [(null? csp-headers)
+       (tell (tell NSURLResponse alloc)
+             initWithURL:
+             #:type _id
+             (scheme-task-url task)
+             MIMEType:
+             (->nsstring bare-mime)
+             expectedContentLength:
+             #:type _intptr
+             (bytes-length data)
+             textEncodingName:
+             (->nsstring "utf-8"))]
+      [else
+       ;; A plain NSURLResponse cannot carry CSP. Keep the existing
+       ;; response path for applications that did not request a policy.
+       (define fields (tell (tell NSMutableDictionary alloc) init))
+       (for ([entry (in-list (cons (cons "Content-Type" mime-str)
+                                  (cons (cons "X-Content-Type-Options" "nosniff") csp-headers)))])
+         (define key (->nsstring (car entry)))
+         (define value (->nsstring (cdr entry)))
+         (tellv fields setObject: #:type _id value forKey: #:type _id key)
+         (tellv key release)
+         (tellv value release))
+       (define response
+         (tell (tell NSHTTPURLResponse alloc)
+               initWithURL:
+               #:type _id
+               (scheme-task-url task)
+               statusCode:
+               #:type _int
+               200
+               HTTPVersion:
+               (->nsstring "HTTP/1.1")
+               headerFields:
+               #:type _id
+               fields))
+       (tellv fields release)
+       (unless (cast response _id _pointer)
+         (error 'respond-scheme-data! "could not construct CSP response"))
+       response]))
   ;; alloc+init keeps the object retained — convenience constructors return
   ;; autoreleased objects that the pump's per-iteration autorelease pool
   ;; would drain before WebKit's deferred XPC forwarding reads them (the
@@ -331,7 +358,7 @@
        (if mime
            (lambda ()
              (native-transport-count-resource! transport)
-             (respond-scheme-data! task mime data))
+             (respond-scheme-data! task mime data (native-transport-csp-headers transport)))
            (lambda () (respond-scheme-status! task 404)))]))
   (async-channel-put scheme-response-queue respond!))
 
