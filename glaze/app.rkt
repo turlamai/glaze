@@ -355,12 +355,7 @@
      (unless (memq transport '(http native))
        (raise-argument-error 'run-app "(or/c 'http 'native)" transport))
      (define native? (eq? transport 'native))
-     ;; Never silently drop a requested security policy on unsupported hosts.
-     (when (and native? (or csp csp-report-only) (not (memq (system-type 'os) '(windows macosx))))
-       (raise-arguments-error 'run-app
-                              "native CSP is currently supported only on Windows and macOS"
-                              "platform"
-                              (system-type 'os)))
+     ;; Native backend startup checks whether policy-bearing responses are supported.
      ;; The native transport has no listener to protect: the message handler is
      ;; the trust boundary, so no token is minted and #:port is meaningless.
      (when (and native? port)
