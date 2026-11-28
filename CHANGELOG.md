@@ -16,8 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Optional enforced and report-only CSP headers on HTTP static resources
   via `start-server`; reject empty/control-character header values before
   binding the listener. `run-app` forwards both options for HTTP and native
-  Windows WebView2 and macOS WKWebView responses; Linux native hosts reject
-  them. Per-window
+  WebView2, WKWebView and WebKitGTK responses. Linux requires response
+  APIs and matching libsoup, otherwise startup fails. Per-window
   transports inherit the application policy.
 
 - Stable `glaze/core` and `glaze/app` window snapshot queries
