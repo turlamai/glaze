@@ -44,6 +44,7 @@
          "capability.rkt"
          "events.rkt"
          "private/bridge-dispatch.rkt"
+         "private/content-security-policy.rkt"
          "private/native-client.rkt"
          "private/native-delivery.rkt"
          "private/native-resources.rkt")
@@ -66,6 +67,7 @@
          native-transport-take-deferred!
          native-transport-set-deliver!
          native-transport-public-dir
+         native-transport-csp-headers
          native-transport-stats
          native-transport-count-resource!
          native-transport-shutdown!
@@ -87,6 +89,7 @@
          authority ; #f or capability?
          bus ; #f or event-bus?
          public-dir ; path-string? — scheme resources are served from here
+         csp-headers ; immutable validated response header pairs
          table ; request table (cancellation), per transport
          inbox ; box of (listof string) — FFI-safe message inbox, see message!
          control ; async channel for the event thread's shutdown
@@ -175,7 +178,17 @@
 (define (start-native-transport #:api routes
                                 #:authority [authority #f]
                                 #:events [bus #f]
-                                #:public-dir [public-dir "public"])
+                                #:public-dir [public-dir "public"]
+                                #:content-security-policy [csp #f]
+                                #:content-security-policy-report-only [csp-report-only #f])
+  (define csp-headers (content-security-policy-headers 'start-native-transport csp csp-report-only))
+  ;; Until every host implements policy headers, do not accept a policy
+  ;; that the selected platform would silently discard.
+  (when (and (pair? csp-headers) (not (eq? (system-type 'os) 'windows)))
+    (raise-arguments-error 'start-native-transport
+                           "native CSP is currently supported only on Windows"
+                           "platform"
+                           (system-type 'os)))
   (when (and authority (not (capability? authority)))
     (raise-argument-error 'start-native-transport "(or/c #f capability?)" authority))
   (when (and bus (not (event-bus? bus)))
@@ -186,6 +199,7 @@
      authority
      bus
      public-dir
+     csp-headers
      (make-request-table)
      (make-async-channel #f)
      (make-async-channel 1)
