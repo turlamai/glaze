@@ -648,7 +648,12 @@
                   (values r p))))
     (define bare-mime (car (regexp-split #rx";" (bytes->string/latin-1 mime))))
     (define headers
-      (wstr (string-append "Content-Type: " bare-mime "\r\nX-Content-Type-Options: nosniff")))
+      (wstr (apply string-append
+                   "Content-Type: "
+                   bare-mime
+                   "\r\nX-Content-Type-Options: nosniff"
+                   (for/list ([entry (in-list (native-transport-csp-headers transport))])
+                     (string-append "\r\n" (car entry) ": " (cdr entry))))))
     (define-values (hr resp) (make-resp env stream 200 (wstr "OK") headers))
     (unless (= hr S_OK)
       (error 'win-scheme-serve! "CreateWebResourceResponse failed: 0x~x" (bitwise-and hr #xffffffff)))
