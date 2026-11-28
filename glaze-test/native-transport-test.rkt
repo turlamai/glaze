@@ -634,20 +634,15 @@
   (check-exn exn:fail:contract?
              (lambda () (start-native-transport #:api '() #:content-security-policy "x\r\ny")))
   (define policy (string-copy "script-src 'none'"))
-  (cond
-    [(memq (system-type 'os) '(windows macosx))
-     (define transport
-       (start-native-transport #:api '()
-                               #:content-security-policy policy
-                               #:content-security-policy-report-only "default-src 'self'"))
-     (dynamic-wind
-      void
-      (lambda ()
-        (string-set! policy 0 #\X)
-        (check-equal? (native-transport-csp-headers transport)
-                      '(("Content-Security-Policy" . "script-src 'none'")
-                        ("Content-Security-Policy-Report-Only" . "default-src 'self'"))))
-      (lambda () (native-transport-shutdown! transport)))]
-    [else
-     (check-exn #rx"native CSP is currently supported only on Windows and macOS"
-                (lambda () (start-native-transport #:api '() #:content-security-policy policy)))]))
+  (define transport
+    (start-native-transport #:api '()
+                            #:content-security-policy policy
+                            #:content-security-policy-report-only "default-src 'self'"))
+  (dynamic-wind
+   void
+   (lambda ()
+     (string-set! policy 0 #\X)
+     (check-equal? (native-transport-csp-headers transport)
+                   '(("Content-Security-Policy" . "script-src 'none'")
+                     ("Content-Security-Policy-Report-Only" . "default-src 'self'"))))
+   (lambda () (native-transport-shutdown! transport))))
