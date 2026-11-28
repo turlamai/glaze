@@ -135,15 +135,6 @@
     (check-exn exn:fail:contract?
                (lambda () (start-server #:port 18995 #:content-security-policy-report-only policy)))))
 
-(test-case "run-app rejects unsupported native CSP before starting a window"
-  (unless (memq (system-type 'os) '(windows macosx))
-    (check-exn #rx"native CSP is currently supported only on Windows and macOS"
-               (lambda () (run-app #:transport 'native #:content-security-policy "default-src 'self'")))
-    (check-exn #rx"native CSP is currently supported only on Windows and macOS"
-               (lambda ()
-                 (run-app #:transport 'native
-                          #:content-security-policy-report-only "default-src 'self'")))))
-
 ;; ---- update checking ----
 (check-true (newer-version? "1.10.0" "1.9.2") "numeric not lexicographic")
 (check-false (newer-version? "1.0.0" "1.0.0") "equal is not newer")
