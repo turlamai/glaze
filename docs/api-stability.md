@@ -5,7 +5,7 @@ Glaze is pre-1.0, but public growth is deliberate rather than accidental. The AP
 | Tier | Modules | Rule before 1.0 | Rule after 1.0 |
 |---|---|---|---|
 | Stable facade | `glaze/core` | Compatible additions only; breaking changes require an announced migration | SemVer compatibility promise |
-| Reviewed layers | `glaze/window`, `glaze/services`, `glaze/distribution`, `glaze/devtools`, `glaze/now-playing` | May be narrowed once during 1.0 curation, with deprecation and migration notes | SemVer compatibility promise |
+| Reviewed layers | `glaze/window`, `glaze/services`, `glaze/distribution`, `glaze/devtools`, `glaze/now-playing`, `glaze/power` | May be narrowed once during 1.0 curation, with deprecation and migration notes | SemVer compatibility promise |
 | Legacy facade | `glaze` | No new exports; existing applications remain supported through the 1.0 migration window | Compatibility shim, then removal only in a major release |
 | Unstable | `glaze/experimental` and explicitly documented internals | May change in any release | No stability promise |
 
