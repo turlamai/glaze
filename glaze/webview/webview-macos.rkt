@@ -539,8 +539,8 @@
 ;; ring user-initiated activity for the process lifetime keeps the WebView
 ;; live in the background; a Glaze app with an open window IS user-initiated
 ;; work, so the token is intentionally never ended. Options value:
-;; NSActivityUserInitiated = 0x00FFFFFF (mask includes the IdleSystemSleep
-;; bit; per NSProcessInfo.h).
+;; NSActivityUserInitiatedAllowingIdleSystemSleep = 0x00EFFFFF.
+;; Preserve background UI updates without permanently preventing idle sleep.
 (define (disable-app-nap!)
   (unless app-nap-disabled?
     (set! app-nap-disabled? #t)
@@ -551,7 +551,7 @@
               pi
               beginActivityWithOptions:
               #:type _uint64
-              16777215
+              15728639
               reason:
               #:type _id
               (->nsstring "Glaze UI running")))

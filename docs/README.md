@@ -20,6 +20,7 @@ This directory has one owner for each durable decision. New documents must link 
 - [Product acceptance](product-acceptance.md): the scenario record and evidence levels that define when a packaged application is done.
 - [Commercial readiness](commercial-readiness.md): framework and downstream application qualification checklist.
 - [OS Now Playing](now-playing.md) / [简体中文](now-playing.zh-CN.md): host-owned publication to the OS Now Playing surface, platform backends, and the readback evidence contract.
+- [Scoped power protection](power.md) — task-scoped system and display sleep assertions.
 - [Production signing](production-signing.md): trust domains, certificate and notary prerequisites, key handling in CI, and the verification checklist.
 - [Releasing and updating applications](release-and-updates.md): release identity, update channels, staged rollout, signed manifests, rollback and the N→N+1 evidence per installation shape.
 - [GLZ1 fuzzing](fuzzing.md): the decoders under fuzz, the invariant, the seeded inputs and how to extend the corpus.

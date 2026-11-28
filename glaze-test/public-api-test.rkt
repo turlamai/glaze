@@ -355,7 +355,9 @@
                                            now-playing-os-info
                                            now-playing-set!
                                            now-playing-set-command-handler!
-                                           now-playing-supported?))))
+                                           now-playing-supported?))
+    (glaze/power (call-with-keep-awake keep-awake-acquire! keep-awake-release!
+                                       keep-awake-token? power-diagnostic power-supported?))))
 
 (define (phase-zero-export-names exports)
   (for*/list ([phase-entry (in-list exports)]
