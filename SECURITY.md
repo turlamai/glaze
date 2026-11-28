@@ -59,8 +59,10 @@ application-owned reporting endpoint and browser support.
 
 These options cover static responses, including SPA fallback, not arbitrary
 application API responses. The same options are accepted by `run-app` with the HTTP transport.
-Native scheme responses are not yet supported: `run-app` rejects either
-option with `#:transport 'native` rather than ignoring the policy.
+Native WebView2 responses on Windows forward both policies. Other native
+hosts reject either option rather than ignoring it. Child windows with
+separate capabilities inherit the application policy; explicit replacement
+transports must preserve it. Browser enforcement requires runtime verification.
 
 CSP does not grant or revoke Glaze route permissions. Injected script running
 in a privileged page can use that page's existing authority. Prefer rendering
