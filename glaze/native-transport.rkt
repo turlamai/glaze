@@ -184,9 +184,9 @@
   (define csp-headers (content-security-policy-headers 'start-native-transport csp csp-report-only))
   ;; Until every host implements policy headers, do not accept a policy
   ;; that the selected platform would silently discard.
-  (when (and (pair? csp-headers) (not (eq? (system-type 'os) 'windows)))
+  (when (and (pair? csp-headers) (not (memq (system-type 'os) '(windows macosx))))
     (raise-arguments-error 'start-native-transport
-                           "native CSP is currently supported only on Windows"
+                           "native CSP is currently supported only on Windows and macOS"
                            "platform"
                            (system-type 'os)))
   (when (and authority (not (capability? authority)))
