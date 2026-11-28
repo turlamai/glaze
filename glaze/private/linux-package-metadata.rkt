@@ -5,7 +5,8 @@
 
 (require racket/list
          racket/path
-         racket/string)
+         racket/string
+         "png.rkt")
 
 (provide deb-arch-name
          rpm-arch-name
@@ -130,62 +131,6 @@ SPECEOF
 ;; A flat-color square PNG in pure Racket (zlib stored blocks + adler32):
 ;; projects without an icon still get a valid hicolor/AppDir icon instead
 ;; of a broken desktop integration or a failing appimagetool run.
-(define (crc32-bytes data)
-  (define table
-    (for/vector #:length 256
-                ([n (in-naturals)])
-      (for/fold ([c n]) ([_ (in-range 8)])
-        (if (zero? (bitwise-and c 1))
-            (arithmetic-shift c -1)
-            (bitwise-xor #xEDB88320 (arithmetic-shift c -1))))))
-  (bitwise-xor #xFFFFFFFF
-               (for/fold ([c #xFFFFFFFF]) ([b (in-bytes data)])
-                 (bitwise-and #xFFFFFFFF (vector-ref table (bitwise-xor (bitwise-and c #xFF) b))))))
-
-(define (adler32-bytes data)
-  ;; RFC 1950: s1/s2 accumulate modulo 65521, not a 16-bit mask — masking
-  ;; instead of reducing silently corrupts the checksum for larger payloads.
-  (define mod 65521)
-  (let loop ([i 0]
-             [a 1]
-             [b 0])
-    (if (= i (bytes-length data))
-        (+ (* (modulo b mod) 65536) (modulo a mod))
-        (let ([a2 (modulo (+ a (bytes-ref data i)) mod)]) (loop (add1 i) a2 (modulo (+ b a2) mod))))))
-
-;; zlib stream using stored (uncompressed) deflate blocks.
-(define (zlib-store-bytes data)
-  (define block-size 65535)
-  (define blocks
-    (let loop ([offset 0])
-      (cond
-        [(>= offset (bytes-length data)) '()]
-        [else
-         (define len (min block-size (- (bytes-length data) offset)))
-         (define final? (>= (+ offset len) (bytes-length data)))
-         (define chunk (subbytes data offset (+ offset len)))
-         (cons (cons final? chunk) (loop (+ offset len)))])))
-  (apply bytes-append
-         (cons (bytes #x78 #x01)
-               (append (for/list ([block (in-list blocks)])
-                         (define final? (car block))
-                         (define chunk (cdr block))
-                         (define len (bytes-length chunk))
-                         (bytes (if final? 1 0)
-                                (bitwise-and len #xFF)
-                                (arithmetic-shift (bitwise-and len #xFF00) -8)
-                                (bitwise-and (bitwise-not len) #xFF)
-                                (arithmetic-shift (bitwise-and (bitwise-not len) #xFF00) -8)))
-                       (map cdr blocks)
-                       (list (integer->integer-bytes (adler32-bytes data) 4 #f #t))))))
-
-(define (png-chunk type data)
-  (define type-bytes (string->bytes/latin-1 type))
-  (define body (bytes-append type-bytes data))
-  (bytes-append (integer->integer-bytes (bytes-length data) 4 #f #t)
-                body
-                (integer->integer-bytes (crc32-bytes body) 4 #f #t)))
-
 ;; Read width/height from a PNG's IHDR chunk. Returns two values, or #f #f
 ;; when the bytes are not a PNG — callers fall back to the placeholder icon
 ;; bucket instead of guessing a size.
@@ -198,14 +143,5 @@ SPECEOF
       (values #f #f)))
 
 (define (icon-png-bytes [size 64] [r #xC1] [g #x5F] [b #x3C])
-  ;; PNG RGB scanlines are per-pixel interleaved: a filter byte, then R G B
-  ;; for each pixel in the row.
-  (define row (apply bytes (cons 0 (append-map (lambda (_) (list r g b)) (range size)))))
-  (define raw (apply bytes-append (make-list size row)))
-  (bytes-append #"\211PNG\r\n\032\n"
-                (png-chunk "IHDR"
-                           (bytes-append (integer->integer-bytes size 4 #f #t)
-                                         (integer->integer-bytes size 4 #f #t)
-                                         (bytes 8 2 0 0 0)))
-                (png-chunk "IDAT" (zlib-store-bytes raw))
-                (png-chunk "IEND" #"")))
+  (define row (apply bytes (append-map (lambda (_) (list r g b)) (range size))))
+  (rgb-png-bytes size size (apply bytes-append (make-list size row))))
