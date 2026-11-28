@@ -477,11 +477,11 @@
                 "capability-denied"))
 (delete-directory/files pw-dir)
 
-;; ---- native CSP enforcement (Windows) ----
+;; ---- native CSP enforcement (Windows/macOS) ----
 ;; An external same-origin script must execute and report whether the
 ;; inline script ran. Merely loading the page or inspecting headers does
 ;; not demonstrate browser enforcement.
-(when (eq? (system-type 'os) 'windows)
+(when (memq (system-type 'os) '(windows macosx))
   (define csp-dir (make-temporary-file "glaze-csp-e2e-~a" 'directory))
   (dynamic-wind
    void
