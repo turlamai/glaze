@@ -629,3 +629,25 @@
 (delete-directory/files shutdown-dir)
 
 (delete-directory/files stream-dir)
+
+(test-case "native CSP validates policies before starting transport workers"
+  (check-exn exn:fail:contract?
+             (lambda () (start-native-transport #:api '() #:content-security-policy "x\r\ny")))
+  (define policy (string-copy "script-src 'none'"))
+  (cond
+    [(eq? (system-type 'os) 'windows)
+     (define transport
+       (start-native-transport #:api '()
+                               #:content-security-policy policy
+                               #:content-security-policy-report-only "default-src 'self'"))
+     (dynamic-wind
+      void
+      (lambda ()
+        (string-set! policy 0 #\X)
+        (check-equal? (native-transport-csp-headers transport)
+                      '(("Content-Security-Policy" . "script-src 'none'")
+                        ("Content-Security-Policy-Report-Only" . "default-src 'self'"))))
+      (lambda () (native-transport-shutdown! transport)))]
+    [else
+     (check-exn #rx"native CSP is currently supported only on Windows"
+                (lambda () (start-native-transport #:api '() #:content-security-policy policy)))]))
