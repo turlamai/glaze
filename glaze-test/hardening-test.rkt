@@ -136,12 +136,13 @@
                (lambda () (start-server #:port 18995 #:content-security-policy-report-only policy)))))
 
 (test-case "run-app rejects unsupported native CSP before starting a window"
-  (check-exn #rx"CSP options currently require"
-             (lambda () (run-app #:transport 'native #:content-security-policy "default-src 'self'")))
-  (check-exn #rx"CSP options currently require"
-             (lambda ()
-               (run-app #:transport 'native
-                        #:content-security-policy-report-only "default-src 'self'"))))
+  (unless (eq? (system-type 'os) 'windows)
+    (check-exn #rx"native CSP is currently supported only on Windows"
+               (lambda () (run-app #:transport 'native #:content-security-policy "default-src 'self'")))
+    (check-exn #rx"native CSP is currently supported only on Windows"
+               (lambda ()
+                 (run-app #:transport 'native
+                          #:content-security-policy-report-only "default-src 'self'")))))
 
 ;; ---- update checking ----
 (check-true (newer-version? "1.10.0" "1.9.2") "numeric not lexicographic")
