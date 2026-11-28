@@ -46,6 +46,32 @@ platforms they actually test.
   [Permit](https://github.com/turlamai/permit) credential keys are separate trust
   domains. Do not reuse one key across them.
 
+## Third-party content and HTTP CSP
+
+The HTTP static-resource server accepts optional
+`#:content-security-policy` and `#:content-security-policy-report-only`
+strings on `start-server`. Both default to #f. For example, a page using
+external same-origin scripts can begin with
+`default-src 'self'; object-src 'none'; base-uri 'none'`.
+Review inline scripts, styles and external resources before enforcing.
+Report-only is not enforcement; receiving violation reports requires an
+application-owned reporting endpoint and browser support.
+
+These options cover static responses, including SPA fallback, not arbitrary
+application API responses. The same options are accepted by `run-app` with the HTTP transport.
+Native scheme responses are not yet supported: `run-app` rejects either
+option with `#:transport 'native` rather than ignoring the policy.
+
+CSP does not grant or revoke Glaze route permissions. Injected script running
+in a privileged page can use that page's existing authority. Prefer rendering
+untrusted data as text, or use a maintained allowlist HTML sanitizer. For
+rich content, isolate it from the privileged page; do not combine
+allow-scripts with allow-same-origin on same-origin sandboxed frames.
+Do not expose the bridge or credentials to untrusted frames. Native WebView
+message-handler exposure and custom-scheme isolation require platform-specific
+verification; do not assume iframe sandboxing alone blocks native messages.
+Validate message origin/source and payloads wherever messaging is enabled.
+
 ## Security-sensitive areas
 
 Treat changes to these owners as security review items:

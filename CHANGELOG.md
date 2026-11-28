@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Optional enforced and report-only CSP headers on HTTP static resources
+  via `start-server`; reject empty/control-character header values before
+  binding the listener. `run-app` forwards both options for HTTP and rejects
+  them with native transport until native enforcement is implemented.
+
 - Stable `glaze/core` and `glaze/app` window snapshot queries
   `app-windows` and `app-window-count` for resident and multi-window apps.
   Queries synchronize with the window registry without extending the legacy

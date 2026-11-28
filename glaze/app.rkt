@@ -286,7 +286,9 @@
                                    #:events [event-bus #f]
                                    #:api-token [api-token #f]
                                    #:capability [authority #f]
-                                   #:max-body-size [max-body-size (* 8 1024 1024)])
+                                   #:max-body-size [max-body-size (* 8 1024 1024)]
+                                   #:content-security-policy [csp #f]
+                                   #:content-security-policy-report-only [csp-report-only #f])
   (let loop ([attempts 0])
     (define candidate (+ 20000 (random 45000)))
     (with-handlers ([exn:fail:network? (lambda (e)
@@ -299,7 +301,9 @@
                     #:events event-bus
                     #:api-token api-token
                     #:capability authority
-                    #:max-body-size max-body-size))))
+                    #:max-body-size max-body-size
+                    #:content-security-policy csp
+                    #:content-security-policy-report-only csp-report-only))))
 
 ;; run-app defaults to a token-protected bridge: the loopback port is
 ;; reachable by every web page in every browser, so an open local API is a
@@ -317,6 +321,8 @@
                  #:api-token [api-token #t]
                  #:capability [authority #f]
                  #:max-body-size [max-body-size (* 8 1024 1024)]
+                 #:content-security-policy [csp #f]
+                 #:content-security-policy-report-only [csp-report-only #f]
                  #:quit-on-last-window? [quit-on-last-window? #t]
                  #:on-close [user-on-close (lambda () (void))]
                  #:on-error [on-error #f]
@@ -332,6 +338,13 @@
      (unless (memq transport '(http native))
        (raise-argument-error 'run-app "(or/c 'http 'native)" transport))
      (define native? (eq? transport 'native))
+     ;; Until every native backend can enforce the requested policy, reject
+     ;; the option rather than silently starting an unprotected window.
+     (when (and native? (or csp csp-report-only))
+       (raise-arguments-error 'run-app
+                              "CSP options currently require #:transport 'http"
+                              "transport"
+                              transport))
      ;; The native transport has no listener to protect: the message handler is
      ;; the trust boundary, so no token is minted and #:port is meaningless.
      (when (and native? port)
@@ -388,13 +401,17 @@
                              #:events event-bus
                              #:api-token token
                              #:capability authority
-                             #:max-body-size max-body-size)
+                             #:max-body-size max-body-size
+                             #:content-security-policy csp
+                             #:content-security-policy-report-only csp-report-only)
                (start-server-on-free-port #:public-dir public-dir
                                           #:api api-routes
                                           #:events event-bus
                                           #:api-token token
                                           #:capability authority
-                                          #:max-body-size max-body-size))))
+                                          #:max-body-size max-body-size
+                                          #:content-security-policy csp
+                                          #:content-security-policy-report-only csp-report-only))))
      (define url
        (if native?
            "glaze://app/"
