@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Scoped idle-sleep protection via `glaze/power`: independent assertion tokens,
+  exception-safe task scopes, macOS IOKit and Windows power requests, and Linux
+  logind system-sleep inhibitors. Linux display assertions are not supported.
+  macOS background UI activity no longer implicitly prevents idle sleep.
+
 - Optional enforced and report-only CSP headers on HTTP static resources
   via `start-server`; reject empty/control-character header values before
   binding the listener. `run-app` forwards both options for HTTP and rejects
