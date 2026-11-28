@@ -69,3 +69,20 @@
     (doctor-problems
      (hash "glaze" (list 'link existing-dir) "glaze-doc" (list 'other "glaze-doc 1.0 catalog"))))
   (check-true (ormap (lambda (p) (string-contains? p "glaze-doc")) problems)))
+
+
+(test-case "CSP diagnostics distinguish support from enforcement"
+  (define available (hash 'supported #t))
+  (define missing (hash 'supported #f))
+  (for ([os (in-list '(windows macosx unix))])
+    (define report (csp-report available os (lambda () #t)))
+    (check-true (hash-ref report 'http-supported))
+    (check-true (hash-ref report 'native-supported))
+    (check-equal? (hash-ref report 'configured) "unknown")
+    (check-equal? (hash-ref report 'enforcement) "not-verified"))
+  (check-false (hash-ref (csp-report missing 'windows) 'native-supported))
+  (check-false (hash-ref (csp-report available 'unix (lambda () #f)) 'native-supported))
+  (check-false
+   (hash-ref (csp-report available 'unix (lambda () (error 'probe "unavailable")))
+             'native-supported))
+  (check-false (hash-ref (csp-report available 'other) 'native-supported)))

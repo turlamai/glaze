@@ -103,3 +103,13 @@ window or the packaged artifact failed and the first error. If you paste
 reports manually instead, include `doctor --json` and `inspect --json`, the
 Racket and Glaze versions, and OS/architecture, and redact paths yourself.
 Report suspected vulnerabilities privately through [SECURITY.md](../SECURITY.md).
+
+
+## Content Security Policy readiness
+
+The `security.csp` section of `doctor --json` reports HTTP support and
+native response API availability. On Linux it checks the WebKitGTK and
+matching libsoup interfaces. It does not launch the application or infer
+its policy from source code: `configured` is "unknown" and `enforcement`
+is "not-verified". Verify enforced and report-only behavior in a real
+window before relying on CSP to protect third-party content.

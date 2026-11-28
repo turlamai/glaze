@@ -246,6 +246,17 @@
                            "app transport"
                            "http"))
   (define reporter (current-glaze-error-reporter))
+  (define app-csp-headers
+    (if (glaze-app-native-info app)
+        (native-transport-csp-headers
+         (app-native-default-transport (glaze-app-native-info app)))
+        '()))
+  (when (and native-transport
+             (pair? app-csp-headers)
+             (not (equal? app-csp-headers (native-transport-csp-headers native-transport))))
+    (raise-arguments-error 'open-app-window
+                           "explicit native transport must preserve the application CSP"
+                           "transport" native-transport))
   ;; On the native transport every window is its own identity: a window
   ;; opened with #:capability gets its own transport with exactly that
   ;; authority (the host's per-window message handler already isolates its
@@ -259,7 +270,13 @@
          (start-native-transport #:api (app-native-routes info)
                                  #:authority capability
                                  #:events (app-native-bus info)
-                                 #:public-dir (app-native-public-dir info)))]
+                                 #:public-dir (app-native-public-dir info)
+                                 #:content-security-policy
+                                 (cond [(assoc "Content-Security-Policy" app-csp-headers) => cdr]
+                                       [else #f])
+                                 #:content-security-policy-report-only
+                                 (cond [(assoc "Content-Security-Policy-Report-Only" app-csp-headers) => cdr]
+                                       [else #f])))]
       [(glaze-app-native-info app) (app-native-default-transport (glaze-app-native-info app))]
       [else #f]))
   ;; Native close may run before open-window returns its handle.
@@ -338,13 +355,7 @@
      (unless (memq transport '(http native))
        (raise-argument-error 'run-app "(or/c 'http 'native)" transport))
      (define native? (eq? transport 'native))
-     ;; Until every native backend can enforce the requested policy, reject
-     ;; the option rather than silently starting an unprotected window.
-     (when (and native? (or csp csp-report-only))
-       (raise-arguments-error 'run-app
-                              "CSP options currently require #:transport 'http"
-                              "transport"
-                              transport))
+     ;; Native backend startup checks whether policy-bearing responses are supported.
      ;; The native transport has no listener to protect: the message handler is
      ;; the trust boundary, so no token is minted and #:port is meaningless.
      (when (and native? port)
@@ -387,7 +398,9 @@
                 (start-native-transport #:api api-routes
                                         #:authority authority
                                         #:events event-bus
-                                        #:public-dir public-dir))
+                                        #:public-dir public-dir
+                                        #:content-security-policy csp
+                                        #:content-security-policy-report-only csp-report-only))
               (set-glaze-app-native-info! app
                                           (app-native api-routes public-dir authority event-bus nt))
               nt)))

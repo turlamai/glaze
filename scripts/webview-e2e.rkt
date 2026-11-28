@@ -477,6 +477,63 @@
                 "capability-denied"))
 (delete-directory/files pw-dir)
 
+;; ---- native CSP enforcement (all desktop hosts) ----
+;; An external same-origin script must execute and report whether the
+;; inline script ran. Merely loading the page or inspecting headers does
+;; not demonstrate browser enforcement.
+(let ()
+  (define csp-dir (make-temporary-file "glaze-csp-e2e-~a" 'directory))
+  (dynamic-wind
+   void
+   (lambda ()
+     (call-with-output-file
+      (build-path csp-dir "index.html")
+      (lambda (out)
+        (display
+         (string-append
+          "<!DOCTYPE html><html><head><title>CSP test</title></head><body>"
+          "<script>window.inlineExecuted=true;</script>"
+          "<script src='/glaze/api.js'></script>"
+          "<script src='/probe.js'></script></body></html>")
+         out)))
+     (call-with-output-file
+      (build-path csp-dir "probe.js")
+      (lambda (out)
+        (display "glaze.invoke('api/csp-result',{inlineExecuted:window.inlineExecuted===true});" out)))
+     (for ([enforced? (in-list '(#t #f))])
+       (define result (box #f))
+       (define policy "default-src 'self'; script-src 'self'; object-src 'none'")
+       (define transport
+         (start-native-transport
+          #:api (list (POST "api/csp-result"
+                            (lambda (req)
+                              (set-box! result (request-json-body req))
+                              (hasheq 'saved #t))))
+          #:public-dir csp-dir
+          #:content-security-policy (and enforced? policy)
+          #:content-security-policy-report-only (and (not enforced?) policy)))
+       (dynamic-wind
+        void
+        (lambda ()
+          (define wv
+            (open-webview (native-app-origin)
+                          #:title "native CSP"
+                          #:width 480
+                          #:height 320
+                          #:native-transport transport))
+          (dynamic-wind
+           void
+           (lambda ()
+             (define reported? (wait-until (lambda () (hash? (unbox result))) 30))
+             (check! (format "native CSP (~a): external script reports" enforced?) reported?)
+             (check! (format "native CSP (~a): inline execution matches policy" enforced?)
+                     (and reported?
+                          (equal? (hash-ref (unbox result) 'inlineExecuted 'missing)
+                                  (not enforced?)))))
+           (lambda () (webview-close wv))))
+        (lambda () (native-transport-shutdown! transport)))))
+   (lambda () (delete-directory/files csp-dir))))
+
 (if (null? failures)
     (begin
       (printf "[e2e] ALL PASS\n")

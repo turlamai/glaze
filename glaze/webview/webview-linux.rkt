@@ -41,6 +41,7 @@
 
 (provide open-webview
          supported?
+         native-csp-supported?
          close
          navigate
          title
@@ -64,7 +65,14 @@
 (define try-ffi-lib ffi-lib*)
 
 (define gtk-lib (try-ffi-lib "gtk-3" '("0")))
-(define webkit-lib (or (try-ffi-lib "webkit2gtk-4.1" '("0")) (try-ffi-lib "webkit2gtk-4.0" '("37"))))
+(define webkit-41-lib (try-ffi-lib "webkit2gtk-4.1" '("0")))
+(define webkit-lib (or webkit-41-lib (try-ffi-lib "webkit2gtk-4.0" '("37"))))
+;; WebKitGTK 4.1 uses libsoup 3; 4.0 uses libsoup 2. Never mix them.
+(define soup-lib
+  (and webkit-lib
+       (if webkit-41-lib
+           (try-ffi-lib "soup-3.0" '("0"))
+           (try-ffi-lib "soup-2.4" '("1")))))
 (define glib-lib (try-ffi-lib "glib-2.0" '("0")))
 (define gobject-lib (try-ffi-lib "gobject-2.0" '("0")))
 
@@ -173,6 +181,61 @@
   (maybe-bind gio-lib
               "g_memory_input_stream_new_from_data"
               (_fun _pointer _uintptr _pointer -> _pointer)))
+;; WebKitGTK 2.36+ response API; optional for legacy no-policy apps.
+(define webkit_uri_scheme_response_new
+  (maybe-bind webkit-lib "webkit_uri_scheme_response_new" (_fun _pointer _int64 -> _pointer)))
+(define webkit_uri_scheme_response_set_content_type
+  (maybe-bind webkit-lib "webkit_uri_scheme_response_set_content_type" (_fun _pointer _string -> _void)))
+(define webkit_uri_scheme_response_set_http_headers
+  (maybe-bind webkit-lib "webkit_uri_scheme_response_set_http_headers" (_fun _pointer _pointer -> _void)))
+(define webkit_uri_scheme_request_finish_with_response
+  (maybe-bind webkit-lib "webkit_uri_scheme_request_finish_with_response" (_fun _pointer _pointer -> _void)))
+(define soup_message_headers_new
+  (maybe-bind soup-lib "soup_message_headers_new" (_fun _int -> _pointer)))
+(define soup_message_headers_append
+  (maybe-bind soup-lib "soup_message_headers_append" (_fun _pointer _string _string -> _void)))
+(define g_object_unref
+  (maybe-bind gobject-lib "g_object_unref" (_fun _pointer -> _void)))
+(define g_bytes_new
+  (maybe-bind glib-lib "g_bytes_new" (_fun _bytes _uintptr -> _pointer)))
+(define g_bytes_unref
+  (maybe-bind glib-lib "g_bytes_unref" (_fun _pointer -> _void)))
+(define g_memory_input_stream_new_from_bytes
+  (maybe-bind gio-lib "g_memory_input_stream_new_from_bytes" (_fun _pointer -> _pointer)))
+
+(define (native-csp-supported?)
+  (and webkit_uri_scheme_response_new
+       webkit_uri_scheme_response_set_content_type
+       webkit_uri_scheme_response_set_http_headers
+       webkit_uri_scheme_request_finish_with_response
+       soup_message_headers_new
+       soup_message_headers_append
+       g_object_unref
+       g_bytes_new
+       g_bytes_unref
+       g_memory_input_stream_new_from_bytes
+       #t))
+
+(define (finish-csp-response! request mime data csp-headers)
+  ;; GBytes copies the Racket buffer so asynchronous WebKit reads never
+  ;; depend on the lifetime of a managed Racket byte string.
+  (define bytes (g_bytes_new data (bytes-length data)))
+  (define stream (g_memory_input_stream_new_from_bytes bytes))
+  (g_bytes_unref bytes)
+  (define response (webkit_uri_scheme_response_new stream (bytes-length data)))
+  (g_object_unref stream)
+  (unless response
+    (error 'finish-csp-response! "could not allocate WebKit response"))
+  (webkit_uri_scheme_response_set_content_type response (bytes->string/utf-8 mime))
+  (define headers (soup_message_headers_new 1)) ; SOUP_MESSAGE_HEADERS_RESPONSE
+  (soup_message_headers_append headers "X-Content-Type-Options" "nosniff")
+  (for ([entry (in-list csp-headers)])
+    (soup_message_headers_append headers (car entry) (cdr entry)))
+  ;; set_http_headers takes ownership; finish_with_response borrows response.
+  (webkit_uri_scheme_response_set_http_headers response headers)
+  (webkit_uri_scheme_request_finish_with_response request response)
+  (g_object_unref response))
+
 (define webkit_web_view_evaluate_javascript
   (maybe-bind webkit-lib
               "webkit_web_view_evaluate_javascript"
@@ -304,11 +367,14 @@
                (native-transport-count-resource! transport)
                (values m d))
              (values #"text/plain; charset=utf-8" #"Not found"))]))
-    (webkit_uri_scheme_request_finish
-     request
-     (g_memory_input_stream_new_from_data data (bytes-length data) #f)
-     (bytes-length data)
-     (bytes->string/utf-8 mime)))
+    (define csp-headers (native-transport-csp-headers transport))
+    (if (null? csp-headers)
+        (webkit_uri_scheme_request_finish
+         request
+         (g_memory_input_stream_new_from_data data (bytes-length data) #f)
+         (bytes-length data)
+         (bytes->string/utf-8 mime))
+        (finish-csp-response! request mime data csp-headers)))
   (with-handlers ([exn:fail? (lambda (e)
                                ((current-glaze-error-reporter) e "glz1:scheme")
                                (finish-empty! "text/plain"))])
@@ -381,6 +447,9 @@
   (when native-transport
     (unless (and native-transport? native-transport)
       (raise-argument-error 'open-webview "native-transport?" native-transport))
+    (when (and (pair? (native-transport-csp-headers native-transport))
+               (not (native-csp-supported?)))
+      (error 'open-webview "native CSP requires WebKitGTK response APIs and matching libsoup"))
     ;; The native transport needs the scheme registration, the user content
     ;; manager, and evaluate_javascript; fail before any window exists.
     (unless (and webkit_web_view_new_with_user_content_manager

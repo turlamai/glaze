@@ -30,6 +30,7 @@
          doctor-problems
          install-command
          doctor-jsexpr
+         csp-report
          doctor-command)
 
 (define glaze-repo-url "https://github.com/turlamai/glaze")
@@ -257,6 +258,28 @@
               #f
               (diagnostic)))))
 
+;; Headless diagnostics cannot attest an application's effective policy.
+;; Keep platform readiness separate from configuration and enforcement.
+(define (csp-report webview [os (system-type 'os)]
+                    [linux-probe (lambda ()
+                                   ((dynamic-require 'glaze/webview/webview-linux
+                                                     'native-csp-supported?)))])
+  (define native-supported?
+    (and (hash-ref webview 'supported #f)
+         (case os
+           [(windows macosx) #t]
+           [(unix) (with-handlers ([exn:fail? (lambda (_) #f)]) (and (linux-probe) #t))]
+           [else #f])))
+  (hash 'http-supported #t
+        'native-supported native-supported?
+        'configured "unknown"
+        'enforcement "not-verified"
+        'diagnostic
+        (cond
+          [native-supported? "Native response APIs available; verify the application in a real window."]
+          [(not (hash-ref webview 'supported #f)) "Native WebView unavailable."]
+          [else "Native CSP response APIs unavailable; use HTTP transport or upgrade the backend."])))
+
 ;; Parsed entries -> non-canonical owners of glaze bits: any discovered
 ;; glaze-related package whose registry name is not exactly "glaze".
 (define (non-canonical-glaze-packages)
@@ -312,6 +335,8 @@
           (values (string->symbol name) (doctor-entry->jsexpr parsed)))
         'webview
         webview
+        'security
+        (hash 'csp (csp-report webview))
         'project-schema
         (project-schema-status)
         'problems
@@ -349,6 +374,9 @@
           (if (hash-ref webview 'supported)
               "available"
               (format "unavailable — ~a" (hash-ref webview 'diagnostic))))
+  (define csp (hash-ref (hash-ref report 'security) 'csp))
+  (printf "native CSP: ~a; application enforcement not verified\n"
+          (if (hash-ref csp 'native-supported) "available" "unavailable"))
   (printf "project schema: ~a\n" (hash-ref (hash-ref report 'project-schema) 'status))
   (cond
     [(null? all-problems) (printf "OK: no glaze package problems found\n")]
